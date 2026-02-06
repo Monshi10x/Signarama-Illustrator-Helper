@@ -122,6 +122,12 @@
     const path = $('btnAddPathText');
     if (path) path.onclick = () => callJSX('signarama_helper_addFilePathTextToArtboards()', res => res && log(res));
 
+    const outlineAll = $('btnOutlineAllText');
+    if (outlineAll) outlineAll.onclick = () => callJSX('signarama_helper_outlineAllText()', res => res && log(res));
+
+    const setFillsStrokes = $('btnSetFillsStrokes');
+    if (setFillsStrokes) setFillsStrokes.onclick = () => callJSX('signarama_helper_setAllFillsStrokes()', res => res && log(res));
+
     const clear = $('btnClearLog');
     if (clear) clear.onclick = () => { const el = $('log'); if (el) el.textContent=''; };
   }

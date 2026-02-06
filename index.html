@@ -130,7 +130,7 @@
     <section id="tab-bleeds" class="wrap hidden" role="tabpanel">
       <div class="card">
         <div class="cardHead">
-          <div class="cardTitle">Add bleeds</div>
+          <div class="cardTitle">Bleeds to Basics (Rect, Circle)</div>
           <span class="info" data-tip="All inputs are millimetres. Expands the current selection by Top/Right/Bottom/Left.">i</span>
         </div>
 
@@ -190,13 +190,13 @@
 
         <div class="row" style="margin-top:10px; align-items:center;">
           <label class="chk">
-            <input id="pathBleedCutline" type="checkbox">
+            <input id="pathBleedCutline" type="checkbox" checked>
             <span>Create cutline</span>
           </label>
 
           <button class="btn2" id="btnApplyPathBleed" type="button" style="margin-left:auto;">
             <span>Apply path bleed</span>
-            <span class="info" data-tip="Moves the target to layer 'bleed' and offsets paths. If enabled, duplicates the original to layer 'cutline' with no fill and #ff00ff stroke.">i</span>
+            <span class="info" data-tip="Moves the target to layer 'bleed' and offsets paths. If enabled, duplicates the original to layer 'cutline' with no fill and 'Cut Contour' spot stroke.">i</span>
           </button>
         </div>
 
@@ -205,14 +205,23 @@
         </div>
       </div>
 
-      </div>
     </section>
 
     <!-- TAB: CUTFILES -->
     <section id="tab-cutfiles" class="wrap hidden" role="tabpanel">
       <button class="btn" id="btnAddPathText" type="button">
         <span class="btnText">Add file path label to artboards</span>
-        <span class="info" data-tip="Adds a centered label near the top of each artboard showing the current file path. Width=60% of artboard, offset=5mm.">i</span>
+        <span class="info" data-tip="Adds a centered label near the top of each artboard showing the current file path. Width=60% of artboard, offset=5mm. Text scales to the field width.">i</span>
+      </button>
+
+      <button class="btn" id="btnOutlineAllText" type="button">
+        <span class="btnText">Outline all text</span>
+        <span class="info" data-tip="Converts all text frames in the document to outlines.">i</span>
+      </button>
+
+      <button class="btn" id="btnSetFillsStrokes" type="button">
+        <span class="btnText">Set fills/strokes</span>
+        <span class="info" data-tip="Sets all fills to none and all strokes to 1px black across the document.">i</span>
       </button>
     </section>
 
@@ -232,3 +241,5 @@
   <script src="js/main.js"></script>
 </body>
 </html>
+
+
