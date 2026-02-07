@@ -7,6 +7,10 @@
     const el = $('log');
     if (el) { el.textContent += String(line) + '\n'; el.scrollTop = el.scrollHeight; }
   }
+  function logDim(line){
+    const el = $('dimensionsLog');
+    if (el) { el.textContent += String(line) + '\n'; el.scrollTop = el.scrollHeight; }
+  }
   function setStatus(txt){
     const el = $('status');
     if (el) el.textContent = txt || '';
@@ -128,8 +132,85 @@
     const setFillsStrokes = $('btnSetFillsStrokes');
     if (setFillsStrokes) setFillsStrokes.onclick = () => callJSX('signarama_helper_setAllFillsStrokes()', res => res && log(res));
 
+    wireDimensions();
+    wireLightbox();
+
     const clear = $('btnClearLog');
     if (clear) clear.onclick = () => { const el = $('log'); if (el) el.textContent=''; };
+  }
+
+  function wireLightbox(){
+    const createBtn = $('btnCreateLightbox');
+    if (!createBtn) return;
+    createBtn.onclick = () => {
+      const payload = {
+        widthMm: num(($('lightboxWidthMm') && $('lightboxWidthMm').value) || 0),
+        heightMm: num(($('lightboxHeightMm') && $('lightboxHeightMm').value) || 0),
+        depthMm: num(($('lightboxDepthMm') && $('lightboxDepthMm').value) || 0),
+        type: ($('lightboxType') && $('lightboxType').value) || 'Acrylic',
+        supportCount: parseInt((($('lightboxSupportCount') && $('lightboxSupportCount').value) || 0), 10) || 0,
+        ledOffsetMm: num(($('lightboxLedOffsetMm') && $('lightboxLedOffsetMm').value) || 0)
+      };
+      const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+      callJSX('signarama_helper_createLightbox("' + json + '")', res => res && log(res));
+    };
+  }
+
+  function wireDimensions(){
+    const dimClear = $('btnDimClear');
+    if (dimClear) dimClear.onclick = () => callJSX('atlas_dimensions_clear()', res => res && logDim(res));
+
+    function buildPayload(){
+      return {
+        offsetMm: num(($('offsetMm') && $('offsetMm').value) || 0),
+        ticLenMm: num(($('ticLenMm') && $('ticLenMm').value) || 0),
+        textPt: num(($('textPt') && $('textPt').value) || 0),
+        strokePt: num(($('strokePt') && $('strokePt').value) || 0),
+        decimals: parseInt((($('decimals') && $('decimals').value) || 0), 10),
+        labelGapMm: num(($('labelGapMm') && $('labelGapMm').value) || 0),
+        measureClippedContent: !!($('measureClippedContent') && $('measureClippedContent').checked),
+        arrowheadSizePt: num(($('arrowheadSizePt') && $('arrowheadSizePt').value) || 0),
+        includeArrowhead: !!($('includeArrowhead') && $('includeArrowhead').checked),
+        textColor: ($('textColor') && $('textColor').value) || '#ff00ff',
+        lineColor: ($('lineColor') && $('lineColor').value) || '#000000',
+        scaleAppearance: num(($('scaleAppearance') && $('scaleAppearance').value) || 100) / 100
+      };
+    }
+
+    function runSides(sides){
+      const payload = buildPayload();
+      payload.sides = sides;
+      const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+      callJSX('atlas_dimensions_runMulti("' + json + '")', function(res){
+        if (res) logDim(res);
+      });
+    }
+
+    function runLineMeasure(){
+      const payload = buildPayload();
+      const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+      callJSX('atlas_dimensions_runLine("' + json + '")', function(res){
+        if (res) logDim(res);
+      });
+    }
+
+    const map = {
+      btnTL: () => runSides(['TOP', 'LEFT']),
+      btnT: () => runSides(['TOP']),
+      btnRT: () => runSides(['RIGHT', 'TOP']),
+      btnL: () => runSides(['LEFT']),
+      btnCenterText: () => runSides(['CENTER_TEXT']),
+      btnR: () => runSides(['RIGHT']),
+      btnBL: () => runSides(['BOTTOM', 'LEFT']),
+      btnB: () => runSides(['BOTTOM']),
+      btnRB: () => runSides(['RIGHT', 'BOTTOM']),
+      btnLineMeasure: () => runLineMeasure()
+    };
+
+    Object.keys(map).forEach(id => {
+      const el = $(id);
+      if (el) el.onclick = map[id];
+    });
   }
 
   function loadJSX(done){

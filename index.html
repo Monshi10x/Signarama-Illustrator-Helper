@@ -62,9 +62,33 @@
     .small { color:#aaa; font-size:12px; line-height:1.35; }
     .chk { display:flex; align-items:center; gap:8px; font-size:13px; color:#ddd; user-select:none; }
     .chk input { width:14px; height:14px; }
-    #log { white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-           font-size:11px; color:#cfcfcf; padding:10px; border:1px solid #333; border-radius:10px; background:#101010; height:240px; overflow:auto; }
+    #log, .log { white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                 font-size:11px; color:#cfcfcf; padding:10px; border:1px solid #333; border-radius:10px; background:#101010; height:240px; overflow:auto; }
     .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+    .dim-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+    .dim-btn {
+      display:grid; place-items:center;
+      background:#2a2a2a; color:#eee;
+      border:1px solid #444; border-radius:12px;
+      padding:10px;
+      cursor:pointer;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
+                  5px 8px 10px rgba(0,0,0,0.45),
+                  0 0px 1px rgba(0,0,0,0.6);
+      height:70px;
+    }
+    .dim-btn:hover { background:#242424; }
+    .dim-btn svg { width:50px; height:50px; }
+    .dim-center {
+      display:grid; place-items:center;
+      color:#bbb;
+      border:1px dashed #444;
+      border-radius:12px;
+      background:#202020;
+      height:70px;
+      font-size:12px;
+    }
     .row { display:flex; gap:10px; align-items:flex-end; }
     .fld { display:flex; flex-direction:column; gap:4px; }
     .fld span { font-size:12px; color:#bcbcbc; }
@@ -104,6 +128,8 @@
     <button class="tab active" data-tab="tab-buttons" type="button">Buttons</button>
     <button class="tab" data-tab="tab-bleeds" type="button">Bleeds</button>
     <button class="tab" data-tab="tab-cutfiles" type="button">Cutfiles</button>
+    <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
+    <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
 
@@ -225,6 +251,261 @@
       </button>
     </section>
 
+    <!-- TAB: DIMENSIONS -->
+    <section id="tab-dimensions" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">Quick Add</div>
+          <span class="info" data-tip="Adds measurement dimensions to the current selection.">i</span>
+        </div>
+        <div class="dim-grid">
+          <button id="btnTL" class="dim-btn" type="button" title="Top + Left">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="20" y1="10" x2="50" y2="10" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+              <line x1="10" y1="20" x2="10" y2="50" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnT" class="dim-btn" type="button" title="Top Only">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="5 0 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="20" y1="10" x2="50" y2="10" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnRT" class="dim-btn" type="button" title="Right + Top">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="10 0 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="20" y1="10" x2="50" y2="10" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+              <line x1="60" y1="20" x2="60" y2="50" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnL" class="dim-btn" type="button" title="Left Only">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 5 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="10" y1="20" x2="10" y2="50" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnCenterText" class="dim-btn" type="button" title="Center Text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="5" y="5" width="14" height="14" rx="1" />
+              <path d="M12 7v10M7 12h10" />
+            </svg>
+          </button>
+          <button id="btnR" class="dim-btn" type="button" title="Right Only">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="10 5 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="60" y1="20" x2="60" y2="50" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnBL" class="dim-btn" type="button" title="Bottom + Left">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 10 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="20" y1="60" x2="50" y2="60" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+              <line x1="10" y1="20" x2="10" y2="50" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnB" class="dim-btn" type="button" title="Bottom Only">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="5 10 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="20" y1="60" x2="50" y2="60" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnRB" class="dim-btn" type="button" title="Right + Bottom">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="10 10 60 60">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
+              <line x1="20" y1="60" x2="50" y2="60" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+              <line x1="60" y1="20" x2="60" y2="50" stroke="white" stroke-width="3"
+                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+            </svg>
+          </button>
+          <button id="btnLineMeasure" class="dim-btn" type="button" title="Measure Line/Path">
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
+              <defs>
+                <marker id="arrowLine" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
+                </marker>
+              </defs>
+              <line x1="10" y1="45" x2="50" y2="15" stroke="white" stroke-width="3"
+                    marker-start="url(#arrowLine)" marker-end="url(#arrowLine)"/>
+              <circle cx="10" cy="45" r="2" fill="white"/>
+              <circle cx="50" cy="15" r="2" fill="white"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Actions</div>
+        </div>
+        <div class="row">
+          <button id="btnDimClear" class="btn2" type="button">Clear “Dimensions” Layer</button>
+          <label class="fld" style="flex:1;">
+            <span>Scale Appearance (%)</span>
+            <input type="number" id="scaleAppearance" step="10" value="100">
+          </label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Settings</div>
+        </div>
+        <div class="grid2">
+          <label class="fld">
+            <span>Offset from object (mm)</span>
+            <input type="number" id="offsetMm" step="0.1" value="50">
+          </label>
+          <label class="fld">
+            <span>Tick length (mm)</span>
+            <input type="number" id="ticLenMm" step="0.1" value="50">
+          </label>
+          <label class="fld">
+            <span>Text size (pt)</span>
+            <input type="number" id="textPt" step="0.5" value="100">
+          </label>
+          <label class="fld">
+            <span>Stroke width (pt)</span>
+            <input type="number" id="strokePt" step="0.25" value="5">
+          </label>
+          <label class="fld">
+            <span>Label decimals</span>
+            <input type="number" id="decimals" step="1" value="1">
+          </label>
+          <label class="fld">
+            <span>Label gap from line (mm)</span>
+            <input type="number" id="labelGapMm" step="0.1" value="20">
+          </label>
+          <label class="chk" style="align-items:center; gap:8px; margin-top:6px;">
+            <input type="checkbox" id="measureClippedContent">
+            <span>Measure clipped content</span>
+          </label>
+          <label class="fld">
+            <span>Arrowhead size (pt)</span>
+            <input type="number" id="arrowheadSizePt" step="0.5" value="50">
+          </label>
+          <label class="chk" style="align-items:center; gap:8px; margin-top:6px;">
+            <input type="checkbox" id="includeArrowhead" checked>
+            <span>Include arrowhead</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Colours</div>
+        </div>
+        <div class="grid3">
+          <label class="fld">Text colour
+            <input type="color" id="textColor" value="#ff00ff">
+          </label>
+          <label class="fld">Line colour
+            <input type="color" id="lineColor" value="#000000">
+          </label>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Log</div>
+        </div>
+        <div id="dimensionsLog" class="log"></div>
+      </div>
+    </section>
+
+    <!-- TAB: LIGHTBOX -->
+    <section id="tab-lightbox" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">Lightbox</div>
+          <span class="info" data-tip="Creates a lightbox frame, supports, and an LED panel offset from the frame.">i</span>
+        </div>
+        <div class="grid2">
+          <label class="fld">
+            <span>Width (mm)</span>
+            <input type="number" id="lightboxWidthMm" step="1" value="1000">
+          </label>
+          <label class="fld">
+            <span>Height (mm)</span>
+            <input type="number" id="lightboxHeightMm" step="1" value="500">
+          </label>
+          <label class="fld">
+            <span>Depth (mm)</span>
+            <input type="number" id="lightboxDepthMm" step="1" value="100">
+          </label>
+          <label class="fld">
+            <span>Lightbox type</span>
+            <select id="lightboxType">
+              <option value="Acrylic">Acrylic</option>
+              <option value="Flexface">Flexface</option>
+            </select>
+          </label>
+          <label class="fld">
+            <span>Number of supports</span>
+            <input type="number" id="lightboxSupportCount" step="1" value="2">
+          </label>
+          <label class="fld">
+            <span>LED panel offset (mm)</span>
+            <input type="number" id="lightboxLedOffsetMm" step="1" value="30">
+          </label>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btnCreateLightbox" class="btn2" type="button">Create lightbox</button>
+        </div>
+      </div>
+    </section>
+
     <!-- TAB: TESTING -->
     <section id="tab-testing" class="wrap hidden" role="tabpanel">
       <div class="card">
@@ -241,5 +522,3 @@
   <script src="js/main.js"></script>
 </body>
 </html>
-
-
