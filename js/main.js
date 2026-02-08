@@ -338,6 +338,8 @@
           entry.y = colourEditState.lastEdit.y;
           entry.k = colourEditState.lastEdit.k;
           entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
+          log('Colours: matched lastEdit toKey=' + colourEditState.lastEdit.toKey + ' type=' + (entry.type || '') +
+            ' values=' + [entry.c, entry.m, entry.y, entry.k].join(','));
         }
 
         const row = document.createElement('div');
@@ -376,15 +378,22 @@
         });
 
         function applyCmyk() {
-          const c = num(cInput.value);
-          const m = num(mInput.value);
-          const y = num(yInput.value);
-          const k = num(kInput.value);
+          const cRaw = parseFloat(cInput.value);
+          const mRaw = parseFloat(mInput.value);
+          const yRaw = parseFloat(yInput.value);
+          const kRaw = parseFloat(kInput.value);
+          const c = isFinite(cRaw) ? cRaw : num(entry.c);
+          const m = isFinite(mRaw) ? mRaw : num(entry.m);
+          const y = isFinite(yRaw) ? yRaw : num(entry.y);
+          const k = isFinite(kRaw) ? kRaw : num(entry.k);
           const payload = JSON.stringify({
             fromKey: entry.key || '',
             fromType: entry.type || '',
             toCmyk: {c, m, y, k}
           }).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+          log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
+            ' to=' + [c, m, y, k].join(',') + ' (inputs=' +
+            [cInput.value, mInput.value, yInput.value, kInput.value].join(',') + ')');
           callJSX('signarama_helper_replaceColor("' + payload + '")', () => {
             swatch.style.background = cmykToHex(c, m, y, k);
             colourEditState.lastEdit = {
@@ -393,6 +402,7 @@
               toKey: cmykKey(c, m, y, k),
               c, m, y, k
             };
+            log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
             refreshColours();
           });
         }
