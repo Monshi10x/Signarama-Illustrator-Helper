@@ -126,6 +126,27 @@ function _srh_colorToCmyk(color) {
   return null;
 }
 
+function _srh_colorToRgb(color) {
+  if(!color) return null;
+  try {
+    if(color.typename === "RGBColor") {
+      return {r: color.red, g: color.green, b: color.blue};
+    }
+    if(color.typename === "SpotColor" && color.spot && color.spot.color) {
+      return _srh_colorToRgb(color.spot.color);
+    }
+    if(color.typename === "CMYKColor") {
+      var rgb = app.convertSampleColor(ColorSpace.CMYK, [color.cyan, color.magenta, color.yellow, color.black], ColorSpace.RGB, ColorConvertPurpose.defaultpurpose);
+      return {r: rgb[0], g: rgb[1], b: rgb[2]};
+    }
+    if(color.typename === "GrayColor") {
+      var rgbG = app.convertSampleColor(ColorSpace.GRAY, [color.gray], ColorSpace.RGB, ColorConvertPurpose.defaultpurpose);
+      return {r: rgbG[0], g: rgbG[1], b: rgbG[2]};
+    }
+  } catch(e) { }
+  return null;
+}
+
 function _srh_cmykToHex(cmyk) {
   if(!cmyk) return "#000000";
   try {
@@ -147,9 +168,25 @@ function _srh_cmykToHex(cmyk) {
   return "#000000";
 }
 
+function _srh_rgbToHex(rgb) {
+  if(!rgb) return "#000000";
+  function h(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0"+s : s; }
+  return "#" + h(rgb.r) + h(rgb.g) + h(rgb.b);
+}
+
 function _srh_colorKey(cmyk) {
   if(!cmyk) return null;
   return _srh_round(cmyk.c, 2) + "," + _srh_round(cmyk.m, 2) + "," + _srh_round(cmyk.y, 2) + "," + _srh_round(cmyk.k, 2);
+}
+
+function _srh_rgbKey(rgb) {
+  if(!rgb) return null;
+  return _srh_round(rgb.r, 2) + "," + _srh_round(rgb.g, 2) + "," + _srh_round(rgb.b, 2);
+}
+
+function _srh_rgbLabel(rgb) {
+  if(!rgb) return "";
+  return "R " + _srh_round(rgb.r, 2) + " G " + _srh_round(rgb.g, 2) + " B " + _srh_round(rgb.b, 2);
 }
 
 function _srh_cmykLabel(cmyk) {
@@ -182,6 +219,7 @@ function _srh_walkPageItems(container, cb) {
 function signarama_helper_getDocumentColors() {
   if(!app.documents.length) return "[]";
   var doc = app.activeDocument;
+  var mode = doc.documentColorSpace === DocumentColorSpace.RGB ? "RGB" : "CMYK";
   var seen = {};
   var list = [];
   var debug = {
@@ -202,10 +240,28 @@ function signarama_helper_getDocumentColors() {
   function addColor(color, typeLabel) {
     if(!color || color.typename === "NoColor") return;
     if(color.typename === "GradientColor" || color.typename === "PatternColor") return;
+    var typeKey = (typeLabel || "fill");
+    if(mode === "RGB") {
+      var rgb = _srh_colorToRgb(color);
+      if(!rgb) return;
+      var rKey = _srh_rgbKey(rgb);
+      var rgbCompositeKey = rKey + "|" + typeKey;
+      if(!rKey || seen[rgbCompositeKey]) return;
+      seen[rgbCompositeKey] = true;
+      list.push({
+        key: rKey,
+        type: typeKey,
+        hex: _srh_rgbToHex(rgb),
+        r: _srh_round(rgb.r, 2),
+        g: _srh_round(rgb.g, 2),
+        b: _srh_round(rgb.b, 2),
+        label: (typeKey.toUpperCase() + "  " + _srh_rgbLabel(rgb))
+      });
+      return;
+    }
     var cmyk = _srh_colorToCmyk(color);
     if(!cmyk) return;
     var key = _srh_colorKey(cmyk);
-    var typeKey = (typeLabel || "fill");
     var compositeKey = key + "|" + typeKey;
     if(!key || seen[compositeKey]) return;
     seen[compositeKey] = true;
@@ -276,7 +332,13 @@ function signarama_helper_getDocumentColors() {
     }
   } catch(_eFallback) { }
 
-  return JSON.stringify({colors: list, debug: debug});
+  return JSON.stringify({colors: list, debug: debug, mode: mode});
+}
+
+function signarama_helper_getDocumentColorMode() {
+  if(!app.documents.length) return "";
+  var doc = app.activeDocument;
+  return doc.documentColorSpace === DocumentColorSpace.RGB ? "RGB" : "CMYK";
 }
 
 function signarama_helper_replaceColor(jsonStr) {
@@ -286,8 +348,11 @@ function signarama_helper_replaceColor(jsonStr) {
   try {args = JSON.parse(String(jsonStr));} catch(e) {args = {};}
   var fromKey = String(args.fromKey || "");
   var fromType = String(args.fromType || "");
+  var fromMode = String(args.fromMode || "CMYK");
+  var fromHex = String(args.fromHex || "");
   var toHex = args.toHex != null ? String(args.toHex) : null;
   var toCmyk = args.toCmyk || null;
+  var fromRgb = null;
 
   if(!fromKey || (!toHex && !toCmyk)) return "Missing arguments.";
 
@@ -301,6 +366,27 @@ function signarama_helper_replaceColor(jsonStr) {
     var c = new RGBColor();
     c.red = r; c.green = g; c.blue = b;
     return c;
+  }
+
+  function _parseRgbKey(key) {
+    if(!key) return null;
+    var parts = key.split(",");
+    if(parts.length !== 3) return null;
+    var r = Number(parts[0]);
+    var g = Number(parts[1]);
+    var b = Number(parts[2]);
+    if(isNaN(r) || isNaN(g) || isNaN(b)) return null;
+    return {r: r, g: g, b: b};
+  }
+
+  function _rgbClose(a, b, tol) {
+    if(!a || !b) return false;
+    var t = (tol != null) ? tol : 0.5;
+    return Math.abs(a.r - b.r) <= t && Math.abs(a.g - b.g) <= t && Math.abs(a.b - b.b) <= t;
+  }
+
+  if(fromMode === "RGB") {
+    fromRgb = _parseRgbKey(fromKey);
   }
 
   var newCmyk = new CMYKColor();
@@ -318,6 +404,11 @@ function signarama_helper_replaceColor(jsonStr) {
     newCmyk.black = cmykArr[3];
   }
 
+  var newRgb = null;
+  if(toHex) {
+    newRgb = _hexToRgb(toHex);
+  }
+
   var updated = 0;
   _srh_walkPageItems(doc, function(it){
     if(!it) return;
@@ -329,12 +420,22 @@ function signarama_helper_replaceColor(jsonStr) {
 
     if(it.typename === "PathItem") {
       if(it.filled && (fromType === "" || fromType === "fill")) {
-        var k1 = _srh_colorKey(_srh_colorToCmyk(it.fillColor));
-        if(k1 === fromKey) { it.fillColor = newCmyk; updated++; }
+        var k1 = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(it.fillColor)) : _srh_colorKey(_srh_colorToCmyk(it.fillColor));
+        var k1Hex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(it.fillColor)) : "";
+        var k1Rgb = fromMode === "RGB" ? _srh_colorToRgb(it.fillColor) : null;
+        if(k1 === fromKey || (fromMode === "RGB" && fromHex && k1Hex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(k1Rgb, fromRgb, 0.5))) {
+          it.fillColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
+          updated++;
+        }
       }
       if(it.stroked && (fromType === "" || fromType === "stroke")) {
-        var k2 = _srh_colorKey(_srh_colorToCmyk(it.strokeColor));
-        if(k2 === fromKey) { it.strokeColor = newCmyk; updated++; }
+        var k2 = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(it.strokeColor)) : _srh_colorKey(_srh_colorToCmyk(it.strokeColor));
+        var k2Hex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(it.strokeColor)) : "";
+        var k2Rgb = fromMode === "RGB" ? _srh_colorToRgb(it.strokeColor) : null;
+        if(k2 === fromKey || (fromMode === "RGB" && fromHex && k2Hex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(k2Rgb, fromRgb, 0.5))) {
+          it.strokeColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
+          updated++;
+        }
       }
       return;
     }
@@ -342,12 +443,22 @@ function signarama_helper_replaceColor(jsonStr) {
       try {
         var tr = it.textRange.characterAttributes;
         if(fromType === "" || fromType === "fill") {
-          var kf = _srh_colorKey(_srh_colorToCmyk(tr.fillColor));
-          if(kf === fromKey) { tr.fillColor = newCmyk; updated++; }
+          var kf = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(tr.fillColor)) : _srh_colorKey(_srh_colorToCmyk(tr.fillColor));
+          var kfHex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(tr.fillColor)) : "";
+          var kfRgb = fromMode === "RGB" ? _srh_colorToRgb(tr.fillColor) : null;
+          if(kf === fromKey || (fromMode === "RGB" && fromHex && kfHex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(kfRgb, fromRgb, 0.5))) {
+            tr.fillColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
+            updated++;
+          }
         }
         if(fromType === "" || fromType === "stroke") {
-          var ks = _srh_colorKey(_srh_colorToCmyk(tr.strokeColor));
-          if(ks === fromKey) { tr.strokeColor = newCmyk; updated++; }
+          var ks = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(tr.strokeColor)) : _srh_colorKey(_srh_colorToCmyk(tr.strokeColor));
+          var ksHex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(tr.strokeColor)) : "";
+          var ksRgb = fromMode === "RGB" ? _srh_colorToRgb(tr.strokeColor) : null;
+          if(ks === fromKey || (fromMode === "RGB" && fromHex && ksHex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(ksRgb, fromRgb, 0.5))) {
+            tr.strokeColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
+            updated++;
+          }
         }
       } catch(_eT) { }
       return;
