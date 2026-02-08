@@ -332,15 +332,28 @@
       if (countEl) countEl.textContent = 'Document colours: ' + data.length + (debug ? ' (items: ' + (debug.totalItems || 0) + ', scanned: ' + (debug.scanned || 0) + ', path: ' + (debug.pathItems || 0) + ', text: ' + (debug.textFrames || 0) + ', fallback: ' + (debug.fallbackUsed ? 'yes' : 'no') + ')' : '');
 
       data.forEach((entry) => {
-        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type && entry.key === colourEditState.lastEdit.toKey) {
-          entry.c = colourEditState.lastEdit.c;
-          entry.m = colourEditState.lastEdit.m;
-          entry.y = colourEditState.lastEdit.y;
-          entry.k = colourEditState.lastEdit.k;
-          entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
-          log('Colours: matched lastEdit toKey=' + colourEditState.lastEdit.toKey + ' type=' + (entry.type || '') +
-            ' values=' + [entry.c, entry.m, entry.y, entry.k].join(','));
+        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type) {
+          const expectedHex = cmykToHex(
+            colourEditState.lastEdit.c,
+            colourEditState.lastEdit.m,
+            colourEditState.lastEdit.y,
+            colourEditState.lastEdit.k
+          );
+          const matchesEdit = entry.key === colourEditState.lastEdit.toKey ||
+            (entry.hex && entry.hex.toLowerCase() === expectedHex.toLowerCase());
+          if (matchesEdit) {
+            entry.c = colourEditState.lastEdit.c;
+            entry.m = colourEditState.lastEdit.m;
+            entry.y = colourEditState.lastEdit.y;
+            entry.k = colourEditState.lastEdit.k;
+            entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
+            log('Colours: matched lastEdit toKey=' + colourEditState.lastEdit.toKey + ' type=' + (entry.type || '') +
+              ' values=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hexMatch=' +
+              (entry.hex ? entry.hex.toLowerCase() === expectedHex.toLowerCase() : false));
+          }
         }
+        log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
+          ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
 
         const row = document.createElement('div');
         row.className = 'row';
