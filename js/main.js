@@ -465,6 +465,7 @@
               fromKey: entry.key || '',
               fromType: entry.type || '',
               fromMode: 'RGB',
+              fromHex: entry.hex || '',
               toHex: toHex
             }).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
             log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +

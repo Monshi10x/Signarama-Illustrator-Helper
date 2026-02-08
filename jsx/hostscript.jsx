@@ -349,6 +349,7 @@ function signarama_helper_replaceColor(jsonStr) {
   var fromKey = String(args.fromKey || "");
   var fromType = String(args.fromType || "");
   var fromMode = String(args.fromMode || "CMYK");
+  var fromHex = String(args.fromHex || "");
   var toHex = args.toHex != null ? String(args.toHex) : null;
   var toCmyk = args.toCmyk || null;
 
@@ -398,14 +399,16 @@ function signarama_helper_replaceColor(jsonStr) {
     if(it.typename === "PathItem") {
       if(it.filled && (fromType === "" || fromType === "fill")) {
         var k1 = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(it.fillColor)) : _srh_colorKey(_srh_colorToCmyk(it.fillColor));
-        if(k1 === fromKey) {
+        var k1Hex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(it.fillColor)) : "";
+        if(k1 === fromKey || (fromMode === "RGB" && fromHex && k1Hex === fromHex)) {
           it.fillColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
           updated++;
         }
       }
       if(it.stroked && (fromType === "" || fromType === "stroke")) {
         var k2 = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(it.strokeColor)) : _srh_colorKey(_srh_colorToCmyk(it.strokeColor));
-        if(k2 === fromKey) {
+        var k2Hex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(it.strokeColor)) : "";
+        if(k2 === fromKey || (fromMode === "RGB" && fromHex && k2Hex === fromHex)) {
           it.strokeColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
           updated++;
         }
@@ -417,14 +420,16 @@ function signarama_helper_replaceColor(jsonStr) {
         var tr = it.textRange.characterAttributes;
         if(fromType === "" || fromType === "fill") {
           var kf = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(tr.fillColor)) : _srh_colorKey(_srh_colorToCmyk(tr.fillColor));
-          if(kf === fromKey) {
+          var kfHex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(tr.fillColor)) : "";
+          if(kf === fromKey || (fromMode === "RGB" && fromHex && kfHex === fromHex)) {
             tr.fillColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
             updated++;
           }
         }
         if(fromType === "" || fromType === "stroke") {
           var ks = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(tr.strokeColor)) : _srh_colorKey(_srh_colorToCmyk(tr.strokeColor));
-          if(ks === fromKey) {
+          var ksHex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(tr.strokeColor)) : "";
+          if(ks === fromKey || (fromMode === "RGB" && fromHex && ksHex === fromHex)) {
             tr.strokeColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
             updated++;
           }
