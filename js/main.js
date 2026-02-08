@@ -477,10 +477,6 @@
               const match = (result || '').match(/Updated\s+(\d+)/i);
               const updated = match ? parseInt(match[1], 10) : 0;
               log('Colours: replace result=' + (result || '') + ' updated=' + updated);
-              if (!updated) {
-                refreshColours();
-                return;
-              }
               swatch.style.background = toHex;
               colourEditState.lastEdit = {
                 mode: 'RGB',
