@@ -20,6 +20,11 @@
     return isFinite(n) ? n : 0;
   }
 
+  function cmykKey(c, m, y, k){
+    function r(v){ return Math.round(v * 100) / 100; }
+    return [r(c), r(m), r(y), r(k)].join(',');
+  }
+
   const colourEditState = {
     lastEdit: null
   };
@@ -300,6 +305,7 @@
     const focusedMeta = focused && focused.dataset && focused.dataset.focusKey ? {
       focusKey: focused.dataset.focusKey,
       focusHex: focused.dataset.focusHex,
+      focusType: focused.dataset.focusType,
       index: focused.dataset.focusIndex
     } : null;
     list.innerHTML = '';
@@ -326,13 +332,28 @@
       if (countEl) countEl.textContent = 'Document colours: ' + data.length + (debug ? ' (items: ' + (debug.totalItems || 0) + ', scanned: ' + (debug.scanned || 0) + ', path: ' + (debug.pathItems || 0) + ', text: ' + (debug.textFrames || 0) + ', fallback: ' + (debug.fallbackUsed ? 'yes' : 'no') + ')' : '');
 
       data.forEach((entry) => {
-        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type && entry.hex === colourEditState.lastEdit.hex) {
-          entry.c = colourEditState.lastEdit.c;
-          entry.m = colourEditState.lastEdit.m;
-          entry.y = colourEditState.lastEdit.y;
-          entry.k = colourEditState.lastEdit.k;
-          entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
+        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type) {
+          const expectedHex = cmykToHex(
+            colourEditState.lastEdit.c,
+            colourEditState.lastEdit.m,
+            colourEditState.lastEdit.y,
+            colourEditState.lastEdit.k
+          );
+          const matchesEdit = entry.key === colourEditState.lastEdit.toKey ||
+            (entry.hex && entry.hex.toLowerCase() === expectedHex.toLowerCase());
+          if (matchesEdit) {
+            entry.c = colourEditState.lastEdit.c;
+            entry.m = colourEditState.lastEdit.m;
+            entry.y = colourEditState.lastEdit.y;
+            entry.k = colourEditState.lastEdit.k;
+            entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
+            log('Colours: matched lastEdit toKey=' + colourEditState.lastEdit.toKey + ' type=' + (entry.type || '') +
+              ' values=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hexMatch=' +
+              (entry.hex ? entry.hex.toLowerCase() === expectedHex.toLowerCase() : false));
+          }
         }
+        log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
+          ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
 
         const row = document.createElement('div');
         row.className = 'row';
@@ -370,22 +391,31 @@
         });
 
         function applyCmyk() {
-          const c = num(cInput.value);
-          const m = num(mInput.value);
-          const y = num(yInput.value);
-          const k = num(kInput.value);
+          const cRaw = parseFloat(cInput.value);
+          const mRaw = parseFloat(mInput.value);
+          const yRaw = parseFloat(yInput.value);
+          const kRaw = parseFloat(kInput.value);
+          const c = isFinite(cRaw) ? cRaw : num(entry.c);
+          const m = isFinite(mRaw) ? mRaw : num(entry.m);
+          const y = isFinite(yRaw) ? yRaw : num(entry.y);
+          const k = isFinite(kRaw) ? kRaw : num(entry.k);
           const payload = JSON.stringify({
             fromKey: entry.key || '',
             fromType: entry.type || '',
             toCmyk: {c, m, y, k}
           }).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+          log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
+            ' to=' + [c, m, y, k].join(',') + ' (inputs=' +
+            [cInput.value, mInput.value, yInput.value, kInput.value].join(',') + ')');
           callJSX('signarama_helper_replaceColor("' + payload + '")', () => {
             swatch.style.background = cmykToHex(c, m, y, k);
             colourEditState.lastEdit = {
               type: entry.type || '',
-              hex: cmykToHex(c, m, y, k),
+              fromKey: entry.key || '',
+              toKey: cmykKey(c, m, y, k),
               c, m, y, k
             };
+            log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
             refreshColours();
           });
         }
@@ -409,6 +439,10 @@
         mInput.dataset.focusKey = entry.key || '';
         yInput.dataset.focusKey = entry.key || '';
         kInput.dataset.focusKey = entry.key || '';
+        cInput.dataset.focusType = entry.type || '';
+        mInput.dataset.focusType = entry.type || '';
+        yInput.dataset.focusType = entry.type || '';
+        kInput.dataset.focusType = entry.type || '';
         cInput.dataset.focusHex = entry.hex || '';
         mInput.dataset.focusHex = entry.hex || '';
         yInput.dataset.focusHex = entry.hex || '';
@@ -445,8 +479,17 @@
 
       if (focusedMeta) {
         let nextFocus = null;
+        let focusKey = focusedMeta.focusKey;
+        if (
+          colourEditState.lastEdit &&
+          focusKey &&
+          focusedMeta.focusType === colourEditState.lastEdit.type &&
+          focusKey === colourEditState.lastEdit.fromKey
+        ) {
+          focusKey = colourEditState.lastEdit.toKey;
+        }
         if (focusedMeta.focusKey) {
-          const selectorKey = '[data-focus-key=\"' + focusedMeta.focusKey + '\"][data-focus-index=\"' + focusedMeta.index + '\"]';
+          const selectorKey = '[data-focus-key=\"' + focusKey + '\"][data-focus-index=\"' + focusedMeta.index + '\"]';
           nextFocus = list.querySelector(selectorKey);
         }
         if (!nextFocus && focusedMeta.focusHex) {
