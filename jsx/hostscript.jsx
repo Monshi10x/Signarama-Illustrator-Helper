@@ -79,7 +79,283 @@ function _srh_getDocumentArtworkBounds(doc) {
 
 /* ---------------- Units ---------------- */
 function _srh_mm2pt(mm) {return mm * 2.834645669291339;} // 72 / 25.4
+function _srh_pt2mm(pt) {return pt / 2.834645669291339;}
 function _srh_clamp(n, a, b) {return n < a ? a : (n > b ? b : n);}
+
+function _srh_round(n, d) {
+  var p = Math.pow(10, d || 2);
+  return Math.round(n * p) / p;
+}
+
+function _srh_colorToCmyk(color) {
+  if(!color) return null;
+  try {
+    if(color.typename === "CMYKColor") {
+      return {c: color.cyan, m: color.magenta, y: color.yellow, k: color.black};
+    }
+    if(color.typename === "SpotColor" && color.spot && color.spot.color) {
+      return _srh_colorToCmyk(color.spot.color);
+    }
+    if(color.typename === "RGBColor") {
+      try {
+        var cmyk = app.convertSampleColor(ColorSpace.RGB, [color.red, color.green, color.blue], ColorSpace.CMYK, ColorConvertPurpose.defaultpurpose);
+        return {c: cmyk[0], m: cmyk[1], y: cmyk[2], k: cmyk[3]};
+      } catch(_eConv) {
+        // Manual RGB -> CMYK fallback (0-255 to 0-100)
+        var r = color.red / 255;
+        var g = color.green / 255;
+        var b = color.blue / 255;
+        var k = 1 - Math.max(r, g, b);
+        if(k >= 1) return {c: 0, m: 0, y: 0, k: 100};
+        var c = (1 - r - k) / (1 - k);
+        var m = (1 - g - k) / (1 - k);
+        var y = (1 - b - k) / (1 - k);
+        return {c: c * 100, m: m * 100, y: y * 100, k: k * 100};
+      }
+    }
+    if(color.typename === "GrayColor") {
+      try {
+        var cmykG = app.convertSampleColor(ColorSpace.GRAY, [color.gray], ColorSpace.CMYK, ColorConvertPurpose.defaultpurpose);
+        return {c: cmykG[0], m: cmykG[1], y: cmykG[2], k: cmykG[3]};
+      } catch(_eConvG) {
+        var k2 = 100 - color.gray;
+        return {c: 0, m: 0, y: 0, k: k2};
+      }
+    }
+  } catch(e) { }
+  return null;
+}
+
+function _srh_cmykToHex(cmyk) {
+  if(!cmyk) return "#000000";
+  try {
+    var rgb = app.convertSampleColor(ColorSpace.CMYK, [cmyk.c, cmyk.m, cmyk.y, cmyk.k], ColorSpace.RGB, ColorConvertPurpose.defaultpurpose);
+    function h(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0"+s : s; }
+    return "#" + h(rgb[0]) + h(rgb[1]) + h(rgb[2]);
+  } catch(e) {
+    // Manual CMYK -> RGB fallback
+    var c = (cmyk.c || 0) / 100;
+    var m = (cmyk.m || 0) / 100;
+    var y = (cmyk.y || 0) / 100;
+    var k = (cmyk.k || 0) / 100;
+    var r = 255 * (1 - c) * (1 - k);
+    var g = 255 * (1 - m) * (1 - k);
+    var b = 255 * (1 - y) * (1 - k);
+    function h2(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s2 = v.toString(16); return s2.length === 1 ? "0"+s2 : s2; }
+    return "#" + h2(r) + h2(g) + h2(b);
+  }
+  return "#000000";
+}
+
+function _srh_colorKey(cmyk) {
+  if(!cmyk) return null;
+  return _srh_round(cmyk.c, 2) + "," + _srh_round(cmyk.m, 2) + "," + _srh_round(cmyk.y, 2) + "," + _srh_round(cmyk.k, 2);
+}
+
+function _srh_cmykLabel(cmyk) {
+  if(!cmyk) return "";
+  return "C " + _srh_round(cmyk.c, 2) + " M " + _srh_round(cmyk.m, 2) + " Y " + _srh_round(cmyk.y, 2) + " K " + _srh_round(cmyk.k, 2);
+}
+
+function _srh_walkPageItems(container, cb) {
+  if(!container) return;
+  var items = null;
+  try {items = container.pageItems;} catch(_eItems) {items = null;}
+  if(!items) return;
+  for(var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if(!it) continue;
+    if(it.typename === "GroupItem") {
+      _srh_walkPageItems(it, cb);
+      continue;
+    }
+    if(it.typename === "CompoundPathItem") {
+      for(var j = 0; j < it.pathItems.length; j++) {
+        cb(it.pathItems[j]);
+      }
+      continue;
+    }
+    cb(it);
+  }
+}
+
+function signarama_helper_getDocumentColors() {
+  if(!app.documents.length) return "[]";
+  var doc = app.activeDocument;
+  var seen = {};
+  var list = [];
+  var debug = {
+    totalItems: 0,
+    scanned: 0,
+    pathItems: 0,
+    textFrames: 0,
+    skippedRaster: 0,
+    skippedPlaced: 0,
+    skippedHidden: 0,
+    skippedLocked: 0,
+    sampleTypes: [],
+    totalPathItems: 0,
+    totalTextFrames: 0,
+    fallbackUsed: false
+  };
+
+  function addColor(color, typeLabel) {
+    if(!color || color.typename === "NoColor") return;
+    if(color.typename === "GradientColor" || color.typename === "PatternColor") return;
+    var cmyk = _srh_colorToCmyk(color);
+    if(!cmyk) return;
+    var key = _srh_colorKey(cmyk);
+    var typeKey = (typeLabel || "fill");
+    var compositeKey = key + "|" + typeKey;
+    if(!key || seen[compositeKey]) return;
+    seen[compositeKey] = true;
+    list.push({
+      key: key,
+      type: typeKey,
+      hex: _srh_cmykToHex(cmyk),
+      c: _srh_round(cmyk.c, 2),
+      m: _srh_round(cmyk.m, 2),
+      y: _srh_round(cmyk.y, 2),
+      k: _srh_round(cmyk.k, 2),
+      label: (typeKey.toUpperCase() + "  " + _srh_cmykLabel(cmyk))
+    });
+  }
+
+  _srh_walkPageItems(doc, function(it){
+    if(!it) return;
+    debug.totalItems++;
+    if(debug.sampleTypes.length < 10) debug.sampleTypes.push(it.typename);
+    if(it.typename === "RasterItem") {debug.skippedRaster++; return;}
+    if(it.typename === "PlacedItem") {debug.skippedPlaced++; return;}
+    if(it.locked) {debug.skippedLocked++; return;}
+    if(it.hidden) {debug.skippedHidden++; return;}
+    try {
+      if(it.layer && (it.layer.locked || !it.layer.visible)) return;
+    } catch(_eLayer) { }
+
+    if(it.typename === "PathItem") {
+      debug.pathItems++;
+      try {if(it.filled) addColor(it.fillColor, "fill");} catch(_eF) { }
+      try {if(it.stroked) addColor(it.strokeColor, "stroke");} catch(_eS) { }
+      debug.scanned++;
+      return;
+    }
+    if(it.typename === "TextFrame") {
+      debug.textFrames++;
+      try {
+        var tr = it.textRange.characterAttributes;
+        addColor(tr.fillColor, "fill");
+        addColor(tr.strokeColor, "stroke");
+      } catch(_eT) { }
+      debug.scanned++;
+      return;
+    }
+  });
+
+  // Fallback scan using direct collections if nothing found
+  try {
+    debug.totalPathItems = doc.pathItems.length;
+    debug.totalTextFrames = doc.textFrames.length;
+    if(list.length === 0 && (debug.totalPathItems > 0 || debug.totalTextFrames > 0)) {
+      debug.fallbackUsed = true;
+      for(var p = 0; p < doc.pathItems.length; p++) {
+        var pi = doc.pathItems[p];
+        if(!pi || pi.locked || pi.hidden) continue;
+        try {if(pi.filled) addColor(pi.fillColor, "fill");} catch(_ePF2) { }
+        try {if(pi.stroked) addColor(pi.strokeColor, "stroke");} catch(_ePS2) { }
+      }
+      for(var t = 0; t < doc.textFrames.length; t++) {
+        var tf = doc.textFrames[t];
+        if(!tf || tf.locked || tf.hidden) continue;
+        try {
+          var tr = tf.textRange.characterAttributes;
+          addColor(tr.fillColor, "fill");
+          addColor(tr.strokeColor, "stroke");
+        } catch(_eTF2) { }
+      }
+    }
+  } catch(_eFallback) { }
+
+  return JSON.stringify({colors: list, debug: debug});
+}
+
+function signarama_helper_replaceColor(jsonStr) {
+  if(!app.documents.length) return "No document.";
+  var doc = app.activeDocument;
+  var args = {};
+  try {args = JSON.parse(String(jsonStr));} catch(e) {args = {};}
+  var fromKey = String(args.fromKey || "");
+  var fromType = String(args.fromType || "");
+  var toHex = args.toHex != null ? String(args.toHex) : null;
+  var toCmyk = args.toCmyk || null;
+
+  if(!fromKey || (!toHex && !toCmyk)) return "Missing arguments.";
+
+  // Convert hex to RGB
+  function _hexToRgb(hex) {
+    var h = hex.replace('#','');
+    if(h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var r = parseInt(h.substring(0,2),16);
+    var g = parseInt(h.substring(2,4),16);
+    var b = parseInt(h.substring(4,6),16);
+    var c = new RGBColor();
+    c.red = r; c.green = g; c.blue = b;
+    return c;
+  }
+
+  var newCmyk = new CMYKColor();
+  if(toCmyk) {
+    newCmyk.cyan = Number(toCmyk.c || 0);
+    newCmyk.magenta = Number(toCmyk.m || 0);
+    newCmyk.yellow = Number(toCmyk.y || 0);
+    newCmyk.black = Number(toCmyk.k || 0);
+  } else {
+    var rgb = _hexToRgb(toHex);
+    var cmykArr = app.convertSampleColor(ColorSpace.RGB, [rgb.red, rgb.green, rgb.blue], ColorSpace.CMYK, ColorConvertPurpose.defaultpurpose);
+    newCmyk.cyan = cmykArr[0];
+    newCmyk.magenta = cmykArr[1];
+    newCmyk.yellow = cmykArr[2];
+    newCmyk.black = cmykArr[3];
+  }
+
+  var updated = 0;
+  _srh_walkPageItems(doc, function(it){
+    if(!it) return;
+    if(it.typename === "RasterItem" || it.typename === "PlacedItem") return;
+    if(it.locked || it.hidden) return;
+    try {
+      if(it.layer && (it.layer.locked || !it.layer.visible)) return;
+    } catch(_eLayer2) { }
+
+    if(it.typename === "PathItem") {
+      if(it.filled && (fromType === "" || fromType === "fill")) {
+        var k1 = _srh_colorKey(_srh_colorToCmyk(it.fillColor));
+        if(k1 === fromKey) { it.fillColor = newCmyk; updated++; }
+      }
+      if(it.stroked && (fromType === "" || fromType === "stroke")) {
+        var k2 = _srh_colorKey(_srh_colorToCmyk(it.strokeColor));
+        if(k2 === fromKey) { it.strokeColor = newCmyk; updated++; }
+      }
+      return;
+    }
+    if(it.typename === "TextFrame") {
+      try {
+        var tr = it.textRange.characterAttributes;
+        if(fromType === "" || fromType === "fill") {
+          var kf = _srh_colorKey(_srh_colorToCmyk(tr.fillColor));
+          if(kf === fromKey) { tr.fillColor = newCmyk; updated++; }
+        }
+        if(fromType === "" || fromType === "stroke") {
+          var ks = _srh_colorKey(_srh_colorToCmyk(tr.strokeColor));
+          if(ks === fromKey) { tr.strokeColor = newCmyk; updated++; }
+        }
+      } catch(_eT) { }
+      return;
+    }
+  });
+
+  return "Updated " + updated + " items.";
+}
 
 function _srh_getLayerByName(doc, name) {
   for(var i = 0; i < doc.layers.length; i++) {
@@ -158,16 +434,30 @@ function signarama_helper_duplicateOutlineScaleA4() {
   doc.selection = null;
   grp.selected = true;
 
-  // Convert text to outlines (within group)
+  // Convert all text types to outlines (within group), then expand appearance if needed
   try {
     var tfs = grp.textFrames;
     for(var t = tfs.length - 1; t >= 0; t--) {
-      try {tfs[t].createOutline();} catch(_e1) { }
+      try {
+        var tf = tfs[t];
+        tf.createOutline();
+      } catch(_e1) { }
     }
   } catch(_e2) { }
 
-  // Outline strokes (menu command operates on selection)
-  try {app.executeMenuCommand('outline');} catch(_e3) { }
+  // Ensure any remaining text types are converted to outlines/expanded
+  try {
+    doc.selection = null;
+    grp.selected = true;
+    app.executeMenuCommand("Expand3");
+  } catch(_eExp3) { }
+
+  // Outline strokes after text has been converted (all paths)
+  try {
+    doc.selection = null;
+    grp.selected = true;
+    app.executeMenuCommand("OffsetPath v22");
+  } catch(_e3) { }
 
   // Scale down to fit within 297x210mm
   var targetW = _srh_mm2pt(297);
@@ -1345,6 +1635,8 @@ function signarama_helper_createLightbox(jsonStr) {
   var supports = parseInt(opts.supportCount, 10);
   if(!supports || supports < 0) supports = 0;
   var ledOffsetMm = Number(opts.ledOffsetMm || 0);
+  var addMeasures = !!opts.addMeasures;
+  var measureOptions = opts.measureOptions || null;
 
   if(!(wMm > 0) || !(hMm > 0)) return 'Width and height must be > 0.';
 
@@ -1365,6 +1657,8 @@ function signarama_helper_createLightbox(jsonStr) {
   var black = new RGBColor();
   black.red = 0; black.green = 0; black.blue = 0;
 
+  var frameFill = _dim_hexToRGB('#848484');
+
   // Frame rectangle + inner offset as a minus-front compound shape
   var inset = _dim_mm2pt(25);
   var innerW = w - (2 * inset);
@@ -1378,7 +1672,9 @@ function signarama_helper_createLightbox(jsonStr) {
   function _lb_applyStroke(it) {
     try {
       if(it.typename === "PathItem") {
-        it.filled = false;
+        it.filled = true;
+        if(frameFill) it.fillColor = frameFill;
+        it.opacity = 50;
         it.stroked = true;
         it.strokeWidth = 1;
         it.strokeColor = black;
@@ -1416,14 +1712,16 @@ function signarama_helper_createLightbox(jsonStr) {
   }
 
   // Supports
+  var supportCenters = [];
   if(supports > 0 && w > supportW) {
     var gap = (w - (supports * supportW)) / (supports + 1);
     if(gap < 0) gap = 0;
     for(var i = 0; i < supports; i++) {
       var sx = left + gap * (i + 1) + supportW * i;
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
-      try {s.filled = false;} catch(_eS0) { }
+      try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
       try {s.stroked = true; s.strokeWidth = 1; s.strokeColor = black;} catch(_eS1) { }
+      supportCenters.push(sx + (supportW / 2));
     }
   }
 
@@ -1440,7 +1738,349 @@ function signarama_helper_createLightbox(jsonStr) {
     }
   }
 
+  if(addMeasures && measureOptions) {
+    var bounds = {left: left, top: top, right: left + w, bottom: top - h};
+    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions);
+  }
+
   return 'Lightbox created: ' + wMm + ' x ' + hMm + ' mm, depth ' + dMm + ' mm, type ' + type + ', supports ' + supports + '.';
+}
+
+function signarama_helper_createLightboxWithLedPanel(jsonStr) {
+  var opts = {};
+  try {opts = JSON.parse(String(jsonStr));} catch(e) {opts = {};}
+  var res = signarama_helper_createLightbox(jsonStr);
+
+  // Reuse the same width/height/depth to create the LED panel and layout.
+  var payload = {
+    ledWatt: Number(opts.ledWatt || 0),
+    ledWidthMm: Number(opts.ledWidthMm || 66),
+    ledHeightMm: Number(opts.ledHeightMm || 13),
+    allowanceWmm: Number(opts.allowanceWmm || 0),
+    allowanceHmm: Number(opts.allowanceHmm || 0),
+    maxLedsInSeries: Number(opts.maxLedsInSeries || 50),
+    flipLed: !!opts.flipLed,
+    layoutWidthMm: Number(opts.widthMm || 0),
+    layoutHeightMm: Number(opts.heightMm || 0),
+    depthMm: Number(opts.depthMm || 0),
+    boxWidthMm: Number(opts.widthMm || 0),
+    boxHeightMm: Number(opts.heightMm || 0),
+    forceBounds: true,
+    ignoreSelection: true
+  };
+
+  // If ledOffset is provided, align the LED layout to the lightbox LED panel bounds.
+  var wMm = Number(opts.widthMm || 0);
+  var hMm = Number(opts.heightMm || 0);
+  var ledOffsetMm = Number(opts.ledOffsetMm || 0);
+  if(wMm > 0 && hMm > 0 && ledOffsetMm > 0) {
+    var ab = app.activeDocument.artboards[app.activeDocument.artboards.getActiveArtboardIndex()].artboardRect;
+    var centerX = (ab[0] + ab[2]) / 2;
+    var centerY = (ab[1] + ab[3]) / 2;
+    var wPt = _srh_mm2pt(wMm);
+    var hPt = _srh_mm2pt(hMm);
+    var ledOffsetPt = _srh_mm2pt(ledOffsetMm);
+    var bounds = {
+      left: centerX - (wPt / 2) + ledOffsetPt,
+      top: centerY + (hPt / 2) - ledOffsetPt,
+      right: centerX + (wPt / 2) - ledOffsetPt,
+      bottom: centerY - (hPt / 2) + ledOffsetPt
+    };
+    payload.boundsOverridePt = bounds;
+  }
+
+  signarama_helper_drawLedLayout(JSON.stringify(payload));
+  return res + ' + LED panel/layout.';
+}
+
+function signarama_helper_drawLedLayout(jsonStr) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var opts = {};
+  try {opts = JSON.parse(String(jsonStr));} catch(e) {opts = {};}
+
+  var ledWatt = Number(opts.ledWatt || 0);
+  var ledWidthMm = Number(opts.ledWidthMm || 0);
+  var ledHeightMm = Number(opts.ledHeightMm || 0);
+  var allowanceWmm = Number(opts.allowanceWmm || 0);
+  var allowanceHmm = Number(opts.allowanceHmm || 0);
+  var maxLedsInSeries = parseInt(opts.maxLedsInSeries, 10);
+  if(!maxLedsInSeries || maxLedsInSeries < 1) maxLedsInSeries = 50;
+  var flipLed = !!opts.flipLed;
+  var layoutWidthMm = Number(opts.layoutWidthMm || 0);
+  var layoutHeightMm = Number(opts.layoutHeightMm || 0);
+  var forceBounds = !!opts.forceBounds;
+  var ignoreSelection = !!opts.ignoreSelection;
+  var boundsOverridePt = opts.boundsOverridePt || null;
+  var depthMm = Number(opts.depthMm || 0);
+  if(!(depthMm > 0)) depthMm = 150;
+
+  var panelInsetWmm = 30;
+  var panelInsetHmm = 30;
+
+  if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
+  if(flipLed) {
+    var tmp = ledWidthMm;
+    ledWidthMm = ledHeightMm;
+    ledHeightMm = tmp;
+  }
+
+  function _getItemBounds(it) {
+    var b = null;
+    try {b = it.visibleBounds;} catch(_e0) { }
+    if(!b || b.length !== 4) {try {b = it.geometricBounds;} catch(_e1) { } }
+    if(!b || b.length !== 4) return null;
+    return {left: b[0], top: b[1], right: b[2], bottom: b[3]};
+  }
+
+  function _getSelectionBounds(doc) {
+    if(!doc.selection || doc.selection.length === 0) return [];
+    var boundsList = [];
+    for(var i = 0; i < doc.selection.length; i++) {
+      var it = doc.selection[i];
+      if(!it) continue;
+      var b = _getItemBounds(it);
+      if(!b) continue;
+      boundsList.push(b);
+    }
+    return boundsList;
+  }
+
+  function _getArtboardBounds(doc) {
+    var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
+    return {left: ab[0], top: ab[1], right: ab[2], bottom: ab[3]};
+  }
+
+  function _getTargetBounds(doc) {
+    if(boundsOverridePt && boundsOverridePt.left != null) {
+      return [boundsOverridePt];
+    }
+    if(forceBounds && (layoutWidthMm > 0) && (layoutHeightMm > 0)) {
+      var ab = _getArtboardBounds(doc);
+      var centerX = (ab.left + ab.right) / 2;
+      var centerY = (ab.top + ab.bottom) / 2;
+      var wPt = _srh_mm2pt(layoutWidthMm);
+      var hPt = _srh_mm2pt(layoutHeightMm);
+      return {
+        left: centerX - (wPt / 2),
+        top: centerY + (hPt / 2),
+        right: centerX + (wPt / 2),
+        bottom: centerY - (hPt / 2)
+      };
+    }
+    var selBounds = ignoreSelection ? [] : _getSelectionBounds(doc);
+    if(selBounds && selBounds.length) return selBounds;
+    if((layoutWidthMm > 0) && (layoutHeightMm > 0)) {
+      var ab2 = _getArtboardBounds(doc);
+      var cx = (ab2.left + ab2.right) / 2;
+      var cy = (ab2.top + ab2.bottom) / 2;
+      var wPt2 = _srh_mm2pt(layoutWidthMm);
+      var hPt2 = _srh_mm2pt(layoutHeightMm);
+      return [{
+        left: cx - (wPt2 / 2),
+        top: cy + (hPt2 / 2),
+        right: cx + (wPt2 / 2),
+        bottom: cy - (hPt2 / 2)
+      }];
+    }
+    return [_getArtboardBounds(doc)];
+  }
+
+  var boundsList = _getTargetBounds(doc);
+  if(!boundsList || !boundsList.length) return 'No bounds found.';
+
+  var depthPt = _srh_mm2pt(depthMm);
+  var ledWidthPt = _srh_mm2pt(ledWidthMm);
+  var ledHeightPt = _srh_mm2pt(ledHeightMm);
+  var allowanceWPt = _srh_mm2pt(allowanceWmm);
+  var allowanceHPt = _srh_mm2pt(allowanceHmm);
+  var panelInsetWPt = _srh_mm2pt(panelInsetWmm);
+  var panelInsetHPt = _srh_mm2pt(panelInsetHmm);
+
+  var panelLayer = _srh_getOrCreateLayer(doc, 'acm led panel');
+  var ledLayer = _srh_getOrCreateLayer(doc, 'LEDs');
+  var penLayer = _srh_getOrCreateLayer(doc, 'LED Pen');
+  var penGroupLayer = _srh_getOrCreateLayer(doc, 'led pen group and text');
+
+  var black = new RGBColor();
+  black.red = 0; black.green = 0; black.blue = 0;
+  var red = new RGBColor();
+  red.red = 255; red.green = 0; red.blue = 0;
+
+  var totalRows = 0;
+  var totalCols = 0;
+  var totalLayouts = 0;
+  for(var b = 0; b < boundsList.length; b++) {
+    var bounds = boundsList[b];
+    var boxWidthPt = bounds.right - bounds.left;
+    var boxHeightPt = bounds.top - bounds.bottom;
+    if(!(boxWidthPt > 0) || !(boxHeightPt > 0)) continue;
+
+    var distanceToOutsideBox = depthPt / 2;
+    var rows = Math.ceil(((boxHeightPt - 2 * distanceToOutsideBox) / (depthPt + allowanceHPt)) + 1);
+    var cols = Math.ceil((((boxWidthPt - 2 * distanceToOutsideBox) - ledWidthPt) / (depthPt + allowanceWPt)) + 1);
+    if(rows < 1) rows = 1;
+    if(cols < 1) cols = 1;
+
+    var centresRows = (boxHeightPt - 2 * distanceToOutsideBox + ((rows - 1) * allowanceHPt)) / (rows > 1 ? (rows - 1) : 1);
+    var centresCols = (boxWidthPt - 2 * distanceToOutsideBox - ledWidthPt + ((cols - 1) * allowanceWPt)) / (cols > 1 ? (cols - 1) : 1);
+
+    var centresInFromPanelCol = 0.5 * ((boxWidthPt - (cols - 1) * centresCols) - 2 * panelInsetWPt);
+    var centresInFromPanelRow = 0.5 * ((boxHeightPt - (rows - 1) * centresRows) - (2 * panelInsetHPt));
+
+    var startX = bounds.left + panelInsetWPt + centresInFromPanelCol;
+    var startY = bounds.top - panelInsetHPt - centresInFromPanelRow;
+
+    var panelRect = panelLayer.pathItems.rectangle(bounds.top, bounds.left, boxWidthPt, boxHeightPt);
+    try {panelRect.filled = false;} catch(_ePF) { }
+    try {panelRect.stroked = true; panelRect.strokeWidth = 1; panelRect.strokeColor = black;} catch(_ePS) { }
+
+    // Column-major ordering (consider LEDs in columns)
+    var ledRectsByColumn = [];
+    for(var c = 0; c < cols; c++) {
+      ledRectsByColumn[c] = [];
+      for(var r = 0; r < rows; r++) {
+        var cx = startX + c * centresCols;
+        var cy = startY - r * centresRows;
+
+        var left = cx - ledWidthPt / 2;
+        var top = cy + ledHeightPt / 2;
+
+        var rect = ledLayer.pathItems.rectangle(top, left, ledWidthPt, ledHeightPt);
+        try {rect.filled = false;} catch(_eF) { }
+        try {rect.stroked = true; rect.strokeWidth = 1; rect.strokeColor = black;} catch(_eS) { }
+
+        var line = penLayer.pathItems.add();
+        if(flipLed) {
+          line.setEntirePath([[cx, cy - ledHeightPt / 2], [cx, cy + ledHeightPt / 2]]);
+        } else {
+          line.setEntirePath([[cx - ledWidthPt / 2, cy], [cx + ledWidthPt / 2, cy]]);
+        }
+        try {line.filled = false;} catch(_eLF) { }
+        try {line.stroked = true; line.strokeWidth = 1; line.strokeColor = red;} catch(_eLS) { }
+
+        ledRectsByColumn[c].push({left: left, top: top, right: left + ledWidthPt, bottom: top - ledHeightPt});
+      }
+    }
+
+    // Group LEDs by columns, max in series, no overlaps
+    var colIndex = 0;
+    while(colIndex < cols) {
+      var colsInGroup = 1;
+      if(rows > 0) {
+        colsInGroup = Math.floor(maxLedsInSeries / rows);
+        if(colsInGroup < 1) colsInGroup = 1;
+        if(colsInGroup > (cols - colIndex)) colsInGroup = cols - colIndex;
+        // If too many LEDs in group, reduce by one column
+        while(colsInGroup > 1 && (colsInGroup * rows) > maxLedsInSeries) {
+          colsInGroup -= 1;
+        }
+      }
+
+      var gLeft = null, gTop = null, gRight = null, gBottom = null;
+      var count = 0;
+      for(var gc = 0; gc < colsInGroup; gc++) {
+        var colRects = ledRectsByColumn[colIndex + gc];
+        for(var gr = 0; gr < colRects.length; gr++) {
+          var lr = colRects[gr];
+          if(gLeft === null) {
+            gLeft = lr.left; gTop = lr.top; gRight = lr.right; gBottom = lr.bottom;
+          } else {
+            if(lr.left < gLeft) gLeft = lr.left;
+            if(lr.top > gTop) gTop = lr.top;
+            if(lr.right > gRight) gRight = lr.right;
+            if(lr.bottom < gBottom) gBottom = lr.bottom;
+          }
+          count++;
+        }
+      }
+
+      if(gLeft !== null) {
+        var gWidth = gRight - gLeft;
+        var gHeight = gTop - gBottom;
+        var grpRect = penGroupLayer.pathItems.rectangle(gTop, gLeft, gWidth, gHeight);
+        try {grpRect.filled = false;} catch(_eGF) { }
+        try {grpRect.stroked = true; grpRect.strokeWidth = 1; grpRect.strokeColor = black;} catch(_eGS) { }
+
+        // Label at bottom center with LED count
+        try {
+          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2pt(5)]);
+          label.contents = count + " LEDs";
+          try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
+          try {label.textRange.characterAttributes.size = 10;} catch(_eSize) { }
+          try {label.textRange.characterAttributes.fillColor = black;} catch(_eCol) { }
+        } catch(_eLbl) { }
+      }
+
+      colIndex += colsInGroup;
+    }
+
+    totalRows += rows;
+    totalCols += cols;
+    totalLayouts++;
+  }
+
+  _srh_bringLayerToFront(penLayer);
+  _srh_bringLayerToFront(ledLayer);
+  _srh_bringLayerToFront(penGroupLayer);
+
+  return 'LED layout drawn. Layouts: ' + totalLayouts + ', Rows: ' + totalRows + ', Columns: ' + totalCols + ', Watt: ' + ledWatt + 'W.';
+}
+
+function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
+  if(!doc || !bounds || !opts) return;
+
+  var offsetPt = _dim_mm2pt(opts.offsetMm || 10);
+  var ticLenPt = _dim_mm2pt(opts.ticLenMm || 2);
+  var textPt = opts.textPt || 10;
+  var strokePt = opts.strokePt || 1;
+  var decimals = (opts.decimals | 0);
+  var textOffsetPt = _dim_mm2pt(opts.labelGapMm || 0);
+  var includeArrowhead = !!opts.includeArrowhead;
+  var arrowheadSizePt = opts.arrowheadSizePt || 0;
+  var scaleAppearance = opts.scaleAppearance || 1;
+
+  var lineColor = null;
+  try {
+    lineColor = _dim_hexToRGB(opts.lineColor);
+    if(!lineColor) lineColor = _dim_parseHexColorToRGBColor(opts.lineColor);
+  } catch(_eLc2) { lineColor = null; }
+  if(!lineColor) lineColor = _dim_hexToRGB('#000000');
+  var textColor = opts.textColor;
+
+  var scaleFactor = 1.0;
+  try {
+    var sfDoc = app.activeDocument.scaleFactor;
+    if(sfDoc && sfDoc > 0) scaleFactor = sfDoc;
+  } catch(e) {scaleFactor = 1.0;}
+
+  var dOpts = {
+    offsetPt: offsetPt * scaleAppearance,
+    ticLenPt: ticLenPt * scaleAppearance,
+    textPt: textPt * scaleAppearance,
+    strokePt: strokePt,
+    decimals: decimals,
+    scaleFactor: scaleFactor,
+    textOffsetPt: textOffsetPt * scaleAppearance,
+    textColor: textColor,
+    lineColor: lineColor,
+    includeArrowhead: includeArrowhead,
+    arrowheadSizePt: arrowheadSizePt
+  };
+
+  var lyr = _dim_ensureLayer('Dimensions');
+
+  // Top width measure
+  _dim_drawHorizontalDim(lyr, bounds.left, bounds.right, bounds.top + dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'TOP', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  // Left height measure
+  _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+
+  // Bottom measures from left edge to each support center
+  if(supportCenters && supportCenters.length) {
+    for(var i = 0; i < supportCenters.length; i++) {
+      _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[i], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+    }
+  }
 }
 
 this.atlas_dimensions_clear = function() {
