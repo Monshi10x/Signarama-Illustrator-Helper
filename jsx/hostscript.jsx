@@ -389,19 +389,22 @@ function signarama_helper_replaceColor(jsonStr) {
     fromRgb = _parseRgbKey(fromKey);
   }
 
-  var newCmyk = new CMYKColor();
-  if(toCmyk) {
-    newCmyk.cyan = Number(toCmyk.c || 0);
-    newCmyk.magenta = Number(toCmyk.m || 0);
-    newCmyk.yellow = Number(toCmyk.y || 0);
-    newCmyk.black = Number(toCmyk.k || 0);
-  } else {
-    var rgb = _hexToRgb(toHex);
-    var cmykArr = app.convertSampleColor(ColorSpace.RGB, [rgb.red, rgb.green, rgb.blue], ColorSpace.CMYK, ColorConvertPurpose.defaultpurpose);
-    newCmyk.cyan = cmykArr[0];
-    newCmyk.magenta = cmykArr[1];
-    newCmyk.yellow = cmykArr[2];
-    newCmyk.black = cmykArr[3];
+  var newCmyk = null;
+  if(fromMode !== "RGB") {
+    newCmyk = new CMYKColor();
+    if(toCmyk) {
+      newCmyk.cyan = Number(toCmyk.c || 0);
+      newCmyk.magenta = Number(toCmyk.m || 0);
+      newCmyk.yellow = Number(toCmyk.y || 0);
+      newCmyk.black = Number(toCmyk.k || 0);
+    } else {
+      var rgb = _hexToRgb(toHex);
+      var cmykArr = app.convertSampleColor(ColorSpace.RGB, [rgb.red, rgb.green, rgb.blue], ColorSpace.CMYK, ColorConvertPurpose.defaultpurpose);
+      newCmyk.cyan = cmykArr[0];
+      newCmyk.magenta = cmykArr[1];
+      newCmyk.yellow = cmykArr[2];
+      newCmyk.black = cmykArr[3];
+    }
   }
 
   var newRgb = null;
