@@ -352,6 +352,7 @@ function signarama_helper_replaceColor(jsonStr) {
   var fromHex = String(args.fromHex || "");
   var toHex = args.toHex != null ? String(args.toHex) : null;
   var toCmyk = args.toCmyk || null;
+  var fromRgb = null;
 
   if(!fromKey || (!toHex && !toCmyk)) return "Missing arguments.";
 
@@ -365,6 +366,27 @@ function signarama_helper_replaceColor(jsonStr) {
     var c = new RGBColor();
     c.red = r; c.green = g; c.blue = b;
     return c;
+  }
+
+  function _parseRgbKey(key) {
+    if(!key) return null;
+    var parts = key.split(",");
+    if(parts.length !== 3) return null;
+    var r = Number(parts[0]);
+    var g = Number(parts[1]);
+    var b = Number(parts[2]);
+    if(isNaN(r) || isNaN(g) || isNaN(b)) return null;
+    return {r: r, g: g, b: b};
+  }
+
+  function _rgbClose(a, b, tol) {
+    if(!a || !b) return false;
+    var t = (tol != null) ? tol : 0.5;
+    return Math.abs(a.r - b.r) <= t && Math.abs(a.g - b.g) <= t && Math.abs(a.b - b.b) <= t;
+  }
+
+  if(fromMode === "RGB") {
+    fromRgb = _parseRgbKey(fromKey);
   }
 
   var newCmyk = new CMYKColor();
@@ -400,7 +422,8 @@ function signarama_helper_replaceColor(jsonStr) {
       if(it.filled && (fromType === "" || fromType === "fill")) {
         var k1 = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(it.fillColor)) : _srh_colorKey(_srh_colorToCmyk(it.fillColor));
         var k1Hex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(it.fillColor)) : "";
-        if(k1 === fromKey || (fromMode === "RGB" && fromHex && k1Hex === fromHex)) {
+        var k1Rgb = fromMode === "RGB" ? _srh_colorToRgb(it.fillColor) : null;
+        if(k1 === fromKey || (fromMode === "RGB" && fromHex && k1Hex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(k1Rgb, fromRgb, 0.5))) {
           it.fillColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
           updated++;
         }
@@ -408,7 +431,8 @@ function signarama_helper_replaceColor(jsonStr) {
       if(it.stroked && (fromType === "" || fromType === "stroke")) {
         var k2 = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(it.strokeColor)) : _srh_colorKey(_srh_colorToCmyk(it.strokeColor));
         var k2Hex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(it.strokeColor)) : "";
-        if(k2 === fromKey || (fromMode === "RGB" && fromHex && k2Hex === fromHex)) {
+        var k2Rgb = fromMode === "RGB" ? _srh_colorToRgb(it.strokeColor) : null;
+        if(k2 === fromKey || (fromMode === "RGB" && fromHex && k2Hex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(k2Rgb, fromRgb, 0.5))) {
           it.strokeColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
           updated++;
         }
@@ -421,7 +445,8 @@ function signarama_helper_replaceColor(jsonStr) {
         if(fromType === "" || fromType === "fill") {
           var kf = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(tr.fillColor)) : _srh_colorKey(_srh_colorToCmyk(tr.fillColor));
           var kfHex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(tr.fillColor)) : "";
-          if(kf === fromKey || (fromMode === "RGB" && fromHex && kfHex === fromHex)) {
+          var kfRgb = fromMode === "RGB" ? _srh_colorToRgb(tr.fillColor) : null;
+          if(kf === fromKey || (fromMode === "RGB" && fromHex && kfHex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(kfRgb, fromRgb, 0.5))) {
             tr.fillColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
             updated++;
           }
@@ -429,7 +454,8 @@ function signarama_helper_replaceColor(jsonStr) {
         if(fromType === "" || fromType === "stroke") {
           var ks = fromMode === "RGB" ? _srh_rgbKey(_srh_colorToRgb(tr.strokeColor)) : _srh_colorKey(_srh_colorToCmyk(tr.strokeColor));
           var ksHex = fromMode === "RGB" ? _srh_rgbToHex(_srh_colorToRgb(tr.strokeColor)) : "";
-          if(ks === fromKey || (fromMode === "RGB" && fromHex && ksHex === fromHex)) {
+          var ksRgb = fromMode === "RGB" ? _srh_colorToRgb(tr.strokeColor) : null;
+          if(ks === fromKey || (fromMode === "RGB" && fromHex && ksHex === fromHex) || (fromMode === "RGB" && fromRgb && _rgbClose(ksRgb, fromRgb, 0.5))) {
             tr.strokeColor = fromMode === "RGB" && newRgb ? newRgb : newCmyk;
             updated++;
           }

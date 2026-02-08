@@ -471,7 +471,14 @@
             log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
               ' to=' + [r, g, b].join(',') + ' (inputs=' +
               [inputs[0].value, inputs[1].value, inputs[2].value].join(',') + ')');
-            callJSX('signarama_helper_replaceColor("' + payload + '")', () => {
+            callJSX('signarama_helper_replaceColor("' + payload + '")', (result) => {
+              const match = (result || '').match(/Updated\s+(\d+)/i);
+              const updated = match ? parseInt(match[1], 10) : 0;
+              log('Colours: replace result=' + (result || '') + ' updated=' + updated);
+              if (!updated) {
+                refreshColours();
+                return;
+              }
               swatch.style.background = toHex;
               colourEditState.lastEdit = {
                 mode: 'RGB',
@@ -503,7 +510,14 @@
           log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
             ' to=' + [c, m, y, k].join(',') + ' (inputs=' +
             [inputs[0].value, inputs[1].value, inputs[2].value, inputs[3].value].join(',') + ')');
-          callJSX('signarama_helper_replaceColor("' + payload + '")', () => {
+          callJSX('signarama_helper_replaceColor("' + payload + '")', (result) => {
+            const match = (result || '').match(/Updated\s+(\d+)/i);
+            const updated = match ? parseInt(match[1], 10) : 0;
+            log('Colours: replace result=' + (result || '') + ' updated=' + updated);
+            if (!updated) {
+              refreshColours();
+              return;
+            }
             swatch.style.background = cmykToHex(c, m, y, k);
             colourEditState.lastEdit = {
               mode: 'CMYK',
