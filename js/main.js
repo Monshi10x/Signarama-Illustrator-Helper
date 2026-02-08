@@ -20,6 +20,11 @@
     return isFinite(n) ? n : 0;
   }
 
+  function cmykKey(c, m, y, k){
+    function r(v){ return Math.round(v * 100) / 100; }
+    return [r(c), r(m), r(y), r(k)].join(',');
+  }
+
   const colourEditState = {
     lastEdit: null
   };
@@ -300,6 +305,7 @@
     const focusedMeta = focused && focused.dataset && focused.dataset.focusKey ? {
       focusKey: focused.dataset.focusKey,
       focusHex: focused.dataset.focusHex,
+      focusType: focused.dataset.focusType,
       index: focused.dataset.focusIndex
     } : null;
     list.innerHTML = '';
@@ -326,7 +332,7 @@
       if (countEl) countEl.textContent = 'Document colours: ' + data.length + (debug ? ' (items: ' + (debug.totalItems || 0) + ', scanned: ' + (debug.scanned || 0) + ', path: ' + (debug.pathItems || 0) + ', text: ' + (debug.textFrames || 0) + ', fallback: ' + (debug.fallbackUsed ? 'yes' : 'no') + ')' : '');
 
       data.forEach((entry) => {
-        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type && entry.hex === colourEditState.lastEdit.hex) {
+        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type && entry.key === colourEditState.lastEdit.toKey) {
           entry.c = colourEditState.lastEdit.c;
           entry.m = colourEditState.lastEdit.m;
           entry.y = colourEditState.lastEdit.y;
@@ -383,7 +389,8 @@
             swatch.style.background = cmykToHex(c, m, y, k);
             colourEditState.lastEdit = {
               type: entry.type || '',
-              hex: cmykToHex(c, m, y, k),
+              fromKey: entry.key || '',
+              toKey: cmykKey(c, m, y, k),
               c, m, y, k
             };
             refreshColours();
@@ -409,6 +416,10 @@
         mInput.dataset.focusKey = entry.key || '';
         yInput.dataset.focusKey = entry.key || '';
         kInput.dataset.focusKey = entry.key || '';
+        cInput.dataset.focusType = entry.type || '';
+        mInput.dataset.focusType = entry.type || '';
+        yInput.dataset.focusType = entry.type || '';
+        kInput.dataset.focusType = entry.type || '';
         cInput.dataset.focusHex = entry.hex || '';
         mInput.dataset.focusHex = entry.hex || '';
         yInput.dataset.focusHex = entry.hex || '';
@@ -445,8 +456,17 @@
 
       if (focusedMeta) {
         let nextFocus = null;
+        let focusKey = focusedMeta.focusKey;
+        if (
+          colourEditState.lastEdit &&
+          focusKey &&
+          focusedMeta.focusType === colourEditState.lastEdit.type &&
+          focusKey === colourEditState.lastEdit.fromKey
+        ) {
+          focusKey = colourEditState.lastEdit.toKey;
+        }
         if (focusedMeta.focusKey) {
-          const selectorKey = '[data-focus-key=\"' + focusedMeta.focusKey + '\"][data-focus-index=\"' + focusedMeta.index + '\"]';
+          const selectorKey = '[data-focus-key=\"' + focusKey + '\"][data-focus-index=\"' + focusedMeta.index + '\"]';
           nextFocus = list.querySelector(selectorKey);
         }
         if (!nextFocus && focusedMeta.focusHex) {
