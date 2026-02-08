@@ -369,12 +369,16 @@
               entry.r = colourEditState.lastEdit.r;
               entry.g = colourEditState.lastEdit.g;
               entry.b = colourEditState.lastEdit.b;
+              entry.key = colourEditState.lastEdit.toKey;
+              entry.hex = expectedHex;
               entry.label = (entry.type || 'fill').toUpperCase() + '  R ' + entry.r + ' G ' + entry.g + ' B ' + entry.b;
             } else {
               entry.c = colourEditState.lastEdit.c;
               entry.m = colourEditState.lastEdit.m;
               entry.y = colourEditState.lastEdit.y;
               entry.k = colourEditState.lastEdit.k;
+              entry.key = colourEditState.lastEdit.toKey;
+              entry.hex = expectedHex;
               entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
             }
             const valueLog = colourEditState.mode === 'RGB'
