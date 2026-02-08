@@ -20,8 +20,19 @@
     return isFinite(n) ? n : 0;
   }
 
+  function cmykKey(c, m, y, k){
+    function r(v){ return Math.round(v * 100) / 100; }
+    return [r(c), r(m), r(y), r(k)].join(',');
+  }
+
+  function rgbKey(r, g, b){
+    function r2(v){ return Math.round(v * 100) / 100; }
+    return [r2(r), r2(g), r2(b)].join(',');
+  }
+
   const colourEditState = {
-    lastEdit: null
+    lastEdit: null,
+    mode: 'CMYK'
   };
 
   function buildDimensionPayload(){
@@ -300,12 +311,22 @@
     const focusedMeta = focused && focused.dataset && focused.dataset.focusKey ? {
       focusKey: focused.dataset.focusKey,
       focusHex: focused.dataset.focusHex,
+      focusType: focused.dataset.focusType,
       index: focused.dataset.focusIndex
     } : null;
     list.innerHTML = '';
     if (countEl) countEl.textContent = 'Document colours: 0';
 
-    callJSX('signarama_helper_getDocumentColors()', function(res){
+    callJSX('signarama_helper_getDocumentColorMode()', function(modeRes){
+      const mode = String(modeRes || '').replace(/"/g, '').trim() || 'CMYK';
+      colourEditState.mode = mode;
+      const banner = $('colourModeBanner');
+      if (banner) {
+        banner.style.display = mode === 'RGB' ? 'block' : 'none';
+        banner.textContent = 'Current document colour mode is RGB';
+      }
+
+      callJSX('signarama_helper_getDocumentColors()', function(res){
       if (!res) { log('Colours: no response from JSX.'); return; }
       let data = null;
       let debug = null;
@@ -320,18 +341,59 @@
       }
       if (data && data.colors && Array.isArray(data.colors)) {
         debug = data.debug || null;
+        if (data.mode) {
+          colourEditState.mode = data.mode;
+          if (banner) {
+            banner.style.display = data.mode === 'RGB' ? 'block' : 'none';
+            banner.textContent = 'Current document colour mode is RGB';
+          }
+        }
         data = data.colors;
       }
       if (!data || !Array.isArray(data)) return;
       if (countEl) countEl.textContent = 'Document colours: ' + data.length + (debug ? ' (items: ' + (debug.totalItems || 0) + ', scanned: ' + (debug.scanned || 0) + ', path: ' + (debug.pathItems || 0) + ', text: ' + (debug.textFrames || 0) + ', fallback: ' + (debug.fallbackUsed ? 'yes' : 'no') + ')' : '');
 
       data.forEach((entry) => {
-        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type && entry.hex === colourEditState.lastEdit.hex) {
-          entry.c = colourEditState.lastEdit.c;
-          entry.m = colourEditState.lastEdit.m;
-          entry.y = colourEditState.lastEdit.y;
-          entry.k = colourEditState.lastEdit.k;
-          entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
+        if (colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type &&
+          colourEditState.lastEdit.mode === colourEditState.mode) {
+          const expectedHex = colourEditState.mode === 'RGB'
+            ? rgbToHex(colourEditState.lastEdit.r, colourEditState.lastEdit.g, colourEditState.lastEdit.b)
+            : cmykToHex(colourEditState.lastEdit.c, colourEditState.lastEdit.m, colourEditState.lastEdit.y, colourEditState.lastEdit.k);
+          const matchesEdit = entry.key === colourEditState.lastEdit.toKey ||
+            entry.key === colourEditState.lastEdit.fromKey ||
+            (entry.hex && entry.hex.toLowerCase() === expectedHex.toLowerCase()) ||
+            (entry.hex && colourEditState.lastEdit.fromHex &&
+              entry.hex.toLowerCase() === colourEditState.lastEdit.fromHex.toLowerCase());
+          if (matchesEdit) {
+            if (colourEditState.mode === 'RGB') {
+              entry.r = colourEditState.lastEdit.r;
+              entry.g = colourEditState.lastEdit.g;
+              entry.b = colourEditState.lastEdit.b;
+              entry.label = (entry.type || 'fill').toUpperCase() + '  R ' + entry.r + ' G ' + entry.g + ' B ' + entry.b;
+            } else {
+              entry.c = colourEditState.lastEdit.c;
+              entry.m = colourEditState.lastEdit.m;
+              entry.y = colourEditState.lastEdit.y;
+              entry.k = colourEditState.lastEdit.k;
+              entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
+            }
+            const valueLog = colourEditState.mode === 'RGB'
+              ? [entry.r, entry.g, entry.b].join(',')
+              : [entry.c, entry.m, entry.y, entry.k].join(',');
+            log('Colours: matched lastEdit toKey=' + colourEditState.lastEdit.toKey + ' type=' + (entry.type || '') +
+              ' values=' + valueLog + ' hexMatch=' +
+              (entry.hex ? entry.hex.toLowerCase() === expectedHex.toLowerCase() : false) +
+              ' fromKeyMatch=' + (entry.key === colourEditState.lastEdit.fromKey) +
+              ' fromHexMatch=' + (entry.hex && colourEditState.lastEdit.fromHex ?
+              entry.hex.toLowerCase() === colourEditState.lastEdit.fromHex.toLowerCase() : false));
+          }
+        }
+        if (colourEditState.mode === 'RGB') {
+          log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
+            ' rgb=' + [entry.r, entry.g, entry.b].join(',') + ' hex=' + (entry.hex || ''));
+        } else {
+          log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
+            ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
         }
 
         const row = document.createElement('div');
@@ -351,47 +413,106 @@
         label.style.fontSize = '12px';
         label.style.color = '#bcbcbc';
 
-        const cInput = document.createElement('input');
-        cInput.type = 'number'; cInput.step = '0.1'; cInput.min = '0'; cInput.max = '100';
-        cInput.value = entry.c || 0;
-        const mInput = document.createElement('input');
-        mInput.type = 'number'; mInput.step = '0.1'; mInput.min = '0'; mInput.max = '100';
-        mInput.value = entry.m || 0;
-        const yInput = document.createElement('input');
-        yInput.type = 'number'; yInput.step = '0.1'; yInput.min = '0'; yInput.max = '100';
-        yInput.value = entry.y || 0;
-        const kInput = document.createElement('input');
-        kInput.type = 'number'; kInput.step = '0.1'; kInput.min = '0'; kInput.max = '100';
-        kInput.value = entry.k || 0;
-
-        const inputs = [cInput, mInput, yInput, kInput];
+        const inputs = [];
+        if (colourEditState.mode === 'RGB') {
+          const rInput = document.createElement('input');
+          rInput.type = 'number'; rInput.step = '1'; rInput.min = '0'; rInput.max = '255';
+          rInput.value = entry.r || 0;
+          const gInput = document.createElement('input');
+          gInput.type = 'number'; gInput.step = '1'; gInput.min = '0'; gInput.max = '255';
+          gInput.value = entry.g || 0;
+          const bInput = document.createElement('input');
+          bInput.type = 'number'; bInput.step = '1'; bInput.min = '0'; bInput.max = '255';
+          bInput.value = entry.b || 0;
+          inputs.push(rInput, gInput, bInput);
+        } else {
+          const cInput = document.createElement('input');
+          cInput.type = 'number'; cInput.step = '0.1'; cInput.min = '0'; cInput.max = '100';
+          cInput.value = entry.c || 0;
+          const mInput = document.createElement('input');
+          mInput.type = 'number'; mInput.step = '0.1'; mInput.min = '0'; mInput.max = '100';
+          mInput.value = entry.m || 0;
+          const yInput = document.createElement('input');
+          yInput.type = 'number'; yInput.step = '0.1'; yInput.min = '0'; yInput.max = '100';
+          yInput.value = entry.y || 0;
+          const kInput = document.createElement('input');
+          kInput.type = 'number'; kInput.step = '0.1'; kInput.min = '0'; kInput.max = '100';
+          kInput.value = entry.k || 0;
+          inputs.push(cInput, mInput, yInput, kInput);
+        }
         inputs.forEach(inp => {
           inp.style.width = '35px';
         });
+        log('Colours: set inputs key=' + (entry.key || '') + ' type=' + (entry.type || '') +
+          ' values=' + inputs.map(i => i.value).join(','));
 
-        function applyCmyk() {
-          const c = num(cInput.value);
-          const m = num(mInput.value);
-          const y = num(yInput.value);
-          const k = num(kInput.value);
+        function applyValues() {
+          if (colourEditState.mode === 'RGB') {
+            const rRaw = parseFloat(inputs[0].value);
+            const gRaw = parseFloat(inputs[1].value);
+            const bRaw = parseFloat(inputs[2].value);
+            const r = isFinite(rRaw) ? rRaw : num(entry.r);
+            const g = isFinite(gRaw) ? gRaw : num(entry.g);
+            const b = isFinite(bRaw) ? bRaw : num(entry.b);
+            const toHex = rgbToHex(r, g, b);
+            const payload = JSON.stringify({
+              fromKey: entry.key || '',
+              fromType: entry.type || '',
+              fromMode: 'RGB',
+              toHex: toHex
+            }).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+            log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
+              ' to=' + [r, g, b].join(',') + ' (inputs=' +
+              [inputs[0].value, inputs[1].value, inputs[2].value].join(',') + ')');
+            callJSX('signarama_helper_replaceColor("' + payload + '")', () => {
+              swatch.style.background = toHex;
+              colourEditState.lastEdit = {
+                mode: 'RGB',
+                type: entry.type || '',
+                fromKey: entry.key || '',
+                fromHex: entry.hex || '',
+                toKey: rgbKey(r, g, b),
+                r, g, b
+              };
+              log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
+              refreshColours();
+            });
+            return;
+          }
+          const cRaw = parseFloat(inputs[0].value);
+          const mRaw = parseFloat(inputs[1].value);
+          const yRaw = parseFloat(inputs[2].value);
+          const kRaw = parseFloat(inputs[3].value);
+          const c = isFinite(cRaw) ? cRaw : num(entry.c);
+          const m = isFinite(mRaw) ? mRaw : num(entry.m);
+          const y = isFinite(yRaw) ? yRaw : num(entry.y);
+          const k = isFinite(kRaw) ? kRaw : num(entry.k);
           const payload = JSON.stringify({
             fromKey: entry.key || '',
             fromType: entry.type || '',
+            fromMode: 'CMYK',
             toCmyk: {c, m, y, k}
           }).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+          log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
+            ' to=' + [c, m, y, k].join(',') + ' (inputs=' +
+            [inputs[0].value, inputs[1].value, inputs[2].value, inputs[3].value].join(',') + ')');
           callJSX('signarama_helper_replaceColor("' + payload + '")', () => {
             swatch.style.background = cmykToHex(c, m, y, k);
             colourEditState.lastEdit = {
+              mode: 'CMYK',
               type: entry.type || '',
-              hex: cmykToHex(c, m, y, k),
+              fromKey: entry.key || '',
+              fromHex: entry.hex || '',
+              toKey: cmykKey(c, m, y, k),
               c, m, y, k
             };
+            log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
             refreshColours();
           });
         }
 
         inputs.forEach((inp, idx) => {
-          inp.addEventListener('change', applyCmyk);
+          inp.addEventListener('change', applyValues);
           inp.addEventListener('focus', () => {
             try { inp.select(); } catch(_eSel) { }
           });
@@ -405,25 +526,16 @@
         });
 
         // Focus restore metadata
-        cInput.dataset.focusKey = entry.key || '';
-        mInput.dataset.focusKey = entry.key || '';
-        yInput.dataset.focusKey = entry.key || '';
-        kInput.dataset.focusKey = entry.key || '';
-        cInput.dataset.focusHex = entry.hex || '';
-        mInput.dataset.focusHex = entry.hex || '';
-        yInput.dataset.focusHex = entry.hex || '';
-        kInput.dataset.focusHex = entry.hex || '';
-        cInput.dataset.focusIndex = "0";
-        mInput.dataset.focusIndex = "1";
-        yInput.dataset.focusIndex = "2";
-        kInput.dataset.focusIndex = "3";
+        inputs.forEach((inp, idx) => {
+          inp.dataset.focusKey = entry.key || '';
+          inp.dataset.focusType = entry.type || '';
+          inp.dataset.focusHex = entry.hex || '';
+          inp.dataset.focusIndex = String(idx);
+        });
 
         row.appendChild(swatch);
         row.appendChild(label);
-        row.appendChild(cInput);
-        row.appendChild(mInput);
-        row.appendChild(yInput);
-        row.appendChild(kInput);
+        inputs.forEach(inp => row.appendChild(inp));
         list.appendChild(row);
       });
 
@@ -445,8 +557,18 @@
 
       if (focusedMeta) {
         let nextFocus = null;
+        let focusKey = focusedMeta.focusKey;
+        if (
+          colourEditState.lastEdit &&
+          focusKey &&
+          focusedMeta.focusType === colourEditState.lastEdit.type &&
+          focusKey === colourEditState.lastEdit.fromKey &&
+          colourEditState.lastEdit.mode === colourEditState.mode
+        ) {
+          focusKey = colourEditState.lastEdit.toKey;
+        }
         if (focusedMeta.focusKey) {
-          const selectorKey = '[data-focus-key=\"' + focusedMeta.focusKey + '\"][data-focus-index=\"' + focusedMeta.index + '\"]';
+          const selectorKey = '[data-focus-key=\"' + focusKey + '\"][data-focus-index=\"' + focusedMeta.index + '\"]';
           nextFocus = list.querySelector(selectorKey);
         }
         if (!nextFocus && focusedMeta.focusHex) {
@@ -459,6 +581,7 @@
         }
       }
     });
+    });
   }
 
   function cmykToHex(c, m, y, k) {
@@ -470,6 +593,12 @@
     const g = Math.round(255 * (1 - M) * (1 - K));
     const b = Math.round(255 * (1 - Y) * (1 - K));
     const h = v => v.toString(16).padStart(2, '0');
+    return '#' + h(r) + h(g) + h(b);
+  }
+
+  function rgbToHex(r, g, b) {
+    const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+    const h = v => clamp(v).toString(16).padStart(2, '0');
     return '#' + h(r) + h(g) + h(b);
   }
 
