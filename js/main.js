@@ -461,30 +461,28 @@
             const g = isFinite(gRaw) ? gRaw : num(entry.g);
             const b = isFinite(bRaw) ? bRaw : num(entry.b);
             const toHex = rgbToHex(r, g, b);
+            const fromKey = entry.key || rgbKey(entry.r, entry.g, entry.b);
+            const fromHex = entry.hex || rgbToHex(entry.r, entry.g, entry.b);
             const payload = JSON.stringify({
-              fromKey: entry.key || '',
+              fromKey: fromKey,
               fromType: entry.type || '',
               fromMode: 'RGB',
-              fromHex: entry.hex || '',
+              fromHex: fromHex,
               toHex: toHex
             }).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
-            log('Colours: replace fromKey=' + (entry.key || '') + ' type=' + (entry.type || '') +
+            log('Colours: replace fromKey=' + (fromKey || '') + ' type=' + (entry.type || '') +
               ' to=' + [r, g, b].join(',') + ' (inputs=' +
               [inputs[0].value, inputs[1].value, inputs[2].value].join(',') + ')');
             callJSX('signarama_helper_replaceColor("' + payload + '")', (result) => {
               const match = (result || '').match(/Updated\s+(\d+)/i);
               const updated = match ? parseInt(match[1], 10) : 0;
               log('Colours: replace result=' + (result || '') + ' updated=' + updated);
-              if (!updated) {
-                refreshColours();
-                return;
-              }
               swatch.style.background = toHex;
               colourEditState.lastEdit = {
                 mode: 'RGB',
                 type: entry.type || '',
-                fromKey: entry.key || '',
-                fromHex: entry.hex || '',
+                fromKey: fromKey || '',
+                fromHex: fromHex || '',
                 toKey: rgbKey(r, g, b),
                 r, g, b
               };
