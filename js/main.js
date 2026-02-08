@@ -395,6 +395,8 @@
           log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
             ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
         }
+        log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
+          ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
 
         const row = document.createElement('div');
         row.className = 'row';
