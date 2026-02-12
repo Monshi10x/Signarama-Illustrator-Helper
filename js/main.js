@@ -34,6 +34,8 @@
     lastEdit: null,
     mode: 'CMYK'
   };
+  let lightboxMeasureLiveTimer = null;
+  let lightboxMeasureLiveInFlight = false;
 
   function buildDimensionPayload(){
     return {
@@ -178,6 +180,75 @@
   }
 
   function wireLightbox(){
+    function updateSupportSpacingInfo(){
+      const out = $('lightboxSupportSpacingInfo');
+      if(!out) return;
+      const boxWidthMm = num(($('lightboxWidthMm') && $('lightboxWidthMm').value) || 0);
+      const supports = parseInt((($('lightboxSupportCount') && $('lightboxSupportCount').value) || 0), 10) || 0;
+      const supportWidthMm = 25;
+      if(!(boxWidthMm > 0) || supports < 1){
+        out.textContent = 'Support spacing: -';
+        return;
+      }
+      const clearGap = (boxWidthMm - (supports * supportWidthMm)) / (supports + 1);
+      const centerGap = clearGap + supportWidthMm;
+      if(!(clearGap > 0)){
+        out.textContent = 'Support spacing: insufficient width';
+        return;
+      }
+      out.textContent = 'Support spacing: ' + clearGap.toFixed(1) + 'mm clear (' + centerGap.toFixed(1) + 'mm centers)';
+    }
+
+    function runLightboxMeasureLiveTick(force){
+      if(lightboxMeasureLiveInFlight) return;
+      lightboxMeasureLiveInFlight = true;
+      const payload = {
+        force: !!force,
+        measureOptions: buildDimensionPayload()
+      };
+      const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+      callJSX('signarama_helper_updateLightboxMeasures("' + json + '")', res => {
+        lightboxMeasureLiveInFlight = false;
+        if (res && res !== 'No live measure changes.' && res !== 'No live lightbox found.') log(res);
+      });
+    }
+
+    function stopLightboxMeasureLive(){
+      if(lightboxMeasureLiveTimer){
+        clearInterval(lightboxMeasureLiveTimer);
+        lightboxMeasureLiveTimer = null;
+      }
+    }
+
+    function startLightboxMeasureLive(){
+      if(lightboxMeasureLiveTimer) return;
+      lightboxMeasureLiveTimer = setInterval(() => {
+        const liveCkb = $('lightboxUpdateMeasuresLive');
+        if(!liveCkb || !liveCkb.checked){
+          stopLightboxMeasureLive();
+          return;
+        }
+        runLightboxMeasureLiveTick(false);
+      }, 800);
+    }
+
+    const liveCkb = $('lightboxUpdateMeasuresLive');
+    if(liveCkb){
+      liveCkb.onchange = () => {
+        if(liveCkb.checked){
+          runLightboxMeasureLiveTick(true);
+          startLightboxMeasureLive();
+        } else {
+          stopLightboxMeasureLive();
+        }
+      };
+    }
+    const widthField = $('lightboxWidthMm');
+    const supportsField = $('lightboxSupportCount');
+    if(widthField) widthField.addEventListener('input', updateSupportSpacingInfo);
+    if(supportsField) supportsField.addEventListener('input', updateSupportSpacingInfo);
+    updateSupportSpacingInfo();
+
     const createBtn = $('btnCreateLightbox');
     if (!createBtn) return;
     createBtn.onclick = () => {
@@ -189,10 +260,17 @@
         supportCount: parseInt((($('lightboxSupportCount') && $('lightboxSupportCount').value) || 0), 10) || 0,
         ledOffsetMm: num(($('lightboxLedOffsetMm') && $('lightboxLedOffsetMm').value) || 0),
         addMeasures: !!($('lightboxAddMeasures') && $('lightboxAddMeasures').checked),
+        updateMeasuresLive: !!($('lightboxUpdateMeasuresLive') && $('lightboxUpdateMeasuresLive').checked),
         measureOptions: buildDimensionPayload()
       };
       const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
-      callJSX('signarama_helper_createLightbox("' + json + '")', res => res && log(res));
+      callJSX('signarama_helper_createLightbox("' + json + '")', res => {
+        if(res) log(res);
+        if(payload.updateMeasuresLive && payload.addMeasures){
+          runLightboxMeasureLiveTick(true);
+          startLightboxMeasureLive();
+        }
+      });
     };
 
     const createBtnLed = $('btnCreateLightboxWithLedPanel');
@@ -206,6 +284,8 @@
           supportCount: parseInt((($('lightboxSupportCount') && $('lightboxSupportCount').value) || 0), 10) || 0,
           ledOffsetMm: num(($('lightboxLedOffsetMm') && $('lightboxLedOffsetMm').value) || 0),
           ledWatt: num(($('ledWatt') && $('ledWatt').value) || 0),
+          ledCode: (($('ledCode') && $('ledCode').value) || '').trim(),
+          ledVoltage: num(($('ledVoltage') && $('ledVoltage').value) || 0),
           ledWidthMm: num(($('ledWidthMm') && $('ledWidthMm').value) || 0),
           ledHeightMm: num(($('ledHeightMm') && $('ledHeightMm').value) || 0),
           allowanceWmm: num(($('ledAllowanceWmm') && $('ledAllowanceWmm').value) || 0),
@@ -213,10 +293,17 @@
           maxLedsInSeries: parseInt((($('ledMaxInSeries') && $('ledMaxInSeries').value) || 0), 10) || 50,
           flipLed: !!($('ledFlip') && $('ledFlip').checked),
           addMeasures: !!($('lightboxAddMeasures') && $('lightboxAddMeasures').checked),
+          updateMeasuresLive: !!($('lightboxUpdateMeasuresLive') && $('lightboxUpdateMeasuresLive').checked),
           measureOptions: buildDimensionPayload()
         };
         const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
-        callJSX('signarama_helper_createLightboxWithLedPanel("' + json + '")', res => res && log(res));
+        callJSX('signarama_helper_createLightboxWithLedPanel("' + json + '")', res => {
+          if(res) log(res);
+          if(payload.updateMeasuresLive && payload.addMeasures){
+            runLightboxMeasureLiveTick(true);
+            startLightboxMeasureLive();
+          }
+        });
       };
     }
   }
@@ -227,6 +314,8 @@
     ledBtn.onclick = () => {
       const payload = {
         ledWatt: num(($('ledWatt') && $('ledWatt').value) || 0),
+        ledCode: (($('ledCode') && $('ledCode').value) || '').trim(),
+        ledVoltage: num(($('ledVoltage') && $('ledVoltage').value) || 0),
         ledWidthMm: num(($('ledWidthMm') && $('ledWidthMm').value) || 0),
         ledHeightMm: num(($('ledHeightMm') && $('ledHeightMm').value) || 0),
         allowanceWmm: num(($('ledAllowanceWmm') && $('ledAllowanceWmm').value) || 0),
