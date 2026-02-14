@@ -1,4 +1,4 @@
-/* global CSInterface, SystemPath  */
+/* global CSInterface, SystemPath hi  */
 (function() {
   function $(id) {return document.getElementById(id);}
   function $all(sel) {return Array.prototype.slice.call(document.querySelectorAll(sel));}
