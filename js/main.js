@@ -402,7 +402,10 @@
         linkMm: num(($('centerlineLinkMm') && $('centerlineLinkMm').value) || 3),
         smoothPasses: parseInt((($('centerlineSmoothPasses') && $('centerlineSmoothPasses').value) || 0), 10) || 0,
         strokePt: num(($('centerlineStrokePt') && $('centerlineStrokePt').value) || 0.75),
-        useSelectionOnly: !!($('centerlineUseSelectionOnly') && $('centerlineUseSelectionOnly').checked)
+        useSelectionOnly: !!($('centerlineUseSelectionOnly') && $('centerlineUseSelectionOnly').checked),
+        drawNormalized: !!($('centerlineDrawNormalized') && $('centerlineDrawNormalized').checked),
+        debugVisuals: !!($('centerlineDebugVisuals') && $('centerlineDebugVisuals').checked),
+        debugOffsetMm: num(($('centerlineDebugOffsetMm') && $('centerlineDebugOffsetMm').value) || 30)
       };
       const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
       callJSX('signarama_helper_drawCenterline("' + json + '")', res => res && log(res));

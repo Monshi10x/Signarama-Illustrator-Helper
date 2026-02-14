@@ -2401,44 +2401,93 @@ function signarama_helper_drawLedLayout(jsonStr) {
 }
 
 
-function _srh_collectCenterlineShapesFromItem(it, out) {
+function _srh_collectCenterlineShapesFromItem(it, out, normalizeStepPt) {
   if(!it) return;
   if(it.typename === "GroupItem") {
     var kids = null;
     try {kids = it.pageItems;} catch(_eG) {kids = null;}
     if(!kids) return;
     for(var gi = 0; gi < kids.length; gi++) {
-      _srh_collectCenterlineShapesFromItem(kids[gi], out);
+      _srh_collectCenterlineShapesFromItem(kids[gi], out, normalizeStepPt);
     }
     return;
   }
   if(it.typename === "CompoundPathItem") {
     var rings = [];
+    var srcBounds = null;
+    try {
+      srcBounds = {left: it.visibleBounds[0], top: it.visibleBounds[1], right: it.visibleBounds[2], bottom: it.visibleBounds[3]};
+    } catch(_eCB) { srcBounds = null; }
     try {
       for(var ci = 0; ci < it.pathItems.length; ci++) {
         var cp = it.pathItems[ci];
         if(!cp || !cp.closed) continue;
-        var cpts = _srh_centerlinePathPoints(cp);
+        var cpts = _srh_centerlinePathPoints(cp, normalizeStepPt);
         if(cpts.length >= 3) rings.push(cpts);
       }
     } catch(_eC) { }
-    if(rings.length) out.push({rings: rings});
+    if(rings.length) out.push({rings: rings, sourceBounds: srcBounds});
     return;
   }
   if(it.typename === "PathItem") {
     if(!it.closed) return;
-    var pts = _srh_centerlinePathPoints(it);
-    if(pts.length >= 3) out.push({rings: [pts]});
+    var pts = _srh_centerlinePathPoints(it, normalizeStepPt);
+    if(pts.length >= 3) {
+      var pb = null;
+      try {pb = {left: it.visibleBounds[0], top: it.visibleBounds[1], right: it.visibleBounds[2], bottom: it.visibleBounds[3]};} catch(_ePB) {pb = null;}
+      out.push({rings: [pts], sourceBounds: pb});
+    }
   }
 }
 
-function _srh_centerlinePathPoints(pathItem) {
-  var pts = [];
-  if(!pathItem || !pathItem.pathPoints) return pts;
-  for(var i = 0; i < pathItem.pathPoints.length; i++) {
-    var a = pathItem.pathPoints[i].anchor;
-    pts.push({x: a[0], y: a[1]});
+function _srh_centerlineBezierPoint(p0, p1, p2, p3, t) {
+  var it = 1 - t;
+  var it2 = it * it;
+  var t2 = t * t;
+  return {
+    x: p0.x * it2 * it + 3 * p1.x * it2 * t + 3 * p2.x * it * t2 + p3.x * t2 * t,
+    y: p0.y * it2 * it + 3 * p1.y * it2 * t + 3 * p2.y * it * t2 + p3.y * t2 * t
+  };
+}
+
+function _srh_centerlineDist2(a, b) {
+  var dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function _srh_centerlineBezierApproxLen(p0, p1, p2, p3) {
+  var len = 0;
+  var prev = p0;
+  for(var i = 1; i <= 8; i++) {
+    var pt = _srh_centerlineBezierPoint(p0, p1, p2, p3, i / 8);
+    len += _srh_centerlineDist2(prev, pt);
+    prev = pt;
   }
+  return len;
+}
+
+function _srh_centerlinePathPoints(pathItem, normalizeStepPt) {
+  var pts = [];
+  if(!pathItem || !pathItem.pathPoints || pathItem.pathPoints.length < 2) return pts;
+  var pps = pathItem.pathPoints;
+  var step = (normalizeStepPt && normalizeStepPt > 0) ? normalizeStepPt : _srh_mm2pt(1.5);
+
+  for(var i = 0; i < pps.length; i++) {
+    var cur = pps[i];
+    var nxt = pps[(i + 1) % pps.length];
+    var p0 = {x: cur.anchor[0], y: cur.anchor[1]};
+    var p1 = {x: cur.rightDirection[0], y: cur.rightDirection[1]};
+    var p2 = {x: nxt.leftDirection[0], y: nxt.leftDirection[1]};
+    var p3 = {x: nxt.anchor[0], y: nxt.anchor[1]};
+    var segLen = _srh_centerlineBezierApproxLen(p0, p1, p2, p3);
+    var segments = Math.max(1, Math.ceil(segLen / step));
+    for(var s = 0; s < segments; s++) {
+      var t = s / segments;
+      var pt = _srh_centerlineBezierPoint(p0, p1, p2, p3, t);
+      pts.push(pt);
+    }
+  }
+
   if(pts.length > 1) {
     var f = pts[0], l = pts[pts.length - 1];
     if(Math.abs(f.x - l.x) < 0.001 && Math.abs(f.y - l.y) < 0.001) pts.pop();
@@ -2523,6 +2572,61 @@ function _srh_centerlineScanRings(rings, bounds, horizontal, stepPt) {
     }
   }
   return scans;
+}
+
+function _srh_centerlineDrawPolyline(layer, pts, closed, strokeColor, strokeW) {
+  if(!layer || !pts || pts.length < 2) return null;
+  var p = layer.pathItems.add();
+  var arr = [];
+  for(var i = 0; i < pts.length; i++) arr.push([pts[i].x, pts[i].y]);
+  p.setEntirePath(arr);
+  try {p.closed = !!closed;} catch(_eCl) { }
+  try {p.filled = false;} catch(_eFi) { }
+  try {
+    p.stroked = true;
+    p.strokeColor = strokeColor;
+    p.strokeWidth = strokeW || 0.35;
+  } catch(_eSt) { }
+  return p;
+}
+
+function _srh_centerlineDrawScanDebug(layer, bounds, scans, horizontal, lineColor, pointColor) {
+  if(!layer || !bounds || !scans) return;
+  var maxScans = Math.min(scans.length, 240);
+  for(var i = 0; i < maxScans; i++) {
+    var sc = scans[i];
+    var line = layer.pathItems.add();
+    if(horizontal) {
+      line.setEntirePath([[sc.t, bounds.top], [sc.t, bounds.bottom]]);
+    } else {
+      line.setEntirePath([[bounds.left, sc.t], [bounds.right, sc.t]]);
+    }
+    try {line.closed = false;} catch(_eL0) { }
+    try {line.filled = false;} catch(_eL1) { }
+    try {line.stroked = true; line.strokeColor = lineColor; line.strokeWidth = 0.2;} catch(_eL2) { }
+
+    var maxPts = Math.min(sc.points.length, 80);
+    for(var p = 0; p < maxPts; p++) {
+      var m = sc.points[p];
+      var dot = layer.pathItems.ellipse(m.y + 1, m.x - 1, 2, 2);
+      try {dot.filled = true; dot.fillColor = pointColor; dot.stroked = false;} catch(_eD) { }
+    }
+  }
+}
+
+function _srh_centerlineDrawNormalizedRings(layer, rings, sourceBounds, debugOffsetPt, color) {
+  if(!layer || !rings || !rings.length) return;
+  var b = _srh_centerlineBounds(rings);
+  var src = sourceBounds || b;
+  var dy = Math.max(debugOffsetPt, (src.top - src.bottom) + debugOffsetPt);
+  var offset = dy + (b.top - src.top);
+  for(var r = 0; r < rings.length; r++) {
+    var ring = rings[r];
+    if(!ring || ring.length < 2) continue;
+    var moved = [];
+    for(var i = 0; i < ring.length; i++) moved.push({x: ring[i].x, y: ring[i].y - offset});
+    _srh_centerlineDrawPolyline(layer, moved, true, color, 0.45);
+  }
 }
 
 function _srh_centerlineDist(a, b) {
@@ -2622,6 +2726,9 @@ function signarama_helper_drawCenterline(jsonStr) {
   var smoothPasses = Number(args.smoothPasses || 0);
   var strokePt = Number(args.strokePt || 0.75);
   var useSelectionOnly = args.useSelectionOnly !== false;
+  var drawNormalized = args.drawNormalized !== false;
+  var debugVisuals = !!args.debugVisuals;
+  var debugOffsetMm = Number(args.debugOffsetMm || 30);
 
   if(!isFinite(stepMm) || stepMm <= 0) stepMm = 1.5;
   if(!isFinite(linkMm) || linkMm <= 0) linkMm = 3;
@@ -2630,6 +2737,7 @@ function signarama_helper_drawCenterline(jsonStr) {
 
   var stepPt = _srh_mm2pt(stepMm);
   var linkTolPt = _srh_mm2pt(linkMm);
+  var debugOffsetPt = _srh_mm2pt(isFinite(debugOffsetMm) && debugOffsetMm > 0 ? debugOffsetMm : 30);
 
   var sourceItems = [];
   if(useSelectionOnly) {
@@ -2644,15 +2752,25 @@ function signarama_helper_drawCenterline(jsonStr) {
     var it = sourceItems[i];
     if(!it) continue;
     try {if(it.hidden || it.locked) continue;} catch(_eSkip) { }
-    _srh_collectCenterlineShapesFromItem(it, shapes);
+    _srh_collectCenterlineShapesFromItem(it, shapes, stepPt);
   }
   if(!shapes.length) return "No closed shapes found in source.";
 
   var layer = _srh_getOrCreateLayer(doc, "Centerline");
+  var debugLayer = null;
+  if(drawNormalized || debugVisuals) debugLayer = _srh_getOrCreateLayer(doc, "Centerline Debug");
+
   var color = new RGBColor();
   color.red = 255; color.green = 0; color.blue = 255;
+  var normColor = new RGBColor();
+  normColor.red = 40; normColor.green = 160; normColor.blue = 255;
+  var scanLineColor = new RGBColor();
+  scanLineColor.red = 120; scanLineColor.green = 120; scanLineColor.blue = 120;
+  var scanPointColor = new RGBColor();
+  scanPointColor.red = 230; scanPointColor.green = 80; scanPointColor.blue = 80;
 
   var drawn = 0;
+  var normalizedDrawn = 0;
   var scanned = 0;
   for(var sh = 0; sh < shapes.length; sh++) {
     var rings = shapes[sh].rings;
@@ -2662,9 +2780,19 @@ function signarama_helper_drawCenterline(jsonStr) {
     var height = Math.abs((b.top || 0) - (b.bottom || 0));
     if(width < stepPt || height < stepPt) continue;
 
+    if(drawNormalized && debugLayer) {
+      _srh_centerlineDrawNormalizedRings(debugLayer, rings, shapes[sh].sourceBounds, debugOffsetPt, normColor);
+      normalizedDrawn++;
+    }
+
     var scansH = _srh_centerlineScanRings(rings, b, true, stepPt);
     var scansV = _srh_centerlineScanRings(rings, b, false, stepPt);
     scanned += scansH.length + scansV.length;
+
+    if(debugVisuals && debugLayer) {
+      _srh_centerlineDrawScanDebug(debugLayer, b, scansH, true, scanLineColor, scanPointColor);
+      _srh_centerlineDrawScanDebug(debugLayer, b, scansV, false, scanLineColor, scanPointColor);
+    }
 
     var tracksH = _srh_centerlineTracksFromScans(scansH, linkTolPt, true);
     var tracksV = _srh_centerlineTracksFromScans(scansV, linkTolPt, false);
@@ -2690,8 +2818,9 @@ function signarama_helper_drawCenterline(jsonStr) {
     }
   }
 
+  if(debugLayer) _srh_bringLayerToFront(debugLayer);
   _srh_bringLayerToFront(layer);
-  return "Centerline complete. Shapes: " + shapes.length + ", scanlines: " + scanned + ", paths drawn: " + drawn + ".";
+  return "Centerline complete. Shapes: " + shapes.length + ", scanlines: " + scanned + ", paths drawn: " + drawn + ", normalized copies: " + normalizedDrawn + ", debug visuals: " + (debugVisuals ? "on" : "off") + ".";
 }
 
 function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {

@@ -639,10 +639,25 @@
           </label>
         </div>
 
-        <div class="row" style="margin-top:10px; align-items:center;">
+        <div class="row" style="margin-top:10px; align-items:center; gap:14px; flex-wrap:wrap;">
           <label class="chk" style="margin:0;">
             <input id="centerlineUseSelectionOnly" type="checkbox" checked>
             <span>Use selection only</span>
+          </label>
+          <label class="chk" style="margin:0;">
+            <input id="centerlineDrawNormalized" type="checkbox" checked>
+            <span>Draw normalized path below</span>
+          </label>
+          <label class="chk" style="margin:0;">
+            <input id="centerlineDebugVisuals" type="checkbox">
+            <span>Debug visuals</span>
+          </label>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <label class="fld" style="flex:1;">
+            <span>Debug offset down (mm)</span>
+            <input id="centerlineDebugOffsetMm" type="number" step="1" min="5" value="30">
           </label>
         </div>
 
@@ -651,7 +666,7 @@
         </div>
 
         <div class="small" style="margin-top:8px;">
-          Creates open paths on a new <b>Centerline</b> layer.
+          Creates open paths on a new <b>Centerline</b> layer and optional debug geometry on <b>Centerline Debug</b>.
         </div>
       </div>
     </section>
