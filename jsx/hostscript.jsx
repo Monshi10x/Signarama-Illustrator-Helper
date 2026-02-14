@@ -1736,6 +1736,203 @@ this.atlas_dimensions_runLine = function(json) {
   }
 };
 
+var _SRH_LIGHTBOX_OUTER_NAME = 'SRH_LIGHTBOX_OUTER';
+var _SRH_LIGHTBOX_SUPPORT_NAME = 'SRH_LIGHTBOX_SUPPORT';
+var _SRH_LIGHTBOX_MEASURE_NOTE = 'SRH_LIGHTBOX_MEASURE';
+var _SRH_LIGHTBOX_MEASURE_NAME = 'SRH_LIGHTBOX_MEASURE_GROUP';
+var _srh_lightboxLiveSignatures = {};
+var _srh_lightboxLiveEnabled = {};
+
+function _srh_nameStartsWith(value, prefix) {
+  if(value == null || prefix == null) return false;
+  value = String(value);
+  prefix = String(prefix);
+  return value.slice(0, prefix.length) === prefix;
+}
+
+function _srh_generateLightboxId() {
+  var ts = (new Date()).getTime();
+  var r = Math.floor(Math.random() * 1000000);
+  return String(ts) + '_' + String(r);
+}
+
+function _srh_getLightboxTag(item) {
+  if(!item) return null;
+  var note = '';
+  try {note = String(item.note || '');} catch(_eN) { note = ''; }
+  if(note) {
+    var noteParts = note.split('|');
+    if(noteParts.length >= 3 && noteParts[0] === 'SRH_LIGHTBOX') {
+      return {id: noteParts[1], role: noteParts[2]};
+    }
+  }
+  var nm = '';
+  try {nm = String(item.name || '');} catch(_eNm) { nm = ''; }
+  if(!nm) return null;
+  var m = /^SRH_LIGHTBOX_(OUTER|SUPPORT)_(.+)$/.exec(nm);
+  if(m && m.length >= 3) {
+    return {id: m[2], role: m[1].toLowerCase()};
+  }
+  return null;
+}
+
+function _srh_setLightboxItemTag(item, role, lightboxId) {
+  if(!item) return;
+  var id = String(lightboxId || '');
+  if(!id) return;
+  var roleNorm = String(role || '').toLowerCase();
+  if(roleNorm !== 'outer' && roleNorm !== 'support') return;
+  try {
+    if(roleNorm === 'outer') item.name = _SRH_LIGHTBOX_OUTER_NAME + '_' + id;
+    else item.name = _SRH_LIGHTBOX_SUPPORT_NAME + '_' + id;
+  } catch(_eNm0) { }
+  try {item.note = 'SRH_LIGHTBOX|' + id + '|' + roleNorm;} catch(_eNt0) { }
+}
+
+function _srh_getItemBounds(item) {
+  if(!item) return null;
+  var b = null;
+  try {b = item.visibleBounds;} catch(_e0) { }
+  if(!b || b.length !== 4) {
+    try {b = item.geometricBounds;} catch(_e1) { b = null; }
+  }
+  if(!b || b.length !== 4) return null;
+  return {left: b[0], top: b[1], right: b[2], bottom: b[3]};
+}
+
+function _srh_buildLightboxSignature(bounds, supportCenters) {
+  if(!bounds) return '';
+  function _r(n) {return Math.round(Number(n || 0) * 1000) / 1000;}
+  var p = [_r(bounds.left), _r(bounds.top), _r(bounds.right), _r(bounds.bottom)];
+  if(supportCenters && supportCenters.length) {
+    for(var i = 0; i < supportCenters.length; i++) p.push(_r(supportCenters[i]));
+  }
+  return p.join('|');
+}
+
+function _srh_findAllLightboxData(doc) {
+  if(!doc) return null;
+  var frameLayer = null;
+  try {frameLayer = doc.layers.getByName('lightbox frame');} catch(_e0) { return null; }
+  if(!frameLayer) return null;
+
+  var outerCandidates = [];
+  var supportCandidates = [];
+  var items = frameLayer.pageItems;
+  for(var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if(!it) continue;
+    var nm = '';
+    try {nm = String(it.name || '');} catch(_eNm) { nm = ''; }
+    var tag = _srh_getLightboxTag(it);
+    if(tag && tag.role === 'outer') outerCandidates.push(it);
+    else if(tag && tag.role === 'support') supportCandidates.push(it);
+    else {
+      if(_srh_nameStartsWith(nm, _SRH_LIGHTBOX_OUTER_NAME)) outerCandidates.push(it);
+      if(_srh_nameStartsWith(nm, _SRH_LIGHTBOX_SUPPORT_NAME)) supportCandidates.push(it);
+    }
+  }
+  if(!outerCandidates.length) return [];
+
+  var lightboxes = [];
+  var byId = {};
+  var legacyIdx = 0;
+  for(var o = 0; o < outerCandidates.length; o++) {
+    var outer = outerCandidates[o];
+    var ob = _srh_getItemBounds(outer);
+    if(!ob) continue;
+    var otag = _srh_getLightboxTag(outer);
+    var lid = (otag && otag.id) ? String(otag.id) : ('legacy_' + (legacyIdx++));
+    var lb = {
+      id: lid,
+      bounds: ob,
+      supportCenters: [],
+      _centerX: (ob.left + ob.right) * 0.5
+    };
+    lightboxes.push(lb);
+    byId[lid] = lb;
+  }
+
+  for(var s = 0; s < supportCandidates.length; s++) {
+    var support = supportCandidates[s];
+    var sb = _srh_getItemBounds(support);
+    if(!sb) continue;
+    var cx = (sb.left + sb.right) * 0.5;
+
+    var stag = _srh_getLightboxTag(support);
+    var target = null;
+    if(stag && stag.id && byId[String(stag.id)]) {
+      target = byId[String(stag.id)];
+    } else {
+      // Fallback: closest outer that spans this x position.
+      var bestDist = 1e20;
+      for(var j = 0; j < lightboxes.length; j++) {
+        var cand = lightboxes[j];
+        if(cx < cand.bounds.left - 1 || cx > cand.bounds.right + 1) continue;
+        var d = Math.abs(cx - cand._centerX);
+        if(d < bestDist) {
+          bestDist = d;
+          target = cand;
+        }
+      }
+    }
+    if(target) target.supportCenters.push(cx);
+  }
+
+  for(var k = 0; k < lightboxes.length; k++) {
+    lightboxes[k].supportCenters.sort(function(a, b) {return a - b;});
+    lightboxes[k].signature = _srh_buildLightboxSignature(lightboxes[k].bounds, lightboxes[k].supportCenters);
+  }
+  return lightboxes;
+}
+
+function _srh_tagLightboxMeasureGroup(groupItem, lightboxId) {
+  if(!groupItem) return;
+  var id = String(lightboxId || '');
+  if(id) {
+    try {groupItem.note = _SRH_LIGHTBOX_MEASURE_NOTE + '|' + id;} catch(_e0) { }
+    try {groupItem.name = _SRH_LIGHTBOX_MEASURE_NAME + '_' + id;} catch(_e1) { }
+  } else {
+    try {groupItem.note = _SRH_LIGHTBOX_MEASURE_NOTE;} catch(_e2) { }
+    try {groupItem.name = _SRH_LIGHTBOX_MEASURE_NAME;} catch(_e3) { }
+  }
+}
+
+function _srh_clearTaggedLightboxMeasures(doc, lightboxId) {
+  if(!doc) return 0;
+  var lyr = null;
+  try {lyr = doc.layers.getByName('Dimensions');} catch(_e0) { return 0; }
+  if(!lyr) return 0;
+
+  var id = String(lightboxId || '');
+  var removed = 0;
+  for(var i = lyr.groupItems.length - 1; i >= 0; i--) {
+    var g = lyr.groupItems[i];
+    if(!g) continue;
+    var isTagged = false;
+    var note = '';
+    var name = '';
+    try {note = String(g.note || '');} catch(_eN0) { note = ''; }
+    try {name = String(g.name || '');} catch(_eN1) { name = ''; }
+    if(id) {
+      if(note === (_SRH_LIGHTBOX_MEASURE_NOTE + '|' + id)) isTagged = true;
+      if(!isTagged && name === (_SRH_LIGHTBOX_MEASURE_NAME + '_' + id)) isTagged = true;
+    } else {
+      if(note === _SRH_LIGHTBOX_MEASURE_NOTE) isTagged = true;
+      if(!isTagged && _srh_nameStartsWith(name, _SRH_LIGHTBOX_MEASURE_NAME)) isTagged = true;
+    }
+    if(!isTagged) {
+      try {
+        if(!id && _srh_nameStartsWith(name, _SRH_LIGHTBOX_MEASURE_NAME)) isTagged = true;
+      } catch(_eNm) { }
+    }
+    if(isTagged) {
+      try {g.remove(); removed++;} catch(_eR) { }
+    }
+  }
+  return removed;
+}
+
 function signarama_helper_createLightbox(jsonStr) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
@@ -1750,6 +1947,7 @@ function signarama_helper_createLightbox(jsonStr) {
   if(!supports || supports < 0) supports = 0;
   var ledOffsetMm = Number(opts.ledOffsetMm || 0);
   var addMeasures = !!opts.addMeasures;
+  var updateMeasuresLive = !!opts.updateMeasuresLive;
   var measureOptions = opts.measureOptions || null;
 
   if(!(wMm > 0) || !(hMm > 0)) return 'Width and height must be > 0.';
@@ -1758,6 +1956,7 @@ function signarama_helper_createLightbox(jsonStr) {
   var h = _dim_mm2pt(hMm);
   var ledOffset = _dim_mm2pt(ledOffsetMm);
   var supportW = _dim_mm2pt(25);
+  var lightboxId = _srh_generateLightboxId();
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
   var centerX = (ab[0] + ab[2]) / 2;
@@ -1819,10 +2018,12 @@ function signarama_helper_createLightbox(jsonStr) {
     } catch(_eSel2) { }
     if(!result) result = grp;
     _lb_applyStroke(result);
+    _srh_setLightboxItemTag(result, 'outer', lightboxId);
 
     try {doc.selection = prevSel;} catch(_eSel3) { }
   } else {
     _lb_applyStroke(outer);
+    _srh_setLightboxItemTag(outer, 'outer', lightboxId);
   }
 
   // Supports
@@ -1835,6 +2036,7 @@ function signarama_helper_createLightbox(jsonStr) {
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
       try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
       try {s.stroked = true; s.strokeWidth = 1; s.strokeColor = black;} catch(_eS1) { }
+      _srh_setLightboxItemTag(s, 'support', lightboxId);
       supportCenters.push(sx + (supportW / 2));
     }
   }
@@ -1854,7 +2056,12 @@ function signarama_helper_createLightbox(jsonStr) {
 
   if(addMeasures && measureOptions) {
     var bounds = {left: left, top: top, right: left + w, bottom: top - h};
-    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions);
+    _srh_clearTaggedLightboxMeasures(doc, lightboxId);
+    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions, lightboxId);
+    if(updateMeasuresLive) {
+      _srh_lightboxLiveEnabled[lightboxId] = true;
+      _srh_lightboxLiveSignatures[lightboxId] = _srh_buildLightboxSignature(bounds, supportCenters);
+    }
   }
 
   return 'Lightbox created: ' + wMm + ' x ' + hMm + ' mm, depth ' + dMm + ' mm, type ' + type + ', supports ' + supports + '.';
@@ -1868,6 +2075,8 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
   // Reuse the same width/height/depth to create the LED panel and layout.
   var payload = {
     ledWatt: Number(opts.ledWatt || 0),
+    ledCode: String(opts.ledCode || ''),
+    ledVoltage: Number(opts.ledVoltage || 0),
     ledWidthMm: Number(opts.ledWidthMm || 66),
     ledHeightMm: Number(opts.ledHeightMm || 13),
     allowanceWmm: Number(opts.allowanceWmm || 0),
@@ -1907,6 +2116,38 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
   return res + ' + LED panel/layout.';
 }
 
+function signarama_helper_updateLightboxMeasures(jsonStr) {
+  if(!app.documents.length) return 'No open document.';
+  var opts = {};
+  try {opts = JSON.parse(String(jsonStr));} catch(e) {opts = {};}
+
+  var measureOptions = opts.measureOptions || null;
+  var force = !!opts.force;
+  if(!measureOptions) return 'No measure options.';
+
+  var doc = app.activeDocument;
+  var lightboxes = _srh_findAllLightboxData(doc);
+  if(!lightboxes || !lightboxes.length) return 'No live lightbox found.';
+
+  var changed = 0;
+  var supportsTotal = 0;
+  for(var i = 0; i < lightboxes.length; i++) {
+    var lb = lightboxes[i];
+    if(!lb || !lb.id) continue;
+    if(force) _srh_lightboxLiveEnabled[lb.id] = true;
+    if(!_srh_lightboxLiveEnabled[lb.id]) continue;
+    if(!force && _srh_lightboxLiveSignatures[lb.id] === lb.signature) continue;
+
+    _srh_clearTaggedLightboxMeasures(doc, lb.id);
+    _srh_addLightboxMeasures(doc, lb.bounds, lb.supportCenters, measureOptions, lb.id);
+    _srh_lightboxLiveSignatures[lb.id] = lb.signature;
+    changed++;
+    supportsTotal += (lb.supportCenters ? lb.supportCenters.length : 0);
+  }
+  if(changed < 1) return 'No live measure changes.';
+  return 'Updated lightbox measures live (' + changed + ' lightboxes, ' + supportsTotal + ' supports).';
+}
+
 function signarama_helper_drawLedLayout(jsonStr) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
@@ -1914,6 +2155,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
   try {opts = JSON.parse(String(jsonStr));} catch(e) {opts = {};}
 
   var ledWatt = Number(opts.ledWatt || 0);
+  var ledCode = String(opts.ledCode || '');
+  var ledVoltage = Number(opts.ledVoltage || 0);
   var ledWidthMm = Number(opts.ledWidthMm || 0);
   var ledHeightMm = Number(opts.ledHeightMm || 0);
   var allowanceWmm = Number(opts.allowanceWmm || 0);
@@ -2121,13 +2364,29 @@ function signarama_helper_drawLedLayout(jsonStr) {
           var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2pt(5)]);
           label.contents = count + " LEDs";
           try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
-          try {label.textRange.characterAttributes.size = 10;} catch(_eSize) { }
+          try {label.textRange.characterAttributes.size = 20;} catch(_eSize) { }
           try {label.textRange.characterAttributes.fillColor = black;} catch(_eCol) { }
         } catch(_eLbl) { }
       }
 
       colIndex += colsInGroup;
     }
+
+    // Bottom-center lightbox LED spec label.
+    try {
+      var ledBits = [];
+      if(ledWatt) ledBits.push(ledWatt + 'W');
+      if(ledCode && ledCode.length) ledBits.push(ledCode);
+      if(ledVoltage) ledBits.push(ledVoltage + 'V');
+      if(ledBits.length) {
+        var spec = ledBits.join(' | ');
+        var specLabel = penGroupLayer.textFrames.pointText([(bounds.left + bounds.right) * 0.5, bounds.bottom - _srh_mm2pt(3)]);
+        specLabel.contents = spec;
+        try {specLabel.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eSpecJust) { }
+        try {specLabel.textRange.characterAttributes.size = 12;} catch(_eSpecSize) { }
+        try {specLabel.textRange.characterAttributes.fillColor = black;} catch(_eSpecCol) { }
+      }
+    } catch(_eSpecLbl) { }
 
     totalRows += rows;
     totalCols += cols;
@@ -2608,14 +2867,21 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   var lyr = _dim_ensureLayer('Dimensions');
 
   // Top width measure
-  _dim_drawHorizontalDim(lyr, bounds.left, bounds.right, bounds.top + dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'TOP', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  var gTop = _dim_drawHorizontalDim(lyr, bounds.left, bounds.right, bounds.top + dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'TOP', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  _srh_tagLightboxMeasureGroup(gTop, lightboxId);
   // Left height measure
-  _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  var gLeft = _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  _srh_tagLightboxMeasureGroup(gLeft, lightboxId);
 
   // Bottom measures from left edge to each support center
   if(supportCenters && supportCenters.length) {
-    for(var i = 0; i < supportCenters.length; i++) {
-      _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[i], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+    var sortedCenters = supportCenters.slice(0);
+    sortedCenters.sort(function(a, b) {return a - b;});
+    var supportMeasureYOffsetStep = Math.max(dOpts.ticLenPt, dOpts.strokePt * 2);
+    for(var i = 0; i < sortedCenters.length; i++) {
+      var yLine = bounds.bottom - dOpts.offsetPt - (i * supportMeasureYOffsetStep);
+      var gBottom = _dim_drawHorizontalDim(lyr, bounds.left, sortedCenters[i], yLine, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+      _srh_tagLightboxMeasureGroup(gBottom, lightboxId);
     }
   }
 }

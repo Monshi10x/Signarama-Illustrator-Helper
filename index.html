@@ -496,6 +496,7 @@
           <label class="fld">
             <span>Number of supports</span>
             <input type="number" id="lightboxSupportCount" step="1" value="2">
+            <span id="lightboxSupportSpacingInfo" class="small" style="display:block; margin-top:4px; color:#9a9a9a;">Support spacing: -</span>
           </label>
           <label class="fld">
             <span>LED panel offset (mm)</span>
@@ -506,6 +507,12 @@
           <label class="chk">
             <input id="lightboxAddMeasures" type="checkbox" checked>
             <span>Add measures</span>
+          </label>
+        </div>
+        <div class="row" style="margin-top:6px; align-items:center;">
+          <label class="chk">
+            <input id="lightboxUpdateMeasuresLive" type="checkbox" checked>
+            <span>Update measures live</span>
           </label>
         </div>
         <div class="row" style="margin-top:10px;">
@@ -552,6 +559,14 @@
             <label class="fld">
               <span>LED Watt</span>
               <input type="number" id="ledWatt" step="0.01" value="1.5">
+            </label>
+            <label class="fld">
+              <span>LED Code</span>
+              <input type="text" id="ledCode" value="">
+            </label>
+            <label class="fld">
+              <span>LED Voltage</span>
+              <input type="number" id="ledVoltage" step="0.1" value="12">
             </label>
             <label class="fld">
             <span>LED Width (mm)</span>
