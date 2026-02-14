@@ -2530,37 +2530,57 @@ function _srh_centerlineDist(a, b) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function _srh_centerlineTracksFromScans(scans, linkTolPt) {
+function _srh_centerlineTrackSortValue(pt, horizontal) {
+  return horizontal ? pt.y : pt.x;
+}
+
+function _srh_centerlineTrackLength(track) {
+  if(!track || track.length < 2) return 0;
+  var sum = 0;
+  for(var i = 1; i < track.length; i++) {
+    sum += _srh_centerlineDist(track[i - 1], track[i]);
+  }
+  return sum;
+}
+
+function _srh_centerlineTracksFromScans(scans, linkTolPt, horizontal) {
   var tracks = [];
   var active = [];
 
   for(var s = 0; s < scans.length; s++) {
-    var pts = scans[s].points;
-    var usedPts = [];
-    for(var u = 0; u < pts.length; u++) usedPts.push(false);
-    var nextActive = [];
+    var pts = scans[s].points.slice();
+    pts.sort(function(a, b){
+      return _srh_centerlineTrackSortValue(a, horizontal) - _srh_centerlineTrackSortValue(b, horizontal);
+    });
 
-    for(var a = 0; a < active.length; a++) {
-      var tr = active[a];
+    active.sort(function(a, b){
+      var pa = a[a.length - 1];
+      var pb = b[b.length - 1];
+      return _srh_centerlineTrackSortValue(pa, horizontal) - _srh_centerlineTrackSortValue(pb, horizontal);
+    });
+
+    var nextActive = [];
+    var paired = Math.min(active.length, pts.length);
+
+    for(var i = 0; i < paired; i++) {
+      var tr = active[i];
+      var pt = pts[i];
       var last = tr[tr.length - 1];
-      var bestIdx = -1;
-      var bestD = linkTolPt;
-      for(var p = 0; p < pts.length; p++) {
-        if(usedPts[p]) continue;
-        var d = _srh_centerlineDist(last, pts[p]);
-        if(d <= bestD) {bestD = d; bestIdx = p;}
-      }
-      if(bestIdx >= 0) {
-        tr.push(pts[bestIdx]);
-        usedPts[bestIdx] = true;
+      if(_srh_centerlineDist(last, pt) <= linkTolPt) {
+        tr.push(pt);
         nextActive.push(tr);
-      } else if(tr.length > 1) {
-        tracks.push(tr);
+      } else {
+        if(tr.length > 1) tracks.push(tr);
+        nextActive.push([pt]);
       }
     }
 
-    for(var np = 0; np < pts.length; np++) {
-      if(!usedPts[np]) nextActive.push([pts[np]]);
+    for(var a = paired; a < active.length; a++) {
+      if(active[a].length > 1) tracks.push(active[a]);
+    }
+
+    for(var p = paired; p < pts.length; p++) {
+      nextActive.push([pts[p]]);
     }
 
     active = nextActive;
@@ -2642,15 +2662,19 @@ function signarama_helper_drawCenterline(jsonStr) {
     var height = Math.abs((b.top || 0) - (b.bottom || 0));
     if(width < stepPt || height < stepPt) continue;
 
-    var horizontal = width >= height;
-    var scans = _srh_centerlineScanRings(rings, b, horizontal, stepPt);
-    if(!scans.length) continue;
-    scanned += scans.length;
+    var scansH = _srh_centerlineScanRings(rings, b, true, stepPt);
+    var scansV = _srh_centerlineScanRings(rings, b, false, stepPt);
+    scanned += scansH.length + scansV.length;
 
-    var tracks = _srh_centerlineTracksFromScans(scans, linkTolPt);
+    var tracksH = _srh_centerlineTracksFromScans(scansH, linkTolPt, true);
+    var tracksV = _srh_centerlineTracksFromScans(scansV, linkTolPt, false);
+    var tracks = tracksH.concat(tracksV);
+    var minTrackLen = Math.max(stepPt * 2, 1);
+
     for(var t = 0; t < tracks.length; t++) {
       var tr = _srh_centerlineSmoothTrack(tracks[t], smoothPasses);
       if(!tr || tr.length < 2) continue;
+      if(_srh_centerlineTrackLength(tr) < minTrackLen) continue;
       var path = layer.pathItems.add();
       var arr = [];
       for(var k = 0; k < tr.length; k++) arr.push([tr[k].x, tr[k].y]);
