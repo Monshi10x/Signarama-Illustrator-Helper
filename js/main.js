@@ -174,6 +174,7 @@
     wireLedLayout();
     wireLedDepiction();
     wireColours();
+    wireCenterline();
 
     const clear = $('btnClearLog');
     if (clear) clear.onclick = () => { const el = $('log'); if (el) el.textContent=''; };
@@ -390,6 +391,22 @@
     const refreshBtn = $('btnRefreshColours');
     if (refreshBtn) refreshBtn.onclick = () => refreshColours();
     window.refreshColours = refreshColours;
+  }
+
+  function wireCenterline(){
+    const btn = $('btnDrawCenterline');
+    if (!btn) return;
+    btn.onclick = () => {
+      const payload = {
+        stepMm: num(($('centerlineStepMm') && $('centerlineStepMm').value) || 1.5),
+        linkMm: num(($('centerlineLinkMm') && $('centerlineLinkMm').value) || 3),
+        smoothPasses: parseInt((($('centerlineSmoothPasses') && $('centerlineSmoothPasses').value) || 0), 10) || 0,
+        strokePt: num(($('centerlineStrokePt') && $('centerlineStrokePt').value) || 0.75),
+        useSelectionOnly: !!($('centerlineUseSelectionOnly') && $('centerlineUseSelectionOnly').checked)
+      };
+      const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
+      callJSX('signarama_helper_drawCenterline("' + json + '")', res => res && log(res));
+    };
   }
 
   function refreshColours(){
