@@ -34,8 +34,6 @@
     lastEdit: null,
     mode: 'CMYK'
   };
-  let lightboxMeasureLiveTimer = null;
-  let lightboxMeasureLiveInFlight = false;
 
   function buildDimensionPayload() {
     return {
@@ -174,7 +172,6 @@
     wireLedLayout();
     wireLedDepiction();
     wireColours();
-    wireCenterline();
 
     const clear = $('btnClearLog');
     if(clear) clear.onclick = () => {const el = $('log'); if(el) el.textContent = '';};
@@ -192,7 +189,6 @@
         supportCount: parseInt((($('lightboxSupportCount') && $('lightboxSupportCount').value) || 0), 10) || 0,
         ledOffsetMm: num(($('lightboxLedOffsetMm') && $('lightboxLedOffsetMm').value) || 0),
         addMeasures: !!($('lightboxAddMeasures') && $('lightboxAddMeasures').checked),
-        updateMeasuresLive: !!($('lightboxUpdateMeasuresLive') && $('lightboxUpdateMeasuresLive').checked),
         measureOptions: buildDimensionPayload()
       };
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -210,8 +206,6 @@
           supportCount: parseInt((($('lightboxSupportCount') && $('lightboxSupportCount').value) || 0), 10) || 0,
           ledOffsetMm: num(($('lightboxLedOffsetMm') && $('lightboxLedOffsetMm').value) || 0),
           ledWatt: num(($('ledWatt') && $('ledWatt').value) || 0),
-          ledCode: (($('ledCode') && $('ledCode').value) || '').trim(),
-          ledVoltage: num(($('ledVoltage') && $('ledVoltage').value) || 0),
           ledWidthMm: num(($('ledWidthMm') && $('ledWidthMm').value) || 0),
           ledHeightMm: num(($('ledHeightMm') && $('ledHeightMm').value) || 0),
           allowanceWmm: num(($('ledAllowanceWmm') && $('ledAllowanceWmm').value) || 0),
@@ -219,7 +213,6 @@
           maxLedsInSeries: parseInt((($('ledMaxInSeries') && $('ledMaxInSeries').value) || 0), 10) || 50,
           flipLed: !!($('ledFlip') && $('ledFlip').checked),
           addMeasures: !!($('lightboxAddMeasures') && $('lightboxAddMeasures').checked),
-          updateMeasuresLive: !!($('lightboxUpdateMeasuresLive') && $('lightboxUpdateMeasuresLive').checked),
           measureOptions: buildDimensionPayload()
         };
         const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -234,8 +227,6 @@
     ledBtn.onclick = () => {
       const payload = {
         ledWatt: num(($('ledWatt') && $('ledWatt').value) || 0),
-        ledCode: (($('ledCode') && $('ledCode').value) || '').trim(),
-        ledVoltage: num(($('ledVoltage') && $('ledVoltage').value) || 0),
         ledWidthMm: num(($('ledWidthMm') && $('ledWidthMm').value) || 0),
         ledHeightMm: num(($('ledHeightMm') && $('ledHeightMm').value) || 0),
         allowanceWmm: num(($('ledAllowanceWmm') && $('ledAllowanceWmm').value) || 0),

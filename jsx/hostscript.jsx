@@ -151,7 +151,7 @@ function _srh_cmykToHex(cmyk) {
   if(!cmyk) return "#000000";
   try {
     var rgb = app.convertSampleColor(ColorSpace.CMYK, [cmyk.c, cmyk.m, cmyk.y, cmyk.k], ColorSpace.RGB, ColorConvertPurpose.defaultpurpose);
-    function h(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0"+s : s; }
+    function h(v) {v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0" + s : s;}
     return "#" + h(rgb[0]) + h(rgb[1]) + h(rgb[2]);
   } catch(e) {
     // Manual CMYK -> RGB fallback
@@ -162,7 +162,7 @@ function _srh_cmykToHex(cmyk) {
     var r = 255 * (1 - c) * (1 - k);
     var g = 255 * (1 - m) * (1 - k);
     var b = 255 * (1 - y) * (1 - k);
-    function h2(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s2 = v.toString(16); return s2.length === 1 ? "0"+s2 : s2; }
+    function h2(v) {v = Math.max(0, Math.min(255, Math.round(v))); var s2 = v.toString(16); return s2.length === 1 ? "0" + s2 : s2;}
     return "#" + h2(r) + h2(g) + h2(b);
   }
   return "#000000";
@@ -170,7 +170,7 @@ function _srh_cmykToHex(cmyk) {
 
 function _srh_rgbToHex(rgb) {
   if(!rgb) return "#000000";
-  function h(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0"+s : s; }
+  function h(v) {v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0" + s : s;}
   return "#" + h(rgb.r) + h(rgb.g) + h(rgb.b);
 }
 
@@ -277,7 +277,7 @@ function signarama_helper_getDocumentColors() {
     });
   }
 
-  _srh_walkPageItems(doc, function(it){
+  _srh_walkPageItems(doc, function(it) {
     if(!it) return;
     debug.totalItems++;
     if(debug.sampleTypes.length < 10) debug.sampleTypes.push(it.typename);
@@ -358,11 +358,11 @@ function signarama_helper_replaceColor(jsonStr) {
 
   // Convert hex to RGB
   function _hexToRgb(hex) {
-    var h = hex.replace('#','');
-    if(h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-    var r = parseInt(h.substring(0,2),16);
-    var g = parseInt(h.substring(2,4),16);
-    var b = parseInt(h.substring(4,6),16);
+    var h = hex.replace('#', '');
+    if(h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var r = parseInt(h.substring(0, 2), 16);
+    var g = parseInt(h.substring(2, 4), 16);
+    var b = parseInt(h.substring(4, 6), 16);
     var c = new RGBColor();
     c.red = r; c.green = g; c.blue = b;
     return c;
@@ -413,7 +413,7 @@ function signarama_helper_replaceColor(jsonStr) {
   }
 
   var updated = 0;
-  _srh_walkPageItems(doc, function(it){
+  _srh_walkPageItems(doc, function(it) {
     if(!it) return;
     if(it.typename === "RasterItem" || it.typename === "PlacedItem") return;
     if(it.locked || it.hidden) return;
@@ -1105,7 +1105,7 @@ function _dim_makeLine(group, x1, y1, x2, y2, strokePt, opts) {
         lc = _dim_parseHexColorToRGBColor(opts.lineColor);
       }
     }
-  } catch(_eLc) { lc = null; }
+  } catch(_eLc) {lc = null;}
   if(!lc) lc = _dim_parseHexColorToRGBColor('#000000');
   try {p.strokeColor = lc;} catch(_eSc) { }
   p.filled = false;
@@ -1275,7 +1275,7 @@ function _dim_getMetricsFor(item, measureClippedContent) {
 
           var cb = null;
           try {cb = child.visibleBounds;} catch(_eC0) { }
-          if(!cb || cb.length !== 4) {try {cb = child.geometricBounds;} catch(_eC1) { cb = null; } }
+          if(!cb || cb.length !== 4) {try {cb = child.geometricBounds;} catch(_eC1) {cb = null;} }
           if(!cb || cb.length !== 4) continue;
 
           if(!vb) {
@@ -1499,7 +1499,7 @@ function _dim_run(opts) {
     if(!lineColor && opts.lineColor && typeof opts.lineColor === 'object' && typeof opts.lineColor.red !== 'undefined') {
       lineColor = opts.lineColor;
     }
-  } catch(_eLc2) { lineColor = null; }
+  } catch(_eLc2) {lineColor = null;}
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
@@ -1736,203 +1736,6 @@ this.atlas_dimensions_runLine = function(json) {
   }
 };
 
-var _SRH_LIGHTBOX_OUTER_NAME = 'SRH_LIGHTBOX_OUTER';
-var _SRH_LIGHTBOX_SUPPORT_NAME = 'SRH_LIGHTBOX_SUPPORT';
-var _SRH_LIGHTBOX_MEASURE_NOTE = 'SRH_LIGHTBOX_MEASURE';
-var _SRH_LIGHTBOX_MEASURE_NAME = 'SRH_LIGHTBOX_MEASURE_GROUP';
-var _srh_lightboxLiveSignatures = {};
-var _srh_lightboxLiveEnabled = {};
-
-function _srh_nameStartsWith(value, prefix) {
-  if(value == null || prefix == null) return false;
-  value = String(value);
-  prefix = String(prefix);
-  return value.slice(0, prefix.length) === prefix;
-}
-
-function _srh_generateLightboxId() {
-  var ts = (new Date()).getTime();
-  var r = Math.floor(Math.random() * 1000000);
-  return String(ts) + '_' + String(r);
-}
-
-function _srh_getLightboxTag(item) {
-  if(!item) return null;
-  var note = '';
-  try {note = String(item.note || '');} catch(_eN) { note = ''; }
-  if(note) {
-    var noteParts = note.split('|');
-    if(noteParts.length >= 3 && noteParts[0] === 'SRH_LIGHTBOX') {
-      return {id: noteParts[1], role: noteParts[2]};
-    }
-  }
-  var nm = '';
-  try {nm = String(item.name || '');} catch(_eNm) { nm = ''; }
-  if(!nm) return null;
-  var m = /^SRH_LIGHTBOX_(OUTER|SUPPORT)_(.+)$/.exec(nm);
-  if(m && m.length >= 3) {
-    return {id: m[2], role: m[1].toLowerCase()};
-  }
-  return null;
-}
-
-function _srh_setLightboxItemTag(item, role, lightboxId) {
-  if(!item) return;
-  var id = String(lightboxId || '');
-  if(!id) return;
-  var roleNorm = String(role || '').toLowerCase();
-  if(roleNorm !== 'outer' && roleNorm !== 'support') return;
-  try {
-    if(roleNorm === 'outer') item.name = _SRH_LIGHTBOX_OUTER_NAME + '_' + id;
-    else item.name = _SRH_LIGHTBOX_SUPPORT_NAME + '_' + id;
-  } catch(_eNm0) { }
-  try {item.note = 'SRH_LIGHTBOX|' + id + '|' + roleNorm;} catch(_eNt0) { }
-}
-
-function _srh_getItemBounds(item) {
-  if(!item) return null;
-  var b = null;
-  try {b = item.visibleBounds;} catch(_e0) { }
-  if(!b || b.length !== 4) {
-    try {b = item.geometricBounds;} catch(_e1) { b = null; }
-  }
-  if(!b || b.length !== 4) return null;
-  return {left: b[0], top: b[1], right: b[2], bottom: b[3]};
-}
-
-function _srh_buildLightboxSignature(bounds, supportCenters) {
-  if(!bounds) return '';
-  function _r(n) {return Math.round(Number(n || 0) * 1000) / 1000;}
-  var p = [_r(bounds.left), _r(bounds.top), _r(bounds.right), _r(bounds.bottom)];
-  if(supportCenters && supportCenters.length) {
-    for(var i = 0; i < supportCenters.length; i++) p.push(_r(supportCenters[i]));
-  }
-  return p.join('|');
-}
-
-function _srh_findAllLightboxData(doc) {
-  if(!doc) return null;
-  var frameLayer = null;
-  try {frameLayer = doc.layers.getByName('lightbox frame');} catch(_e0) { return null; }
-  if(!frameLayer) return null;
-
-  var outerCandidates = [];
-  var supportCandidates = [];
-  var items = frameLayer.pageItems;
-  for(var i = 0; i < items.length; i++) {
-    var it = items[i];
-    if(!it) continue;
-    var nm = '';
-    try {nm = String(it.name || '');} catch(_eNm) { nm = ''; }
-    var tag = _srh_getLightboxTag(it);
-    if(tag && tag.role === 'outer') outerCandidates.push(it);
-    else if(tag && tag.role === 'support') supportCandidates.push(it);
-    else {
-      if(_srh_nameStartsWith(nm, _SRH_LIGHTBOX_OUTER_NAME)) outerCandidates.push(it);
-      if(_srh_nameStartsWith(nm, _SRH_LIGHTBOX_SUPPORT_NAME)) supportCandidates.push(it);
-    }
-  }
-  if(!outerCandidates.length) return [];
-
-  var lightboxes = [];
-  var byId = {};
-  var legacyIdx = 0;
-  for(var o = 0; o < outerCandidates.length; o++) {
-    var outer = outerCandidates[o];
-    var ob = _srh_getItemBounds(outer);
-    if(!ob) continue;
-    var otag = _srh_getLightboxTag(outer);
-    var lid = (otag && otag.id) ? String(otag.id) : ('legacy_' + (legacyIdx++));
-    var lb = {
-      id: lid,
-      bounds: ob,
-      supportCenters: [],
-      _centerX: (ob.left + ob.right) * 0.5
-    };
-    lightboxes.push(lb);
-    byId[lid] = lb;
-  }
-
-  for(var s = 0; s < supportCandidates.length; s++) {
-    var support = supportCandidates[s];
-    var sb = _srh_getItemBounds(support);
-    if(!sb) continue;
-    var cx = (sb.left + sb.right) * 0.5;
-
-    var stag = _srh_getLightboxTag(support);
-    var target = null;
-    if(stag && stag.id && byId[String(stag.id)]) {
-      target = byId[String(stag.id)];
-    } else {
-      // Fallback: closest outer that spans this x position.
-      var bestDist = 1e20;
-      for(var j = 0; j < lightboxes.length; j++) {
-        var cand = lightboxes[j];
-        if(cx < cand.bounds.left - 1 || cx > cand.bounds.right + 1) continue;
-        var d = Math.abs(cx - cand._centerX);
-        if(d < bestDist) {
-          bestDist = d;
-          target = cand;
-        }
-      }
-    }
-    if(target) target.supportCenters.push(cx);
-  }
-
-  for(var k = 0; k < lightboxes.length; k++) {
-    lightboxes[k].supportCenters.sort(function(a, b) {return a - b;});
-    lightboxes[k].signature = _srh_buildLightboxSignature(lightboxes[k].bounds, lightboxes[k].supportCenters);
-  }
-  return lightboxes;
-}
-
-function _srh_tagLightboxMeasureGroup(groupItem, lightboxId) {
-  if(!groupItem) return;
-  var id = String(lightboxId || '');
-  if(id) {
-    try {groupItem.note = _SRH_LIGHTBOX_MEASURE_NOTE + '|' + id;} catch(_e0) { }
-    try {groupItem.name = _SRH_LIGHTBOX_MEASURE_NAME + '_' + id;} catch(_e1) { }
-  } else {
-    try {groupItem.note = _SRH_LIGHTBOX_MEASURE_NOTE;} catch(_e2) { }
-    try {groupItem.name = _SRH_LIGHTBOX_MEASURE_NAME;} catch(_e3) { }
-  }
-}
-
-function _srh_clearTaggedLightboxMeasures(doc, lightboxId) {
-  if(!doc) return 0;
-  var lyr = null;
-  try {lyr = doc.layers.getByName('Dimensions');} catch(_e0) { return 0; }
-  if(!lyr) return 0;
-
-  var id = String(lightboxId || '');
-  var removed = 0;
-  for(var i = lyr.groupItems.length - 1; i >= 0; i--) {
-    var g = lyr.groupItems[i];
-    if(!g) continue;
-    var isTagged = false;
-    var note = '';
-    var name = '';
-    try {note = String(g.note || '');} catch(_eN0) { note = ''; }
-    try {name = String(g.name || '');} catch(_eN1) { name = ''; }
-    if(id) {
-      if(note === (_SRH_LIGHTBOX_MEASURE_NOTE + '|' + id)) isTagged = true;
-      if(!isTagged && name === (_SRH_LIGHTBOX_MEASURE_NAME + '_' + id)) isTagged = true;
-    } else {
-      if(note === _SRH_LIGHTBOX_MEASURE_NOTE) isTagged = true;
-      if(!isTagged && _srh_nameStartsWith(name, _SRH_LIGHTBOX_MEASURE_NAME)) isTagged = true;
-    }
-    if(!isTagged) {
-      try {
-        if(!id && _srh_nameStartsWith(name, _SRH_LIGHTBOX_MEASURE_NAME)) isTagged = true;
-      } catch(_eNm) { }
-    }
-    if(isTagged) {
-      try {g.remove(); removed++;} catch(_eR) { }
-    }
-  }
-  return removed;
-}
-
 function signarama_helper_createLightbox(jsonStr) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
@@ -1947,7 +1750,6 @@ function signarama_helper_createLightbox(jsonStr) {
   if(!supports || supports < 0) supports = 0;
   var ledOffsetMm = Number(opts.ledOffsetMm || 0);
   var addMeasures = !!opts.addMeasures;
-  var updateMeasuresLive = !!opts.updateMeasuresLive;
   var measureOptions = opts.measureOptions || null;
 
   if(!(wMm > 0) || !(hMm > 0)) return 'Width and height must be > 0.';
@@ -1956,7 +1758,6 @@ function signarama_helper_createLightbox(jsonStr) {
   var h = _dim_mm2pt(hMm);
   var ledOffset = _dim_mm2pt(ledOffsetMm);
   var supportW = _dim_mm2pt(25);
-  var lightboxId = _srh_generateLightboxId();
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
   var centerX = (ab[0] + ab[2]) / 2;
@@ -2018,12 +1819,10 @@ function signarama_helper_createLightbox(jsonStr) {
     } catch(_eSel2) { }
     if(!result) result = grp;
     _lb_applyStroke(result);
-    _srh_setLightboxItemTag(result, 'outer', lightboxId);
 
     try {doc.selection = prevSel;} catch(_eSel3) { }
   } else {
     _lb_applyStroke(outer);
-    _srh_setLightboxItemTag(outer, 'outer', lightboxId);
   }
 
   // Supports
@@ -2036,7 +1835,6 @@ function signarama_helper_createLightbox(jsonStr) {
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
       try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
       try {s.stroked = true; s.strokeWidth = 1; s.strokeColor = black;} catch(_eS1) { }
-      _srh_setLightboxItemTag(s, 'support', lightboxId);
       supportCenters.push(sx + (supportW / 2));
     }
   }
@@ -2056,12 +1854,7 @@ function signarama_helper_createLightbox(jsonStr) {
 
   if(addMeasures && measureOptions) {
     var bounds = {left: left, top: top, right: left + w, bottom: top - h};
-    _srh_clearTaggedLightboxMeasures(doc, lightboxId);
-    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions, lightboxId);
-    if(updateMeasuresLive) {
-      _srh_lightboxLiveEnabled[lightboxId] = true;
-      _srh_lightboxLiveSignatures[lightboxId] = _srh_buildLightboxSignature(bounds, supportCenters);
-    }
+    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions);
   }
 
   return 'Lightbox created: ' + wMm + ' x ' + hMm + ' mm, depth ' + dMm + ' mm, type ' + type + ', supports ' + supports + '.';
@@ -2075,8 +1868,6 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
   // Reuse the same width/height/depth to create the LED panel and layout.
   var payload = {
     ledWatt: Number(opts.ledWatt || 0),
-    ledCode: String(opts.ledCode || ''),
-    ledVoltage: Number(opts.ledVoltage || 0),
     ledWidthMm: Number(opts.ledWidthMm || 66),
     ledHeightMm: Number(opts.ledHeightMm || 13),
     allowanceWmm: Number(opts.allowanceWmm || 0),
@@ -2116,38 +1907,6 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
   return res + ' + LED panel/layout.';
 }
 
-function signarama_helper_updateLightboxMeasures(jsonStr) {
-  if(!app.documents.length) return 'No open document.';
-  var opts = {};
-  try {opts = JSON.parse(String(jsonStr));} catch(e) {opts = {};}
-
-  var measureOptions = opts.measureOptions || null;
-  var force = !!opts.force;
-  if(!measureOptions) return 'No measure options.';
-
-  var doc = app.activeDocument;
-  var lightboxes = _srh_findAllLightboxData(doc);
-  if(!lightboxes || !lightboxes.length) return 'No live lightbox found.';
-
-  var changed = 0;
-  var supportsTotal = 0;
-  for(var i = 0; i < lightboxes.length; i++) {
-    var lb = lightboxes[i];
-    if(!lb || !lb.id) continue;
-    if(force) _srh_lightboxLiveEnabled[lb.id] = true;
-    if(!_srh_lightboxLiveEnabled[lb.id]) continue;
-    if(!force && _srh_lightboxLiveSignatures[lb.id] === lb.signature) continue;
-
-    _srh_clearTaggedLightboxMeasures(doc, lb.id);
-    _srh_addLightboxMeasures(doc, lb.bounds, lb.supportCenters, measureOptions, lb.id);
-    _srh_lightboxLiveSignatures[lb.id] = lb.signature;
-    changed++;
-    supportsTotal += (lb.supportCenters ? lb.supportCenters.length : 0);
-  }
-  if(changed < 1) return 'No live measure changes.';
-  return 'Updated lightbox measures live (' + changed + ' lightboxes, ' + supportsTotal + ' supports).';
-}
-
 function signarama_helper_drawLedLayout(jsonStr) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
@@ -2155,8 +1914,6 @@ function signarama_helper_drawLedLayout(jsonStr) {
   try {opts = JSON.parse(String(jsonStr));} catch(e) {opts = {};}
 
   var ledWatt = Number(opts.ledWatt || 0);
-  var ledCode = String(opts.ledCode || '');
-  var ledVoltage = Number(opts.ledVoltage || 0);
   var ledWidthMm = Number(opts.ledWidthMm || 0);
   var ledHeightMm = Number(opts.ledHeightMm || 0);
   var allowanceWmm = Number(opts.allowanceWmm || 0);
@@ -2364,29 +2121,13 @@ function signarama_helper_drawLedLayout(jsonStr) {
           var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2pt(5)]);
           label.contents = count + " LEDs";
           try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
-          try {label.textRange.characterAttributes.size = 20;} catch(_eSize) { }
+          try {label.textRange.characterAttributes.size = 10;} catch(_eSize) { }
           try {label.textRange.characterAttributes.fillColor = black;} catch(_eCol) { }
         } catch(_eLbl) { }
       }
 
       colIndex += colsInGroup;
     }
-
-    // Bottom-center lightbox LED spec label.
-    try {
-      var ledBits = [];
-      if(ledWatt) ledBits.push(ledWatt + 'W');
-      if(ledCode && ledCode.length) ledBits.push(ledCode);
-      if(ledVoltage) ledBits.push(ledVoltage + 'V');
-      if(ledBits.length) {
-        var spec = ledBits.join(' | ');
-        var specLabel = penGroupLayer.textFrames.pointText([(bounds.left + bounds.right) * 0.5, bounds.bottom - _srh_mm2pt(3)]);
-        specLabel.contents = spec;
-        try {specLabel.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eSpecJust) { }
-        try {specLabel.textRange.characterAttributes.size = 12;} catch(_eSpecSize) { }
-        try {specLabel.textRange.characterAttributes.fillColor = black;} catch(_eSpecCol) { }
-      }
-    } catch(_eSpecLbl) { }
 
     totalRows += rows;
     totalCols += cols;
@@ -2398,429 +2139,6 @@ function signarama_helper_drawLedLayout(jsonStr) {
   _srh_bringLayerToFront(penGroupLayer);
 
   return 'LED layout drawn. Layouts: ' + totalLayouts + ', Rows: ' + totalRows + ', Columns: ' + totalCols + ', Watt: ' + ledWatt + 'W.';
-}
-
-
-function _srh_collectCenterlineShapesFromItem(it, out, normalizeStepPt) {
-  if(!it) return;
-  if(it.typename === "GroupItem") {
-    var kids = null;
-    try {kids = it.pageItems;} catch(_eG) {kids = null;}
-    if(!kids) return;
-    for(var gi = 0; gi < kids.length; gi++) {
-      _srh_collectCenterlineShapesFromItem(kids[gi], out, normalizeStepPt);
-    }
-    return;
-  }
-  if(it.typename === "CompoundPathItem") {
-    var rings = [];
-    var srcBounds = null;
-    try {
-      srcBounds = {left: it.visibleBounds[0], top: it.visibleBounds[1], right: it.visibleBounds[2], bottom: it.visibleBounds[3]};
-    } catch(_eCB) { srcBounds = null; }
-    try {
-      for(var ci = 0; ci < it.pathItems.length; ci++) {
-        var cp = it.pathItems[ci];
-        if(!cp || !cp.closed) continue;
-        var cpts = _srh_centerlinePathPoints(cp, normalizeStepPt);
-        if(cpts.length >= 3) rings.push(cpts);
-      }
-    } catch(_eC) { }
-    if(rings.length) out.push({rings: rings, sourceBounds: srcBounds});
-    return;
-  }
-  if(it.typename === "PathItem") {
-    if(!it.closed) return;
-    var pts = _srh_centerlinePathPoints(it, normalizeStepPt);
-    if(pts.length >= 3) {
-      var pb = null;
-      try {pb = {left: it.visibleBounds[0], top: it.visibleBounds[1], right: it.visibleBounds[2], bottom: it.visibleBounds[3]};} catch(_ePB) {pb = null;}
-      out.push({rings: [pts], sourceBounds: pb});
-    }
-  }
-}
-
-function _srh_centerlineBezierPoint(p0, p1, p2, p3, t) {
-  var it = 1 - t;
-  var it2 = it * it;
-  var t2 = t * t;
-  return {
-    x: p0.x * it2 * it + 3 * p1.x * it2 * t + 3 * p2.x * it * t2 + p3.x * t2 * t,
-    y: p0.y * it2 * it + 3 * p1.y * it2 * t + 3 * p2.y * it * t2 + p3.y * t2 * t
-  };
-}
-
-function _srh_centerlineDist2(a, b) {
-  var dx = a.x - b.x, dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-function _srh_centerlineBezierApproxLen(p0, p1, p2, p3) {
-  var len = 0;
-  var prev = p0;
-  for(var i = 1; i <= 8; i++) {
-    var pt = _srh_centerlineBezierPoint(p0, p1, p2, p3, i / 8);
-    len += _srh_centerlineDist2(prev, pt);
-    prev = pt;
-  }
-  return len;
-}
-
-function _srh_centerlinePathPoints(pathItem, normalizeStepPt) {
-  var pts = [];
-  if(!pathItem || !pathItem.pathPoints || pathItem.pathPoints.length < 2) return pts;
-  var pps = pathItem.pathPoints;
-  var step = (normalizeStepPt && normalizeStepPt > 0) ? normalizeStepPt : _srh_mm2pt(1.5);
-
-  for(var i = 0; i < pps.length; i++) {
-    var cur = pps[i];
-    var nxt = pps[(i + 1) % pps.length];
-    var p0 = {x: cur.anchor[0], y: cur.anchor[1]};
-    var p1 = {x: cur.rightDirection[0], y: cur.rightDirection[1]};
-    var p2 = {x: nxt.leftDirection[0], y: nxt.leftDirection[1]};
-    var p3 = {x: nxt.anchor[0], y: nxt.anchor[1]};
-    var segLen = _srh_centerlineBezierApproxLen(p0, p1, p2, p3);
-    var segments = Math.max(1, Math.ceil(segLen / step));
-    for(var s = 0; s < segments; s++) {
-      var t = s / segments;
-      var pt = _srh_centerlineBezierPoint(p0, p1, p2, p3, t);
-      pts.push(pt);
-    }
-  }
-
-  if(pts.length > 1) {
-    var f = pts[0], l = pts[pts.length - 1];
-    if(Math.abs(f.x - l.x) < 0.001 && Math.abs(f.y - l.y) < 0.001) pts.pop();
-  }
-  return pts;
-}
-
-function _srh_centerlineBounds(rings) {
-  var b = {left: null, top: null, right: null, bottom: null};
-  for(var r = 0; r < rings.length; r++) {
-    var ring = rings[r];
-    for(var i = 0; i < ring.length; i++) {
-      var p = ring[i];
-      if(b.left === null) {
-        b.left = p.x; b.right = p.x; b.top = p.y; b.bottom = p.y;
-      } else {
-        if(p.x < b.left) b.left = p.x;
-        if(p.x > b.right) b.right = p.x;
-        if(p.y > b.top) b.top = p.y;
-        if(p.y < b.bottom) b.bottom = p.y;
-      }
-    }
-  }
-  return b;
-}
-
-function _srh_centerlineVerticalIntersections(ring, x0) {
-  var ys = [];
-  for(var i = 0; i < ring.length; i++) {
-    var p1 = ring[i];
-    var p2 = ring[(i + 1) % ring.length];
-    if(p1.x === p2.x) continue;
-    if((p1.x <= x0 && p2.x > x0) || (p2.x <= x0 && p1.x > x0)) {
-      var y = p1.y + (x0 - p1.x) * (p2.y - p1.y) / (p2.x - p1.x);
-      ys.push(y);
-    }
-  }
-  ys.sort(function(a, b){return a - b;});
-  return ys;
-}
-
-function _srh_centerlineHorizontalIntersections(ring, y0) {
-  var xs = [];
-  for(var i = 0; i < ring.length; i++) {
-    var p1 = ring[i];
-    var p2 = ring[(i + 1) % ring.length];
-    if(p1.y === p2.y) continue;
-    if((p1.y <= y0 && p2.y > y0) || (p2.y <= y0 && p1.y > y0)) {
-      var x = p1.x + (y0 - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
-      xs.push(x);
-    }
-  }
-  xs.sort(function(a, b){return a - b;});
-  return xs;
-}
-
-function _srh_centerlineScanRings(rings, bounds, horizontal, stepPt) {
-  var scans = [];
-  if(horizontal) {
-    for(var x = bounds.left + stepPt * 0.5; x <= bounds.right - stepPt * 0.5; x += stepPt) {
-      var ys = [];
-      for(var i = 0; i < rings.length; i++) {
-        var yInt = _srh_centerlineVerticalIntersections(rings[i], x);
-        for(var yi = 0; yi < yInt.length; yi++) ys.push(yInt[yi]);
-      }
-      ys.sort(function(a, b){return a - b;});
-      var mids = [];
-      for(var yk = 0; yk + 1 < ys.length; yk += 2) mids.push({x: x, y: (ys[yk] + ys[yk + 1]) * 0.5});
-      if(mids.length) scans.push({t: x, points: mids});
-    }
-  } else {
-    for(var y = bounds.bottom + stepPt * 0.5; y <= bounds.top - stepPt * 0.5; y += stepPt) {
-      var xs = [];
-      for(var j = 0; j < rings.length; j++) {
-        var xInt = _srh_centerlineHorizontalIntersections(rings[j], y);
-        for(var xi = 0; xi < xInt.length; xi++) xs.push(xInt[xi]);
-      }
-      xs.sort(function(a, b){return a - b;});
-      var midsY = [];
-      for(var xk = 0; xk + 1 < xs.length; xk += 2) midsY.push({x: (xs[xk] + xs[xk + 1]) * 0.5, y: y});
-      if(midsY.length) scans.push({t: y, points: midsY});
-    }
-  }
-  return scans;
-}
-
-function _srh_centerlineDrawPolyline(layer, pts, closed, strokeColor, strokeW) {
-  if(!layer || !pts || pts.length < 2) return null;
-  var p = layer.pathItems.add();
-  var arr = [];
-  for(var i = 0; i < pts.length; i++) arr.push([pts[i].x, pts[i].y]);
-  p.setEntirePath(arr);
-  try {p.closed = !!closed;} catch(_eCl) { }
-  try {p.filled = false;} catch(_eFi) { }
-  try {
-    p.stroked = true;
-    p.strokeColor = strokeColor;
-    p.strokeWidth = strokeW || 0.35;
-  } catch(_eSt) { }
-  return p;
-}
-
-function _srh_centerlineDrawScanDebug(layer, bounds, scans, horizontal, lineColor, pointColor) {
-  if(!layer || !bounds || !scans) return;
-  var maxScans = Math.min(scans.length, 240);
-  for(var i = 0; i < maxScans; i++) {
-    var sc = scans[i];
-    var line = layer.pathItems.add();
-    if(horizontal) {
-      line.setEntirePath([[sc.t, bounds.top], [sc.t, bounds.bottom]]);
-    } else {
-      line.setEntirePath([[bounds.left, sc.t], [bounds.right, sc.t]]);
-    }
-    try {line.closed = false;} catch(_eL0) { }
-    try {line.filled = false;} catch(_eL1) { }
-    try {line.stroked = true; line.strokeColor = lineColor; line.strokeWidth = 0.2;} catch(_eL2) { }
-
-    var maxPts = Math.min(sc.points.length, 80);
-    for(var p = 0; p < maxPts; p++) {
-      var m = sc.points[p];
-      var dot = layer.pathItems.ellipse(m.y + 1, m.x - 1, 2, 2);
-      try {dot.filled = true; dot.fillColor = pointColor; dot.stroked = false;} catch(_eD) { }
-    }
-  }
-}
-
-function _srh_centerlineDrawNormalizedRings(layer, rings, sourceBounds, debugOffsetPt, color) {
-  if(!layer || !rings || !rings.length) return;
-  var b = _srh_centerlineBounds(rings);
-  var src = sourceBounds || b;
-  var dy = Math.max(debugOffsetPt, (src.top - src.bottom) + debugOffsetPt);
-  var offset = dy + (b.top - src.top);
-  for(var r = 0; r < rings.length; r++) {
-    var ring = rings[r];
-    if(!ring || ring.length < 2) continue;
-    var moved = [];
-    for(var i = 0; i < ring.length; i++) moved.push({x: ring[i].x, y: ring[i].y - offset});
-    _srh_centerlineDrawPolyline(layer, moved, true, color, 0.45);
-  }
-}
-
-function _srh_centerlineDist(a, b) {
-  var dx = a.x - b.x, dy = a.y - b.y;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-function _srh_centerlineTrackSortValue(pt, horizontal) {
-  return horizontal ? pt.y : pt.x;
-}
-
-function _srh_centerlineTrackLength(track) {
-  if(!track || track.length < 2) return 0;
-  var sum = 0;
-  for(var i = 1; i < track.length; i++) {
-    sum += _srh_centerlineDist(track[i - 1], track[i]);
-  }
-  return sum;
-}
-
-function _srh_centerlineTracksFromScans(scans, linkTolPt, horizontal) {
-  var tracks = [];
-  var active = [];
-
-  for(var s = 0; s < scans.length; s++) {
-    var pts = scans[s].points.slice();
-    pts.sort(function(a, b){
-      return _srh_centerlineTrackSortValue(a, horizontal) - _srh_centerlineTrackSortValue(b, horizontal);
-    });
-
-    active.sort(function(a, b){
-      var pa = a[a.length - 1];
-      var pb = b[b.length - 1];
-      return _srh_centerlineTrackSortValue(pa, horizontal) - _srh_centerlineTrackSortValue(pb, horizontal);
-    });
-
-    var nextActive = [];
-    var paired = Math.min(active.length, pts.length);
-
-    for(var i = 0; i < paired; i++) {
-      var tr = active[i];
-      var pt = pts[i];
-      var last = tr[tr.length - 1];
-      if(_srh_centerlineDist(last, pt) <= linkTolPt) {
-        tr.push(pt);
-        nextActive.push(tr);
-      } else {
-        if(tr.length > 1) tracks.push(tr);
-        nextActive.push([pt]);
-      }
-    }
-
-    for(var a = paired; a < active.length; a++) {
-      if(active[a].length > 1) tracks.push(active[a]);
-    }
-
-    for(var p = paired; p < pts.length; p++) {
-      nextActive.push([pts[p]]);
-    }
-
-    active = nextActive;
-  }
-
-  for(var r = 0; r < active.length; r++) {
-    if(active[r].length > 1) tracks.push(active[r]);
-  }
-  return tracks;
-}
-
-function _srh_centerlineSmoothTrack(track, passes) {
-  if(!track || track.length < 3 || passes <= 0) return track;
-  var out = [];
-  for(var i = 0; i < track.length; i++) out.push({x: track[i].x, y: track[i].y});
-
-  for(var p = 0; p < passes; p++) {
-    var tmp = [out[0]];
-    for(var j = 1; j < out.length - 1; j++) {
-      tmp.push({
-        x: (out[j - 1].x + out[j].x + out[j + 1].x) / 3,
-        y: (out[j - 1].y + out[j].y + out[j + 1].y) / 3
-      });
-    }
-    tmp.push(out[out.length - 1]);
-    out = tmp;
-  }
-  return out;
-}
-
-function signarama_helper_drawCenterline(jsonStr) {
-  if(!app.documents.length) return "No document.";
-  var doc = app.activeDocument;
-  var args = {};
-  try {args = JSON.parse(String(jsonStr || "{}"));} catch(_eArgs) {args = {};}
-
-  var stepMm = Number(args.stepMm || 1.5);
-  var linkMm = Number(args.linkMm || 3);
-  var smoothPasses = Number(args.smoothPasses || 0);
-  var strokePt = Number(args.strokePt || 0.75);
-  var useSelectionOnly = args.useSelectionOnly !== false;
-  var drawNormalized = args.drawNormalized !== false;
-  var debugVisuals = !!args.debugVisuals;
-  var debugOffsetMm = Number(args.debugOffsetMm || 30);
-
-  if(!isFinite(stepMm) || stepMm <= 0) stepMm = 1.5;
-  if(!isFinite(linkMm) || linkMm <= 0) linkMm = 3;
-  if(!isFinite(smoothPasses) || smoothPasses < 0) smoothPasses = 0;
-  if(!isFinite(strokePt) || strokePt <= 0) strokePt = 0.75;
-
-  var stepPt = _srh_mm2pt(stepMm);
-  var linkTolPt = _srh_mm2pt(linkMm);
-  var debugOffsetPt = _srh_mm2pt(isFinite(debugOffsetMm) && debugOffsetMm > 0 ? debugOffsetMm : 30);
-
-  var sourceItems = [];
-  if(useSelectionOnly) {
-    if(!doc.selection || !doc.selection.length) return "No selection.";
-    for(var si = 0; si < doc.selection.length; si++) sourceItems.push(doc.selection[si]);
-  } else {
-    for(var pi = 0; pi < doc.pageItems.length; pi++) sourceItems.push(doc.pageItems[pi]);
-  }
-
-  var shapes = [];
-  for(var i = 0; i < sourceItems.length; i++) {
-    var it = sourceItems[i];
-    if(!it) continue;
-    try {if(it.hidden || it.locked) continue;} catch(_eSkip) { }
-    _srh_collectCenterlineShapesFromItem(it, shapes, stepPt);
-  }
-  if(!shapes.length) return "No closed shapes found in source.";
-
-  var layer = _srh_getOrCreateLayer(doc, "Centerline");
-  var debugLayer = null;
-  if(drawNormalized || debugVisuals) debugLayer = _srh_getOrCreateLayer(doc, "Centerline Debug");
-
-  var color = new RGBColor();
-  color.red = 255; color.green = 0; color.blue = 255;
-  var normColor = new RGBColor();
-  normColor.red = 40; normColor.green = 160; normColor.blue = 255;
-  var scanLineColor = new RGBColor();
-  scanLineColor.red = 120; scanLineColor.green = 120; scanLineColor.blue = 120;
-  var scanPointColor = new RGBColor();
-  scanPointColor.red = 230; scanPointColor.green = 80; scanPointColor.blue = 80;
-
-  var drawn = 0;
-  var normalizedDrawn = 0;
-  var scanned = 0;
-  for(var sh = 0; sh < shapes.length; sh++) {
-    var rings = shapes[sh].rings;
-    if(!rings || !rings.length) continue;
-    var b = _srh_centerlineBounds(rings);
-    var width = Math.abs((b.right || 0) - (b.left || 0));
-    var height = Math.abs((b.top || 0) - (b.bottom || 0));
-    if(width < stepPt || height < stepPt) continue;
-
-    if(drawNormalized && debugLayer) {
-      _srh_centerlineDrawNormalizedRings(debugLayer, rings, shapes[sh].sourceBounds, debugOffsetPt, normColor);
-      normalizedDrawn++;
-    }
-
-    var scansH = _srh_centerlineScanRings(rings, b, true, stepPt);
-    var scansV = _srh_centerlineScanRings(rings, b, false, stepPt);
-    scanned += scansH.length + scansV.length;
-
-    if(debugVisuals && debugLayer) {
-      _srh_centerlineDrawScanDebug(debugLayer, b, scansH, true, scanLineColor, scanPointColor);
-      _srh_centerlineDrawScanDebug(debugLayer, b, scansV, false, scanLineColor, scanPointColor);
-    }
-
-    var tracksH = _srh_centerlineTracksFromScans(scansH, linkTolPt, true);
-    var tracksV = _srh_centerlineTracksFromScans(scansV, linkTolPt, false);
-    var tracks = tracksH.concat(tracksV);
-    var minTrackLen = Math.max(stepPt * 2, 1);
-
-    for(var t = 0; t < tracks.length; t++) {
-      var tr = _srh_centerlineSmoothTrack(tracks[t], smoothPasses);
-      if(!tr || tr.length < 2) continue;
-      if(_srh_centerlineTrackLength(tr) < minTrackLen) continue;
-      var path = layer.pathItems.add();
-      var arr = [];
-      for(var k = 0; k < tr.length; k++) arr.push([tr[k].x, tr[k].y]);
-      path.setEntirePath(arr);
-      try {path.closed = false;} catch(_eClosed) { }
-      try {path.filled = false;} catch(_eFill) { }
-      try {
-        path.stroked = true;
-        path.strokeWidth = strokePt;
-        path.strokeColor = color;
-      } catch(_eStroke) { }
-      drawn++;
-    }
-  }
-
-  if(debugLayer) _srh_bringLayerToFront(debugLayer);
-  _srh_bringLayerToFront(layer);
-  return "Centerline complete. Shapes: " + shapes.length + ", scanlines: " + scanned + ", paths drawn: " + drawn + ", normalized copies: " + normalizedDrawn + ", debug visuals: " + (debugVisuals ? "on" : "off") + ".";
 }
 
 function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
@@ -2840,7 +2158,7 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   try {
     lineColor = _dim_hexToRGB(opts.lineColor);
     if(!lineColor) lineColor = _dim_parseHexColorToRGBColor(opts.lineColor);
-  } catch(_eLc2) { lineColor = null; }
+  } catch(_eLc2) {lineColor = null;}
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var textColor = opts.textColor;
 
@@ -2867,21 +2185,14 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   var lyr = _dim_ensureLayer('Dimensions');
 
   // Top width measure
-  var gTop = _dim_drawHorizontalDim(lyr, bounds.left, bounds.right, bounds.top + dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'TOP', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
-  _srh_tagLightboxMeasureGroup(gTop, lightboxId);
+  _dim_drawHorizontalDim(lyr, bounds.left, bounds.right, bounds.top + dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'TOP', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
   // Left height measure
-  var gLeft = _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
-  _srh_tagLightboxMeasureGroup(gLeft, lightboxId);
+  _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
 
   // Bottom measures from left edge to each support center
   if(supportCenters && supportCenters.length) {
-    var sortedCenters = supportCenters.slice(0);
-    sortedCenters.sort(function(a, b) {return a - b;});
-    var supportMeasureYOffsetStep = Math.max(dOpts.ticLenPt, dOpts.strokePt * 2);
-    for(var i = 0; i < sortedCenters.length; i++) {
-      var yLine = bounds.bottom - dOpts.offsetPt - (i * supportMeasureYOffsetStep);
-      var gBottom = _dim_drawHorizontalDim(lyr, bounds.left, sortedCenters[i], yLine, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
-      _srh_tagLightboxMeasureGroup(gBottom, lightboxId);
+    for(var i = 0; i < supportCenters.length; i++) {
+      _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[i], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
     }
   }
 }

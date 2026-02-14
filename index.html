@@ -131,7 +131,6 @@
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
-    <button class="tab" data-tab="tab-centerline" type="button">Centerline</button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
 
@@ -496,7 +495,6 @@
           <label class="fld">
             <span>Number of supports</span>
             <input type="number" id="lightboxSupportCount" step="1" value="2">
-            <span id="lightboxSupportSpacingInfo" class="small" style="display:block; margin-top:4px; color:#9a9a9a;">Support spacing: -</span>
           </label>
           <label class="fld">
             <span>LED panel offset (mm)</span>
@@ -507,12 +505,6 @@
           <label class="chk">
             <input id="lightboxAddMeasures" type="checkbox" checked>
             <span>Add measures</span>
-          </label>
-        </div>
-        <div class="row" style="margin-top:6px; align-items:center;">
-          <label class="chk">
-            <input id="lightboxUpdateMeasuresLive" type="checkbox" checked>
-            <span>Update measures live</span>
           </label>
         </div>
         <div class="row" style="margin-top:10px;">
@@ -561,14 +553,6 @@
               <input type="number" id="ledWatt" step="0.01" value="1.5">
             </label>
             <label class="fld">
-              <span>LED Code</span>
-              <input type="text" id="ledCode" value="">
-            </label>
-            <label class="fld">
-              <span>LED Voltage</span>
-              <input type="number" id="ledVoltage" step="0.1" value="12">
-            </label>
-            <label class="fld">
             <span>LED Width (mm)</span>
             <input type="number" id="ledWidthMm" step="1" value="66">
           </label>
@@ -608,65 +592,6 @@
         <div id="coloursCount" class="small" style="margin-top:8px;">Document colours: 0</div>
         <div id="colourModeBanner" style="display:none; margin-top:12px; padding:8px 10px; border-radius:8px; background:#b00020; color:#fff; font-size:12px; font-weight:600;">
           Current document colour mode is RGB
-        </div>
-      </div>
-    </section>
-
-    <!-- TAB: CENTERLINE -->
-    <section id="tab-centerline" class="wrap hidden" role="tabpanel">
-      <div class="card">
-        <div class="cardHead">
-          <div class="cardTitle">Centerline</div>
-          <span class="info" data-tip="Draws centerline paths inside selected closed shapes. Best with expanded outlines.">i</span>
-        </div>
-
-        <div class="grid2">
-          <label class="fld">
-            <span>Sample step (mm)</span>
-            <input id="centerlineStepMm" type="number" step="0.1" min="0.2" value="1.5">
-          </label>
-          <label class="fld">
-            <span>Link tolerance (mm)</span>
-            <input id="centerlineLinkMm" type="number" step="0.1" min="0.2" value="3">
-          </label>
-          <label class="fld">
-            <span>Smooth passes</span>
-            <input id="centerlineSmoothPasses" type="number" step="1" min="0" max="10" value="2">
-          </label>
-          <label class="fld">
-            <span>Stroke width (pt)</span>
-            <input id="centerlineStrokePt" type="number" step="0.1" min="0.1" value="0.75">
-          </label>
-        </div>
-
-        <div class="row" style="margin-top:10px; align-items:center; gap:14px; flex-wrap:wrap;">
-          <label class="chk" style="margin:0;">
-            <input id="centerlineUseSelectionOnly" type="checkbox" checked>
-            <span>Use selection only</span>
-          </label>
-          <label class="chk" style="margin:0;">
-            <input id="centerlineDrawNormalized" type="checkbox" checked>
-            <span>Draw normalized path below</span>
-          </label>
-          <label class="chk" style="margin:0;">
-            <input id="centerlineDebugVisuals" type="checkbox">
-            <span>Debug visuals</span>
-          </label>
-        </div>
-
-        <div class="row" style="margin-top:10px;">
-          <label class="fld" style="flex:1;">
-            <span>Debug offset down (mm)</span>
-            <input id="centerlineDebugOffsetMm" type="number" step="1" min="5" value="30">
-          </label>
-        </div>
-
-        <div class="row" style="margin-top:10px;">
-          <button id="btnDrawCenterline" class="btn2" type="button">Draw Centerline</button>
-        </div>
-
-        <div class="small" style="margin-top:8px;">
-          Creates open paths on a new <b>Centerline</b> layer and optional debug geometry on <b>Centerline Debug</b>.
         </div>
       </div>
     </section>
