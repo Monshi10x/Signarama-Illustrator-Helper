@@ -82,6 +82,19 @@ function _srh_mm2pt(mm) {return mm * 2.834645669291339;} // 72 / 25.4
 function _srh_pt2mm(pt) {return pt / 2.834645669291339;}
 function _srh_clamp(n, a, b) {return n < a ? a : (n > b ? b : n);}
 
+function _srh_getDocScaleFactor(doc) {
+  var sf = 1.0;
+  try {
+    sf = (doc && doc.scaleFactor) ? Number(doc.scaleFactor) : 1.0;
+  } catch(_eSf) {sf = 1.0;}
+  if(!(sf > 0)) sf = 1.0;
+  return sf;
+}
+
+function _srh_mm2docpt(mm, doc) {
+  return _srh_mm2pt(mm) / _srh_getDocScaleFactor(doc || app.activeDocument);
+}
+
 function _srh_round(n, d) {
   var p = Math.pow(10, d || 2);
   return Math.round(n * p) / p;
@@ -1754,10 +1767,10 @@ function signarama_helper_createLightbox(jsonStr) {
 
   if(!(wMm > 0) || !(hMm > 0)) return 'Width and height must be > 0.';
 
-  var w = _dim_mm2pt(wMm);
-  var h = _dim_mm2pt(hMm);
-  var ledOffset = _dim_mm2pt(ledOffsetMm);
-  var supportW = _dim_mm2pt(25);
+  var w = _srh_mm2docpt(wMm, doc);
+  var h = _srh_mm2docpt(hMm, doc);
+  var ledOffset = _srh_mm2docpt(ledOffsetMm, doc);
+  var supportW = _srh_mm2docpt(25, doc);
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
   var centerX = (ab[0] + ab[2]) / 2;
@@ -1774,7 +1787,7 @@ function signarama_helper_createLightbox(jsonStr) {
   var frameFill = _dim_hexToRGB('#848484');
 
   // Frame rectangle + inner offset as a minus-front compound shape
-  var inset = _dim_mm2pt(25);
+  var inset = _srh_mm2docpt(25, doc);
   var innerW = w - (2 * inset);
   var innerH = h - (2 * inset);
   var outer = frameLayer.pathItems.rectangle(top, left, w, h);
@@ -1891,9 +1904,9 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
     var ab = app.activeDocument.artboards[app.activeDocument.artboards.getActiveArtboardIndex()].artboardRect;
     var centerX = (ab[0] + ab[2]) / 2;
     var centerY = (ab[1] + ab[3]) / 2;
-    var wPt = _srh_mm2pt(wMm);
-    var hPt = _srh_mm2pt(hMm);
-    var ledOffsetPt = _srh_mm2pt(ledOffsetMm);
+    var wPt = _srh_mm2docpt(wMm, app.activeDocument);
+    var hPt = _srh_mm2docpt(hMm, app.activeDocument);
+    var ledOffsetPt = _srh_mm2docpt(ledOffsetMm, app.activeDocument);
     var bounds = {
       left: centerX - (wPt / 2) + ledOffsetPt,
       top: centerY + (hPt / 2) - ledOffsetPt,
@@ -1973,8 +1986,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
       var ab = _getArtboardBounds(doc);
       var centerX = (ab.left + ab.right) / 2;
       var centerY = (ab.top + ab.bottom) / 2;
-      var wPt = _srh_mm2pt(layoutWidthMm);
-      var hPt = _srh_mm2pt(layoutHeightMm);
+      var wPt = _srh_mm2docpt(layoutWidthMm, doc);
+      var hPt = _srh_mm2docpt(layoutHeightMm, doc);
       return {
         left: centerX - (wPt / 2),
         top: centerY + (hPt / 2),
@@ -1988,8 +2001,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
       var ab2 = _getArtboardBounds(doc);
       var cx = (ab2.left + ab2.right) / 2;
       var cy = (ab2.top + ab2.bottom) / 2;
-      var wPt2 = _srh_mm2pt(layoutWidthMm);
-      var hPt2 = _srh_mm2pt(layoutHeightMm);
+      var wPt2 = _srh_mm2docpt(layoutWidthMm, doc);
+      var hPt2 = _srh_mm2docpt(layoutHeightMm, doc);
       return [{
         left: cx - (wPt2 / 2),
         top: cy + (hPt2 / 2),
@@ -2003,13 +2016,13 @@ function signarama_helper_drawLedLayout(jsonStr) {
   var boundsList = _getTargetBounds(doc);
   if(!boundsList || !boundsList.length) return 'No bounds found.';
 
-  var depthPt = _srh_mm2pt(depthMm);
-  var ledWidthPt = _srh_mm2pt(ledWidthMm);
-  var ledHeightPt = _srh_mm2pt(ledHeightMm);
-  var allowanceWPt = _srh_mm2pt(allowanceWmm);
-  var allowanceHPt = _srh_mm2pt(allowanceHmm);
-  var panelInsetWPt = _srh_mm2pt(panelInsetWmm);
-  var panelInsetHPt = _srh_mm2pt(panelInsetHmm);
+  var depthPt = _srh_mm2docpt(depthMm, doc);
+  var ledWidthPt = _srh_mm2docpt(ledWidthMm, doc);
+  var ledHeightPt = _srh_mm2docpt(ledHeightMm, doc);
+  var allowanceWPt = _srh_mm2docpt(allowanceWmm, doc);
+  var allowanceHPt = _srh_mm2docpt(allowanceHmm, doc);
+  var panelInsetWPt = _srh_mm2docpt(panelInsetWmm, doc);
+  var panelInsetHPt = _srh_mm2docpt(panelInsetHmm, doc);
 
   var panelLayer = _srh_getOrCreateLayer(doc, 'acm led panel');
   var ledLayer = _srh_getOrCreateLayer(doc, 'LEDs');
