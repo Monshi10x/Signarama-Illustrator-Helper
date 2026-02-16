@@ -99,6 +99,105 @@ function _srh_getAppearanceScale(doc) {
   return 1.0 / _srh_getDocScaleFactor(doc || app.activeDocument);
 }
 
+var _srh_lightboxMeasureWatch = {
+  enabled: false,
+  lastDocName: '',
+  lastSupportKey: '',
+  wasGrabbed: false,
+  measureOptions: null
+};
+
+function _srh_supportWatchNum(n) {
+  return Math.round(Number(n || 0) * 1000) / 1000;
+}
+
+function _srh_getBoundsFromItem(it) {
+  var b = null;
+  try {b = it.visibleBounds;} catch(_e0) { }
+  if(!b || b.length !== 4) {
+    try {b = it.geometricBounds;} catch(_e1) { }
+  }
+  if(!b || b.length !== 4) return null;
+  return {left: b[0], top: b[1], right: b[2], bottom: b[3]};
+}
+
+function _srh_getLightboxFrameBounds(doc) {
+  if(!doc) return null;
+  var layer = null;
+  try {layer = doc.layers.getByName('lightbox frame');} catch(_eL) {layer = null;}
+  if(!layer) return null;
+
+  var best = null;
+  var bestArea = 0;
+  for(var i = 0; i < layer.pageItems.length; i++) {
+    var b = _srh_getBoundsFromItem(layer.pageItems[i]);
+    if(!b) continue;
+    var w = b.right - b.left;
+    var h = b.top - b.bottom;
+    var area = w * h;
+    if(!(w > 0) || !(h > 0)) continue;
+    if(area > bestArea) {bestArea = area; best = b;}
+  }
+  return best;
+}
+
+function _srh_getSupportCentersForFrame(doc, frameBounds) {
+  var centers = [];
+  if(!doc || !frameBounds) return centers;
+
+  var layer = null;
+  try {layer = doc.layers.getByName('lightbox frame');} catch(_eL) {layer = null;}
+  if(!layer) return centers;
+
+  var frameW = frameBounds.right - frameBounds.left;
+  var frameH = frameBounds.top - frameBounds.bottom;
+  if(!(frameW > 0) || !(frameH > 0)) return centers;
+
+  for(var li = 0; li < layer.pathItems.length; li++) {
+    var b = _srh_getBoundsFromItem(layer.pathItems[li]);
+    if(!b) continue;
+    var w = b.right - b.left;
+    var h = b.top - b.bottom;
+    if(!(w > 0) || !(h > 0)) continue;
+    var isSupportLike = (h >= (frameH * 0.9)) && (w < (frameW * 0.5));
+    var inFrame = (b.left >= frameBounds.left - 0.01) && (b.right <= frameBounds.right + 0.01);
+    if(!isSupportLike || !inFrame) continue;
+    centers.push((b.left + b.right) / 2);
+  }
+
+  centers.sort(function(a, b) {return a - b;});
+  return centers;
+}
+
+function _srh_getSelectedSupportCenters(doc, frameBounds) {
+  var centers = [];
+  if(!doc || !frameBounds || !doc.selection || !doc.selection.length) return centers;
+
+  var frameW = frameBounds.right - frameBounds.left;
+  var frameH = frameBounds.top - frameBounds.bottom;
+  for(var i = 0; i < doc.selection.length; i++) {
+    var b = _srh_getBoundsFromItem(doc.selection[i]);
+    if(!b) continue;
+    var w = b.right - b.left;
+    var h = b.top - b.bottom;
+    if(!(w > 0) || !(h > 0)) continue;
+    var isSupportLike = (h >= (frameH * 0.9)) && (w < (frameW * 0.5));
+    var inFrame = (b.left >= frameBounds.left - 0.01) && (b.right <= frameBounds.right + 0.01);
+    if(!isSupportLike || !inFrame) continue;
+    centers.push((b.left + b.right) / 2);
+  }
+
+  centers.sort(function(a, b) {return a - b;});
+  return centers;
+}
+
+function _srh_makeSupportKey(centers) {
+  if(!centers || !centers.length) return '';
+  var out = [];
+  for(var i = 0; i < centers.length; i++) out.push(_srh_supportWatchNum(centers[i]));
+  return out.join('|');
+}
+
 function _srh_round(n, d) {
   var p = Math.pow(10, d || 2);
   return Math.round(n * p) / p;
@@ -1873,6 +1972,17 @@ function signarama_helper_createLightbox(jsonStr) {
   if(addMeasures && measureOptions) {
     var bounds = {left: left, top: top, right: left + w, bottom: top - h};
     _srh_addLightboxMeasures(doc, bounds, supportItems, measureOptions);
+
+    _srh_lightboxMeasureWatch.enabled = true;
+    _srh_lightboxMeasureWatch.lastDocName = String(doc.name || '');
+    _srh_lightboxMeasureWatch.lastSupportKey = _srh_makeSupportKey(_srh_getSupportCentersForFrame(doc, bounds));
+    _srh_lightboxMeasureWatch.wasGrabbed = false;
+    _srh_lightboxMeasureWatch.measureOptions = measureOptions;
+  } else {
+    _srh_lightboxMeasureWatch.enabled = false;
+    _srh_lightboxMeasureWatch.lastSupportKey = '';
+    _srh_lightboxMeasureWatch.wasGrabbed = false;
+    _srh_lightboxMeasureWatch.measureOptions = null;
   }
 
   return 'Lightbox created: ' + wMm + ' x ' + hMm + ' mm, depth ' + dMm + ' mm, type ' + type + ', supports ' + supports + '.';
@@ -2280,6 +2390,118 @@ function _srh_addLightboxMeasures(doc, bounds, supportsData, opts) {
   for(var ci = 0; ci < supportCenters.length; ci++) {
     _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[ci], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
   }
+}
+
+
+
+function signarama_helper_lightboxSupportWatchTick() {
+  if(!_srh_lightboxMeasureWatch.enabled) return 'ontick disabled';
+  if(!app.documents.length) return 'ontick no-document';
+
+  var doc = app.activeDocument;
+  if(!doc) return 'ontick no-document';
+  var docName = String(doc.name || '');
+
+  if(_srh_lightboxMeasureWatch.lastDocName && _srh_lightboxMeasureWatch.lastDocName !== docName) {
+    _srh_lightboxMeasureWatch.lastDocName = docName;
+    _srh_lightboxMeasureWatch.lastSupportKey = '';
+    _srh_lightboxMeasureWatch.wasGrabbed = false;
+  }
+
+  var frameBounds = _srh_getLightboxFrameBounds(doc);
+  if(!frameBounds) return 'ontick no-lightbox-frame';
+
+  var selectedCenters = _srh_getSelectedSupportCenters(doc, frameBounds);
+  var isGrabbed = selectedCenters.length > 0;
+  var events = ['ontick'];
+
+  if(isGrabbed && !_srh_lightboxMeasureWatch.wasGrabbed) events.push('ongrab');
+  if(!isGrabbed && _srh_lightboxMeasureWatch.wasGrabbed) events.push('ondrop');
+  _srh_lightboxMeasureWatch.wasGrabbed = isGrabbed;
+
+  var supportCenters = _srh_getSupportCentersForFrame(doc, frameBounds);
+  var key = _srh_makeSupportKey(supportCenters);
+
+  if(key && key !== _srh_lightboxMeasureWatch.lastSupportKey) {
+    events.push('onmove');
+    _srh_lightboxMeasureWatch.lastSupportKey = key;
+
+    if(_srh_lightboxMeasureWatch.measureOptions) {
+      try {
+        var dimLyr = doc.layers.getByName('Dimensions');
+        dimLyr.remove();
+      } catch(_eClr) { }
+      _srh_addLightboxMeasures(doc, frameBounds, supportCenters, _srh_lightboxMeasureWatch.measureOptions);
+      events.push('remeasure');
+    } else {
+      events.push('remeasure-skipped-no-options');
+    }
+    if(!b || b.length !== 4) return null;
+    return (b[0] + b[2]) / 2;
+  }
+
+  function _srh_collectSupportCentersFromLayer(doc, frameBounds) {
+    var centers = [];
+    if(!doc || !frameBounds) return centers;
+
+    var layer = null;
+    try {layer = doc.layers.getByName('lightbox frame');} catch(_eL) {layer = null;}
+    if(!layer) return centers;
+
+    var frameW = frameBounds.right - frameBounds.left;
+    var frameH = frameBounds.top - frameBounds.bottom;
+    if(!(frameW > 0) || !(frameH > 0)) return centers;
+
+    for(var li = 0; li < layer.pathItems.length; li++) {
+      var it = layer.pathItems[li];
+      var b = null;
+      try {b = it.visibleBounds;} catch(_eB0) { }
+      if(!b || b.length !== 4) {
+        try {b = it.geometricBounds;} catch(_eB1) { }
+      }
+      if(!b || b.length !== 4) continue;
+
+      var l = b[0], t = b[1], r = b[2], bt = b[3];
+      var w = r - l;
+      var h = t - bt;
+      if(!(w > 0) || !(h > 0)) continue;
+
+      // Supports are tall rectangles with near frame height but narrower than frame width.
+      var isSupportLike = (h >= (frameH * 0.9)) && (w < (frameW * 0.5));
+      // Keep only supports inside the frame extents.
+      var inFrame = (l >= frameBounds.left - 0.01) && (r <= frameBounds.right + 0.01);
+      if(!isSupportLike || !inFrame) continue;
+
+      centers.push((l + r) / 2);
+    }
+
+    centers.sort(function(a, b) {return a - b;});
+    return centers;
+  }
+
+  var supportCenters = [];
+
+  // Resolve support centers from provided data first.
+  if(supportsData && supportsData.length) {
+    for(var i = 0; i < supportsData.length; i++) {
+      var centerX = _srh_getSupportCenterX(supportsData[i]);
+      if(centerX == null) continue;
+      supportCenters.push(centerX);
+    }
+  }
+
+  // Fallback: detect support objects from the lightbox layer (useful after supports were manually moved).
+  if(!supportCenters.length) {
+    supportCenters = _srh_collectSupportCentersFromLayer(doc, bounds);
+  }
+
+  // Bottom measures from left edge to each support center.
+  for(var ci = 0; ci < supportCenters.length; ci++) {
+    _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[ci], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  }
+
+  events.push('supports=' + supportCenters.length);
+  return events.join(' ');
 }
 
 this.atlas_dimensions_clear = function() {
