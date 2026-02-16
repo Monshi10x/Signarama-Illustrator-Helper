@@ -95,6 +95,10 @@ function _srh_mm2docpt(mm, doc) {
   return _srh_mm2pt(mm) / _srh_getDocScaleFactor(doc || app.activeDocument);
 }
 
+function _srh_getAppearanceScale(doc) {
+  return 1.0 / _srh_getDocScaleFactor(doc || app.activeDocument);
+}
+
 function _srh_round(n, d) {
   var p = Math.pow(10, d || 2);
   return Math.round(n * p) / p;
@@ -1516,7 +1520,7 @@ function _dim_run(opts) {
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var scaleAppearance = (opts.scaleAppearance || 1) * _srh_getAppearanceScale(doc);
 
   var scaleFactor = 1.0;
   try {
@@ -1577,7 +1581,7 @@ function _dim_runLine(opts) {
   var ticLenPt = _dim_mm2pt(opts.ticLenMm || 2);
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var scaleAppearance = (opts.scaleAppearance || 1) * _srh_getAppearanceScale(doc);
 
   var lineColor = _dim_hexToRGB(opts.lineColor) || _dim_parseHexColorToRGBColor(opts.lineColor) || _dim_hexToRGB('#000000');
   var textColor = opts.textColor;
@@ -1771,6 +1775,7 @@ function signarama_helper_createLightbox(jsonStr) {
   var h = _srh_mm2docpt(hMm, doc);
   var ledOffset = _srh_mm2docpt(ledOffsetMm, doc);
   var supportW = _srh_mm2docpt(25, doc);
+  var appearanceScale = _srh_getAppearanceScale(doc);
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
   var centerX = (ab[0] + ab[2]) / 2;
@@ -1803,7 +1808,7 @@ function signarama_helper_createLightbox(jsonStr) {
         if(frameFill) it.fillColor = frameFill;
         it.opacity = 50;
         it.stroked = true;
-        it.strokeWidth = 1;
+        it.strokeWidth = 1 * appearanceScale;
         it.strokeColor = black;
       } else if(it.typename === "CompoundPathItem") {
         for(var i = 0; i < it.pathItems.length; i++) _lb_applyStroke(it.pathItems[i]);
@@ -1847,7 +1852,7 @@ function signarama_helper_createLightbox(jsonStr) {
       var sx = left + gap * (i + 1) + supportW * i;
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
       try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
-      try {s.stroked = true; s.strokeWidth = 1; s.strokeColor = black;} catch(_eS1) { }
+      try {s.stroked = true; s.strokeWidth = 1 * appearanceScale; s.strokeColor = black;} catch(_eS1) { }
       supportCenters.push(sx + (supportW / 2));
     }
   }
@@ -1861,7 +1866,7 @@ function signarama_helper_createLightbox(jsonStr) {
       var pTop = top - ledOffset;
       var panel = panelLayer.pathItems.rectangle(pTop, pLeft, pw, ph);
       try {panel.filled = false;} catch(_eP0) { }
-      try {panel.stroked = true; panel.strokeWidth = 1; panel.strokeColor = black;} catch(_eP1) { }
+      try {panel.stroked = true; panel.strokeWidth = 1 * appearanceScale; panel.strokeColor = black;} catch(_eP1) { }
     }
   }
 
@@ -1944,6 +1949,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
   var panelInsetWmm = 30;
   var panelInsetHmm = 30;
+  var appearanceScale = _srh_getAppearanceScale(doc);
 
   if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
   if(flipLed) {
@@ -2060,7 +2066,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
     var panelRect = panelLayer.pathItems.rectangle(bounds.top, bounds.left, boxWidthPt, boxHeightPt);
     try {panelRect.filled = false;} catch(_ePF) { }
-    try {panelRect.stroked = true; panelRect.strokeWidth = 1; panelRect.strokeColor = black;} catch(_ePS) { }
+    try {panelRect.stroked = true; panelRect.strokeWidth = 1 * appearanceScale; panelRect.strokeColor = black;} catch(_ePS) { }
 
     // Column-major ordering (consider LEDs in columns)
     var ledRectsByColumn = [];
@@ -2075,7 +2081,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
         var rect = ledLayer.pathItems.rectangle(top, left, ledWidthPt, ledHeightPt);
         try {rect.filled = false;} catch(_eF) { }
-        try {rect.stroked = true; rect.strokeWidth = 1; rect.strokeColor = black;} catch(_eS) { }
+        try {rect.stroked = true; rect.strokeWidth = 1 * appearanceScale; rect.strokeColor = black;} catch(_eS) { }
 
         var line = penLayer.pathItems.add();
         if(flipLed) {
@@ -2084,7 +2090,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
           line.setEntirePath([[cx - ledWidthPt / 2, cy], [cx + ledWidthPt / 2, cy]]);
         }
         try {line.filled = false;} catch(_eLF) { }
-        try {line.stroked = true; line.strokeWidth = 1; line.strokeColor = red;} catch(_eLS) { }
+        try {line.stroked = true; line.strokeWidth = 1 * appearanceScale; line.strokeColor = red;} catch(_eLS) { }
 
         ledRectsByColumn[c].push({left: left, top: top, right: left + ledWidthPt, bottom: top - ledHeightPt});
       }
@@ -2127,14 +2133,14 @@ function signarama_helper_drawLedLayout(jsonStr) {
         var gHeight = gTop - gBottom;
         var grpRect = penGroupLayer.pathItems.rectangle(gTop, gLeft, gWidth, gHeight);
         try {grpRect.filled = false;} catch(_eGF) { }
-        try {grpRect.stroked = true; grpRect.strokeWidth = 1; grpRect.strokeColor = black;} catch(_eGS) { }
+        try {grpRect.stroked = true; grpRect.strokeWidth = 1 * appearanceScale; grpRect.strokeColor = black;} catch(_eGS) { }
 
         // Label at bottom center with LED count
         try {
-          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2pt(5)]);
+          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2docpt(5, doc)]);
           label.contents = count + " LEDs";
           try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
-          try {label.textRange.characterAttributes.size = 10;} catch(_eSize) { }
+          try {label.textRange.characterAttributes.size = 10 * appearanceScale;} catch(_eSize) { }
           try {label.textRange.characterAttributes.fillColor = black;} catch(_eCol) { }
         } catch(_eLbl) { }
       }
@@ -2165,7 +2171,7 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   var textOffsetPt = _dim_mm2pt(opts.labelGapMm || 0);
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var scaleAppearance = (opts.scaleAppearance || 1) * _srh_getAppearanceScale(doc);
 
   var lineColor = null;
   try {
