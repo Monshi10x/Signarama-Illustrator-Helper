@@ -2221,13 +2221,64 @@ function _srh_addLightboxMeasures(doc, bounds, supportsData, opts) {
     return (b[0] + b[2]) / 2;
   }
 
-  // Bottom measures from left edge to each support center (resolved from live support objects when available)
+  function _srh_collectSupportCentersFromLayer(doc, frameBounds) {
+    var centers = [];
+    if(!doc || !frameBounds) return centers;
+
+    var layer = null;
+    try {layer = doc.layers.getByName('lightbox frame');} catch(_eL) {layer = null;}
+    if(!layer) return centers;
+
+    var frameW = frameBounds.right - frameBounds.left;
+    var frameH = frameBounds.top - frameBounds.bottom;
+    if(!(frameW > 0) || !(frameH > 0)) return centers;
+
+    for(var li = 0; li < layer.pathItems.length; li++) {
+      var it = layer.pathItems[li];
+      var b = null;
+      try {b = it.visibleBounds;} catch(_eB0) { }
+      if(!b || b.length !== 4) {
+        try {b = it.geometricBounds;} catch(_eB1) { }
+      }
+      if(!b || b.length !== 4) continue;
+
+      var l = b[0], t = b[1], r = b[2], bt = b[3];
+      var w = r - l;
+      var h = t - bt;
+      if(!(w > 0) || !(h > 0)) continue;
+
+      // Supports are tall rectangles with near frame height but narrower than frame width.
+      var isSupportLike = (h >= (frameH * 0.9)) && (w < (frameW * 0.5));
+      // Keep only supports inside the frame extents.
+      var inFrame = (l >= frameBounds.left - 0.01) && (r <= frameBounds.right + 0.01);
+      if(!isSupportLike || !inFrame) continue;
+
+      centers.push((l + r) / 2);
+    }
+
+    centers.sort(function(a, b) {return a - b;});
+    return centers;
+  }
+
+  var supportCenters = [];
+
+  // Resolve support centers from provided data first.
   if(supportsData && supportsData.length) {
     for(var i = 0; i < supportsData.length; i++) {
       var centerX = _srh_getSupportCenterX(supportsData[i]);
       if(centerX == null) continue;
-      _dim_drawHorizontalDim(lyr, bounds.left, centerX, bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+      supportCenters.push(centerX);
     }
+  }
+
+  // Fallback: detect support objects from the lightbox layer (useful after supports were manually moved).
+  if(!supportCenters.length) {
+    supportCenters = _srh_collectSupportCentersFromLayer(doc, bounds);
+  }
+
+  // Bottom measures from left edge to each support center.
+  for(var ci = 0; ci < supportCenters.length; ci++) {
+    _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[ci], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
   }
 }
 
