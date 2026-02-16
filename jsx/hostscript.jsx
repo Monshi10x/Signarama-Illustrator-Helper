@@ -82,6 +82,23 @@ function _srh_mm2pt(mm) {return mm * 2.834645669291339;} // 72 / 25.4
 function _srh_pt2mm(pt) {return pt / 2.834645669291339;}
 function _srh_clamp(n, a, b) {return n < a ? a : (n > b ? b : n);}
 
+function _srh_getDocScaleFactor(doc) {
+  var sf = 1.0;
+  try {
+    sf = (doc && doc.scaleFactor) ? Number(doc.scaleFactor) : 1.0;
+  } catch(_eSf) {sf = 1.0;}
+  if(!(sf > 0)) sf = 1.0;
+  return sf;
+}
+
+function _srh_mm2docpt(mm, doc) {
+  return _srh_mm2pt(mm) / _srh_getDocScaleFactor(doc || app.activeDocument);
+}
+
+function _srh_getAppearanceScale(doc) {
+  return 1.0 / _srh_getDocScaleFactor(doc || app.activeDocument);
+}
+
 function _srh_round(n, d) {
   var p = Math.pow(10, d || 2);
   return Math.round(n * p) / p;
@@ -1503,7 +1520,7 @@ function _dim_run(opts) {
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var scaleAppearance = (opts.scaleAppearance || 1) * _srh_getAppearanceScale(doc);
 
   var scaleFactor = 1.0;
   try {
@@ -1564,7 +1581,7 @@ function _dim_runLine(opts) {
   var ticLenPt = _dim_mm2pt(opts.ticLenMm || 2);
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var scaleAppearance = (opts.scaleAppearance || 1) * _srh_getAppearanceScale(doc);
 
   var lineColor = _dim_hexToRGB(opts.lineColor) || _dim_parseHexColorToRGBColor(opts.lineColor) || _dim_hexToRGB('#000000');
   var textColor = opts.textColor;
@@ -1754,10 +1771,11 @@ function signarama_helper_createLightbox(jsonStr) {
 
   if(!(wMm > 0) || !(hMm > 0)) return 'Width and height must be > 0.';
 
-  var w = _dim_mm2pt(wMm);
-  var h = _dim_mm2pt(hMm);
-  var ledOffset = _dim_mm2pt(ledOffsetMm);
-  var supportW = _dim_mm2pt(25);
+  var w = _srh_mm2docpt(wMm, doc);
+  var h = _srh_mm2docpt(hMm, doc);
+  var ledOffset = _srh_mm2docpt(ledOffsetMm, doc);
+  var supportW = _srh_mm2docpt(25, doc);
+  var appearanceScale = _srh_getAppearanceScale(doc);
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
   var centerX = (ab[0] + ab[2]) / 2;
@@ -1774,7 +1792,7 @@ function signarama_helper_createLightbox(jsonStr) {
   var frameFill = _dim_hexToRGB('#848484');
 
   // Frame rectangle + inner offset as a minus-front compound shape
-  var inset = _dim_mm2pt(25);
+  var inset = _srh_mm2docpt(25, doc);
   var innerW = w - (2 * inset);
   var innerH = h - (2 * inset);
   var outer = frameLayer.pathItems.rectangle(top, left, w, h);
@@ -1790,7 +1808,7 @@ function signarama_helper_createLightbox(jsonStr) {
         if(frameFill) it.fillColor = frameFill;
         it.opacity = 50;
         it.stroked = true;
-        it.strokeWidth = 1;
+        it.strokeWidth = 1 * appearanceScale;
         it.strokeColor = black;
       } else if(it.typename === "CompoundPathItem") {
         for(var i = 0; i < it.pathItems.length; i++) _lb_applyStroke(it.pathItems[i]);
@@ -1826,7 +1844,7 @@ function signarama_helper_createLightbox(jsonStr) {
   }
 
   // Supports
-  var supportCenters = [];
+  var supportItems = [];
   if(supports > 0 && w > supportW) {
     var gap = (w - (supports * supportW)) / (supports + 1);
     if(gap < 0) gap = 0;
@@ -1834,8 +1852,8 @@ function signarama_helper_createLightbox(jsonStr) {
       var sx = left + gap * (i + 1) + supportW * i;
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
       try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
-      try {s.stroked = true; s.strokeWidth = 1; s.strokeColor = black;} catch(_eS1) { }
-      supportCenters.push(sx + (supportW / 2));
+      try {s.stroked = true; s.strokeWidth = 1 * appearanceScale; s.strokeColor = black;} catch(_eS1) { }
+      supportItems.push(s);
     }
   }
 
@@ -1848,13 +1866,13 @@ function signarama_helper_createLightbox(jsonStr) {
       var pTop = top - ledOffset;
       var panel = panelLayer.pathItems.rectangle(pTop, pLeft, pw, ph);
       try {panel.filled = false;} catch(_eP0) { }
-      try {panel.stroked = true; panel.strokeWidth = 1; panel.strokeColor = black;} catch(_eP1) { }
+      try {panel.stroked = true; panel.strokeWidth = 1 * appearanceScale; panel.strokeColor = black;} catch(_eP1) { }
     }
   }
 
   if(addMeasures && measureOptions) {
     var bounds = {left: left, top: top, right: left + w, bottom: top - h};
-    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions);
+    _srh_addLightboxMeasures(doc, bounds, supportItems, measureOptions);
   }
 
   return 'Lightbox created: ' + wMm + ' x ' + hMm + ' mm, depth ' + dMm + ' mm, type ' + type + ', supports ' + supports + '.';
@@ -1891,9 +1909,9 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
     var ab = app.activeDocument.artboards[app.activeDocument.artboards.getActiveArtboardIndex()].artboardRect;
     var centerX = (ab[0] + ab[2]) / 2;
     var centerY = (ab[1] + ab[3]) / 2;
-    var wPt = _srh_mm2pt(wMm);
-    var hPt = _srh_mm2pt(hMm);
-    var ledOffsetPt = _srh_mm2pt(ledOffsetMm);
+    var wPt = _srh_mm2docpt(wMm, app.activeDocument);
+    var hPt = _srh_mm2docpt(hMm, app.activeDocument);
+    var ledOffsetPt = _srh_mm2docpt(ledOffsetMm, app.activeDocument);
     var bounds = {
       left: centerX - (wPt / 2) + ledOffsetPt,
       top: centerY + (hPt / 2) - ledOffsetPt,
@@ -1931,6 +1949,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
   var panelInsetWmm = 30;
   var panelInsetHmm = 30;
+  var appearanceScale = _srh_getAppearanceScale(doc);
 
   if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
   if(flipLed) {
@@ -1973,8 +1992,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
       var ab = _getArtboardBounds(doc);
       var centerX = (ab.left + ab.right) / 2;
       var centerY = (ab.top + ab.bottom) / 2;
-      var wPt = _srh_mm2pt(layoutWidthMm);
-      var hPt = _srh_mm2pt(layoutHeightMm);
+      var wPt = _srh_mm2docpt(layoutWidthMm, doc);
+      var hPt = _srh_mm2docpt(layoutHeightMm, doc);
       return {
         left: centerX - (wPt / 2),
         top: centerY + (hPt / 2),
@@ -1988,8 +2007,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
       var ab2 = _getArtboardBounds(doc);
       var cx = (ab2.left + ab2.right) / 2;
       var cy = (ab2.top + ab2.bottom) / 2;
-      var wPt2 = _srh_mm2pt(layoutWidthMm);
-      var hPt2 = _srh_mm2pt(layoutHeightMm);
+      var wPt2 = _srh_mm2docpt(layoutWidthMm, doc);
+      var hPt2 = _srh_mm2docpt(layoutHeightMm, doc);
       return [{
         left: cx - (wPt2 / 2),
         top: cy + (hPt2 / 2),
@@ -2003,13 +2022,13 @@ function signarama_helper_drawLedLayout(jsonStr) {
   var boundsList = _getTargetBounds(doc);
   if(!boundsList || !boundsList.length) return 'No bounds found.';
 
-  var depthPt = _srh_mm2pt(depthMm);
-  var ledWidthPt = _srh_mm2pt(ledWidthMm);
-  var ledHeightPt = _srh_mm2pt(ledHeightMm);
-  var allowanceWPt = _srh_mm2pt(allowanceWmm);
-  var allowanceHPt = _srh_mm2pt(allowanceHmm);
-  var panelInsetWPt = _srh_mm2pt(panelInsetWmm);
-  var panelInsetHPt = _srh_mm2pt(panelInsetHmm);
+  var depthPt = _srh_mm2docpt(depthMm, doc);
+  var ledWidthPt = _srh_mm2docpt(ledWidthMm, doc);
+  var ledHeightPt = _srh_mm2docpt(ledHeightMm, doc);
+  var allowanceWPt = _srh_mm2docpt(allowanceWmm, doc);
+  var allowanceHPt = _srh_mm2docpt(allowanceHmm, doc);
+  var panelInsetWPt = _srh_mm2docpt(panelInsetWmm, doc);
+  var panelInsetHPt = _srh_mm2docpt(panelInsetHmm, doc);
 
   var panelLayer = _srh_getOrCreateLayer(doc, 'acm led panel');
   var ledLayer = _srh_getOrCreateLayer(doc, 'LEDs');
@@ -2047,7 +2066,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
     var panelRect = panelLayer.pathItems.rectangle(bounds.top, bounds.left, boxWidthPt, boxHeightPt);
     try {panelRect.filled = false;} catch(_ePF) { }
-    try {panelRect.stroked = true; panelRect.strokeWidth = 1; panelRect.strokeColor = black;} catch(_ePS) { }
+    try {panelRect.stroked = true; panelRect.strokeWidth = 1 * appearanceScale; panelRect.strokeColor = black;} catch(_ePS) { }
 
     // Column-major ordering (consider LEDs in columns)
     var ledRectsByColumn = [];
@@ -2062,7 +2081,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
         var rect = ledLayer.pathItems.rectangle(top, left, ledWidthPt, ledHeightPt);
         try {rect.filled = false;} catch(_eF) { }
-        try {rect.stroked = true; rect.strokeWidth = 1; rect.strokeColor = black;} catch(_eS) { }
+        try {rect.stroked = true; rect.strokeWidth = 1 * appearanceScale; rect.strokeColor = black;} catch(_eS) { }
 
         var line = penLayer.pathItems.add();
         if(flipLed) {
@@ -2071,7 +2090,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
           line.setEntirePath([[cx - ledWidthPt / 2, cy], [cx + ledWidthPt / 2, cy]]);
         }
         try {line.filled = false;} catch(_eLF) { }
-        try {line.stroked = true; line.strokeWidth = 1; line.strokeColor = red;} catch(_eLS) { }
+        try {line.stroked = true; line.strokeWidth = 1 * appearanceScale; line.strokeColor = red;} catch(_eLS) { }
 
         ledRectsByColumn[c].push({left: left, top: top, right: left + ledWidthPt, bottom: top - ledHeightPt});
       }
@@ -2114,14 +2133,14 @@ function signarama_helper_drawLedLayout(jsonStr) {
         var gHeight = gTop - gBottom;
         var grpRect = penGroupLayer.pathItems.rectangle(gTop, gLeft, gWidth, gHeight);
         try {grpRect.filled = false;} catch(_eGF) { }
-        try {grpRect.stroked = true; grpRect.strokeWidth = 1; grpRect.strokeColor = black;} catch(_eGS) { }
+        try {grpRect.stroked = true; grpRect.strokeWidth = 1 * appearanceScale; grpRect.strokeColor = black;} catch(_eGS) { }
 
         // Label at bottom center with LED count
         try {
-          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2pt(5)]);
+          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2docpt(5, doc)]);
           label.contents = count + " LEDs";
           try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
-          try {label.textRange.characterAttributes.size = 10;} catch(_eSize) { }
+          try {label.textRange.characterAttributes.size = 10 * appearanceScale;} catch(_eSize) { }
           try {label.textRange.characterAttributes.fillColor = black;} catch(_eCol) { }
         } catch(_eLbl) { }
       }
@@ -2141,7 +2160,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
   return 'LED layout drawn. Layouts: ' + totalLayouts + ', Rows: ' + totalRows + ', Columns: ' + totalCols + ', Watt: ' + ledWatt + 'W.';
 }
 
-function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
+function _srh_addLightboxMeasures(doc, bounds, supportsData, opts) {
   if(!doc || !bounds || !opts) return;
 
   var offsetPt = _dim_mm2pt(opts.offsetMm || 10);
@@ -2152,7 +2171,7 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   var textOffsetPt = _dim_mm2pt(opts.labelGapMm || 0);
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = opts.arrowheadSizePt || 0;
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var scaleAppearance = (opts.scaleAppearance || 1) * _srh_getAppearanceScale(doc);
 
   var lineColor = null;
   try {
@@ -2189,10 +2208,25 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   // Left height measure
   _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
 
-  // Bottom measures from left edge to each support center
-  if(supportCenters && supportCenters.length) {
-    for(var i = 0; i < supportCenters.length; i++) {
-      _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[i], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  function _srh_getSupportCenterX(supportRef) {
+    if(supportRef == null) return null;
+    if(typeof supportRef === 'number') return supportRef;
+
+    var b = null;
+    try {b = supportRef.visibleBounds;} catch(_eSb0) { }
+    if(!b || b.length !== 4) {
+      try {b = supportRef.geometricBounds;} catch(_eSb1) { }
+    }
+    if(!b || b.length !== 4) return null;
+    return (b[0] + b[2]) / 2;
+  }
+
+  // Bottom measures from left edge to each support center (resolved from live support objects when available)
+  if(supportsData && supportsData.length) {
+    for(var i = 0; i < supportsData.length; i++) {
+      var centerX = _srh_getSupportCenterX(supportsData[i]);
+      if(centerX == null) continue;
+      _dim_drawHorizontalDim(lyr, bounds.left, centerX, bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
     }
   }
 }
