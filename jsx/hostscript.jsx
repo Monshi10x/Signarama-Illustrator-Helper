@@ -1844,7 +1844,7 @@ function signarama_helper_createLightbox(jsonStr) {
   }
 
   // Supports
-  var supportCenters = [];
+  var supportItems = [];
   if(supports > 0 && w > supportW) {
     var gap = (w - (supports * supportW)) / (supports + 1);
     if(gap < 0) gap = 0;
@@ -1853,7 +1853,7 @@ function signarama_helper_createLightbox(jsonStr) {
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
       try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
       try {s.stroked = true; s.strokeWidth = 1 * appearanceScale; s.strokeColor = black;} catch(_eS1) { }
-      supportCenters.push(sx + (supportW / 2));
+      supportItems.push(s);
     }
   }
 
@@ -1872,7 +1872,7 @@ function signarama_helper_createLightbox(jsonStr) {
 
   if(addMeasures && measureOptions) {
     var bounds = {left: left, top: top, right: left + w, bottom: top - h};
-    _srh_addLightboxMeasures(doc, bounds, supportCenters, measureOptions);
+    _srh_addLightboxMeasures(doc, bounds, supportItems, measureOptions);
   }
 
   return 'Lightbox created: ' + wMm + ' x ' + hMm + ' mm, depth ' + dMm + ' mm, type ' + type + ', supports ' + supports + '.';
@@ -2160,7 +2160,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
   return 'LED layout drawn. Layouts: ' + totalLayouts + ', Rows: ' + totalRows + ', Columns: ' + totalCols + ', Watt: ' + ledWatt + 'W.';
 }
 
-function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
+function _srh_addLightboxMeasures(doc, bounds, supportsData, opts) {
   if(!doc || !bounds || !opts) return;
 
   var offsetPt = _dim_mm2pt(opts.offsetMm || 10);
@@ -2208,10 +2208,25 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts) {
   // Left height measure
   _dim_drawVerticalDim(lyr, bounds.top, bounds.bottom, bounds.left - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 90, dOpts.textOffsetPt, 'LEFT', dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
 
-  // Bottom measures from left edge to each support center
-  if(supportCenters && supportCenters.length) {
-    for(var i = 0; i < supportCenters.length; i++) {
-      _dim_drawHorizontalDim(lyr, bounds.left, supportCenters[i], bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
+  function _srh_getSupportCenterX(supportRef) {
+    if(supportRef == null) return null;
+    if(typeof supportRef === 'number') return supportRef;
+
+    var b = null;
+    try {b = supportRef.visibleBounds;} catch(_eSb0) { }
+    if(!b || b.length !== 4) {
+      try {b = supportRef.geometricBounds;} catch(_eSb1) { }
+    }
+    if(!b || b.length !== 4) return null;
+    return (b[0] + b[2]) / 2;
+  }
+
+  // Bottom measures from left edge to each support center (resolved from live support objects when available)
+  if(supportsData && supportsData.length) {
+    for(var i = 0; i < supportsData.length; i++) {
+      var centerX = _srh_getSupportCenterX(supportsData[i]);
+      if(centerX == null) continue;
+      _dim_drawHorizontalDim(lyr, bounds.left, centerX, bounds.bottom - dOpts.offsetPt, dOpts.ticLenPt, dOpts.textPt, dOpts.strokePt, dOpts.decimals, 'BOTTOM', dOpts.textOffsetPt, dOpts.scaleFactor, dOpts.textColor, dOpts.lineColor, dOpts.includeArrowhead, dOpts.arrowheadSizePt);
     }
   }
 }
