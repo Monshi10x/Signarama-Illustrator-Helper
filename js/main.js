@@ -169,6 +169,7 @@
 
     wireDimensions();
     wireLightbox();
+    wireLightboxSupportWatcher();
     wireLedLayout();
     wireLedDepiction();
     wireColours();
@@ -219,6 +220,23 @@
         callJSX('signarama_helper_createLightboxWithLedPanel("' + json + '")', res => res && log(res));
       };
     }
+  }
+
+
+  let lightboxSupportWatchTimer = null;
+  function wireLightboxSupportWatcher() {
+    if(lightboxSupportWatchTimer) return;
+    lightboxSupportWatchTimer = setInterval(() => {
+      callJSX('signarama_helper_lightboxSupportWatchTick()', (res) => {
+        if(!res) return;
+        const msg = String(res);
+        // Debug trace requested for tick/grab/move lifecycle.
+        if(msg.indexOf('ontick') >= 0 || msg.indexOf('ongrab') >= 0 || msg.indexOf('onmove') >= 0 || msg.indexOf('ondrop') >= 0) {
+          log('[support-watch] ' + msg);
+        }
+      });
+    }, 1000);
+    log('[support-watch] watcher armed (1s tick).');
   }
 
   function wireLedLayout() {
