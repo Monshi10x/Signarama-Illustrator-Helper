@@ -89,19 +89,24 @@ function _srh_getScaleFactor() {
   var scaleFactor = 1.0;
   try {
     var sfDoc = app.activeDocument.scaleFactor;
-    if(sfDoc && sfDoc > 0) scaleFactor = sfDoc;
+    var sfNum = Number(sfDoc);
+    if(sfNum && sfNum > 0) scaleFactor = sfNum;
   } catch(_eSf) { scaleFactor = 1.0; }
   _srh_scaleFactor = scaleFactor;
-  _srh_isLargeArtboard = scaleFactor > 1.0;
+  _srh_isLargeArtboard = scaleFactor > 1.0001;
   return scaleFactor;
 }
 
 function _srh_isLargeArtboardDoc() {
-  return _srh_getScaleFactor() > 1.0;
+  return _srh_getScaleFactor() > 1.0001;
 }
 
 function _srh_mm2ptDoc(mm) {
   return _srh_mm2pt(mm) / _srh_getScaleFactor();
+}
+
+function _srh_ptDoc(pt) {
+  return (pt || 0) / _srh_getScaleFactor();
 }
 
 function _srh_pxStrokeDoc(px) {
@@ -949,8 +954,8 @@ function signarama_helper_addFilePathTextToArtboards() {
     if(aw <= 0 || ah <= 0) continue;
 
     var boxW = aw * 0.60;
-    var boxH = _srh_mm2pt(24); // ~24mm tall
-    var offset = _srh_mm2pt(5); // 5mm from top
+    var boxH = _srh_mm2ptDoc(24); // ~24mm tall
+    var offset = _srh_mm2ptDoc(5); // 5mm from top
 
     var boxLeft = left + (aw - boxW) / 2;
     var boxTop = top - offset;
@@ -991,7 +996,7 @@ function signarama_helper_addFilePathTextToArtboards() {
 
     // Anchor to artboard: top of text bounds should be 10mm below artboard top
     try {
-      var desiredTop = top - _srh_mm2pt(10);
+      var desiredTop = top - _srh_mm2ptDoc(10);
       var bb = tf.visibleBounds;
       if(bb && bb.length === 4) {
         var dy = desiredTop - bb[1];
@@ -1077,6 +1082,8 @@ function signarama_helper_setAllFillsStrokes() {
 
 /* ---------------- Dimensions (Atlas) ---------------- */
 function _dim_mm2pt(mm) {return mm * 72.0 / 25.4;}
+function _dim_mm2ptDoc(mm, scaleFactor) {return _dim_mm2pt(mm) / (scaleFactor || 1.0);}
+function _dim_ptDoc(pt, scaleFactor) {return (pt || 0) / (scaleFactor || 1.0);}
 function _dim_pt2mm(pt) {return pt * 25.4 / 72.0;}
 function _dim_fmtMm(pt, decimals) {
   var mm = _dim_pt2mm(Math.abs(pt));
@@ -1130,7 +1137,8 @@ function _dim_makeLine(group, x1, y1, x2, y2, strokePt, opts) {
   var p = group.pathItems.add();
   p.setEntirePath([[x1, y1], [x2, y2]]);
   p.stroked = true;
-  p.strokeWidth = Math.max(strokePt || 1, 2);
+  var strokeWidth = (typeof strokePt === 'number' && isFinite(strokePt)) ? strokePt : 1;
+  p.strokeWidth = Math.max(strokeWidth, 0.1);
   var lc = null;
   try {
     if(opts && opts.lineColor) {
@@ -1516,13 +1524,13 @@ function _dim_run(opts) {
   var originalSel = _dim_captureSelection();
   if(!originalSel || !originalSel.length) return "Nothing selected.";
 
-  var offsetPt = _dim_mm2pt(opts.offsetMm || 10);
-  var ticLenPt = _dim_mm2pt(opts.ticLenMm || 2);
-  var textPt = opts.textPt || 10;
-  var strokePt = opts.strokePt || 1;
+  var scaleFactor = _srh_getScaleFactor();
+  var offsetPt = _dim_mm2ptDoc(opts.offsetMm || 10, scaleFactor);
+  var ticLenPt = _dim_mm2ptDoc(opts.ticLenMm || 2, scaleFactor);
+  var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
+  var strokePt = _dim_ptDoc(opts.strokePt || 1, scaleFactor);
   var decimals = (opts.decimals | 0);
-  var textOffsetPt = _dim_mm2pt(opts.labelGapMm || 0);
-  var lineOffsetPt = _dim_mm2pt(opts.offsetMm || 0);
+  var textOffsetPt = _dim_mm2ptDoc(opts.labelGapMm || 0, scaleFactor);
   var measureClippedContent = !!opts.measureClippedContent;
 
   var lyr = _dim_ensureLayer('Dimensions');
@@ -1537,28 +1545,22 @@ function _dim_run(opts) {
   } catch(_eLc2) { lineColor = null; }
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var includeArrowhead = !!opts.includeArrowhead;
-  var arrowheadSizePt = opts.arrowheadSizePt || 0;
+  var arrowheadSizePt = _dim_ptDoc(opts.arrowheadSizePt || 0, scaleFactor);
   var scaleAppearance = opts.scaleAppearance || 1;
-
-  var scaleFactor = 1.0;
-  try {
-    var sfDoc = app.activeDocument.scaleFactor;
-    if(sfDoc && sfDoc > 0) scaleFactor = sfDoc;
-  } catch(e) {scaleFactor = 1.0;}
 
   var dOpts = {
     side: opts.side,
     offsetPt: offsetPt * scaleAppearance,
     ticLenPt: ticLenPt * scaleAppearance,
     textPt: textPt * scaleAppearance,
-    strokePt: strokePt,
+    strokePt: strokePt * scaleAppearance,
     decimals: decimals,
     scaleFactor: scaleFactor,
     textOffsetPt: textOffsetPt * scaleAppearance,
     textColor: textColor,
     lineColor: lineColor,
     includeArrowhead: includeArrowhead,
-    arrowheadSizePt: arrowheadSizePt
+    arrowheadSizePt: arrowheadSizePt * scaleAppearance
   };
 
   var objectsProcessed = 0;
@@ -1592,13 +1594,14 @@ function _dim_runLine(opts) {
   var originalSel = _dim_captureSelection();
   if(!originalSel || !originalSel.length) return "Nothing selected.";
 
-  var textPt = opts.textPt || 10;
-  var strokePt = opts.strokePt || 1;
-  var textOffsetPt = _dim_mm2pt(opts.labelGapMm || 0);
-  var lineOffsetPt = _dim_mm2pt(opts.offsetMm || 0);
-  var ticLenPt = _dim_mm2pt(opts.ticLenMm || 2);
+  var scaleFactor = _srh_getScaleFactor();
+  var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
+  var strokePt = _dim_ptDoc(opts.strokePt || 1, scaleFactor);
+  var textOffsetPt = _dim_mm2ptDoc(opts.labelGapMm || 0, scaleFactor);
+  var lineOffsetPt = _dim_mm2ptDoc(opts.offsetMm || 0, scaleFactor);
+  var ticLenPt = _dim_mm2ptDoc(opts.ticLenMm || 2, scaleFactor);
   var includeArrowhead = !!opts.includeArrowhead;
-  var arrowheadSizePt = opts.arrowheadSizePt || 0;
+  var arrowheadSizePt = _dim_ptDoc(opts.arrowheadSizePt || 0, scaleFactor);
   var scaleAppearance = opts.scaleAppearance || 1;
 
   var lineColor = _dim_hexToRGB(opts.lineColor) || _dim_parseHexColorToRGBColor(opts.lineColor) || _dim_hexToRGB('#000000');
@@ -1658,21 +1661,24 @@ function _dim_runLine(opts) {
       var sy = a0[1] + ny * off;
       var ex = a1[0] + nx * off;
       var ey = a1[1] + ny * off;
+      var strokeScaled = strokePt * scaleAppearance;
+      var tickScaled = ticLenPt * scaleAppearance;
+      var arrowScaled = arrowheadSizePt * scaleAppearance;
 
       var g = lyr.groupItems.add();
-      _dim_makeLine(g, sx, sy, ex, ey, strokePt, {lineColor: lineColor});
-      var halfTick = (ticLenPt * scaleAppearance) * 0.5;
-      _dim_makeLine(g, sx - nx * halfTick, sy - ny * halfTick, sx + nx * halfTick, sy + ny * halfTick, strokePt, {lineColor: lineColor});
-      _dim_makeLine(g, ex - nx * halfTick, ey - ny * halfTick, ex + nx * halfTick, ey + ny * halfTick, strokePt, {lineColor: lineColor});
+      _dim_makeLine(g, sx, sy, ex, ey, strokeScaled, {lineColor: lineColor});
+      var halfTick = tickScaled * 0.5;
+      _dim_makeLine(g, sx - nx * halfTick, sy - ny * halfTick, sx + nx * halfTick, sy + ny * halfTick, strokeScaled, {lineColor: lineColor});
+      _dim_makeLine(g, ex - nx * halfTick, ey - ny * halfTick, ex + nx * halfTick, ey + ny * halfTick, strokeScaled, {lineColor: lineColor});
       if(includeArrowhead) {
-        _dim_addArrowheadAlongLine(g, sx, sy, -dx, -dy, arrowheadSizePt, strokePt, lineColor);
-        _dim_addArrowheadAlongLine(g, ex, ey, dx, dy, arrowheadSizePt, strokePt, lineColor);
+        _dim_addArrowheadAlongLine(g, sx, sy, -dx, -dy, arrowScaled, strokeScaled, lineColor);
+        _dim_addArrowheadAlongLine(g, ex, ey, dx, dy, arrowScaled, strokeScaled, lineColor);
       }
 
       var midX = (sx + ex) * 0.5 + nx * textOff;
       var midY = (sy + ey) * 0.5 + ny * textOff;
       var angle = Math.atan2(dy, dx) * 180 / Math.PI;
-      var label = _dim_fmtMmScaled(len, opts.decimals | 0, (doc.scaleFactor || 1.0));
+      var label = _dim_fmtMmScaled(len, opts.decimals | 0, scaleFactor);
 
       var txt = _dim_createAnchoredText(label, "C", midX, midY, {size: textPt * scaleAppearance, rotation: angle, textColor: textColor}, lyr);
       if(txt) {
@@ -2401,7 +2407,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
           var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2ptDoc(5)]);
           label.contents = count + " LEDs";
           try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
-          try {label.textRange.characterAttributes.size = 20;} catch(_eSize) { }
+          try {label.textRange.characterAttributes.size = _srh_ptDoc(20);} catch(_eSize) { }
           try {label.textRange.characterAttributes.fillColor = black;} catch(_eCol) { }
         } catch(_eLbl) { }
       }
@@ -2420,7 +2426,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
         var specLabel = penGroupLayer.textFrames.pointText([(bounds.left + bounds.right) * 0.5, bounds.bottom - _srh_mm2ptDoc(3)]);
         specLabel.contents = spec;
         try {specLabel.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eSpecJust) { }
-        try {specLabel.textRange.characterAttributes.size = 12;} catch(_eSpecSize) { }
+        try {specLabel.textRange.characterAttributes.size = _srh_ptDoc(12);} catch(_eSpecSize) { }
         try {specLabel.textRange.characterAttributes.fillColor = black;} catch(_eSpecCol) { }
       }
     } catch(_eSpecLbl) { }
@@ -2440,14 +2446,15 @@ function signarama_helper_drawLedLayout(jsonStr) {
 function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts, lightboxId) {
   if(!doc || !bounds || !opts) return;
 
-  var offsetPt = _dim_mm2pt(opts.offsetMm || 10);
-  var ticLenPt = _dim_mm2pt(opts.ticLenMm || 2);
-  var textPt = opts.textPt || 10;
-  var strokePt = opts.strokePt || 1;
+  var scaleFactor = _srh_getScaleFactor();
+  var offsetPt = _dim_mm2ptDoc(opts.offsetMm || 10, scaleFactor);
+  var ticLenPt = _dim_mm2ptDoc(opts.ticLenMm || 2, scaleFactor);
+  var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
+  var strokePt = _dim_ptDoc(opts.strokePt || 1, scaleFactor);
   var decimals = (opts.decimals | 0);
-  var textOffsetPt = _dim_mm2pt(opts.labelGapMm || 0);
+  var textOffsetPt = _dim_mm2ptDoc(opts.labelGapMm || 0, scaleFactor);
   var includeArrowhead = !!opts.includeArrowhead;
-  var arrowheadSizePt = opts.arrowheadSizePt || 0;
+  var arrowheadSizePt = _dim_ptDoc(opts.arrowheadSizePt || 0, scaleFactor);
   var scaleAppearance = opts.scaleAppearance || 1;
 
   var lineColor = null;
@@ -2458,24 +2465,18 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts, lightboxId)
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var textColor = opts.textColor;
 
-  var scaleFactor = 1.0;
-  try {
-    var sfDoc = app.activeDocument.scaleFactor;
-    if(sfDoc && sfDoc > 0) scaleFactor = sfDoc;
-  } catch(e) {scaleFactor = 1.0;}
-
   var dOpts = {
     offsetPt: offsetPt * scaleAppearance,
     ticLenPt: ticLenPt * scaleAppearance,
     textPt: textPt * scaleAppearance,
-    strokePt: strokePt,
+    strokePt: strokePt * scaleAppearance,
     decimals: decimals,
     scaleFactor: scaleFactor,
     textOffsetPt: textOffsetPt * scaleAppearance,
     textColor: textColor,
     lineColor: lineColor,
     includeArrowhead: includeArrowhead,
-    arrowheadSizePt: arrowheadSizePt
+    arrowheadSizePt: arrowheadSizePt * scaleAppearance
   };
 
   var lyr = _dim_ensureLayer('Dimensions');

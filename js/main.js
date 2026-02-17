@@ -185,18 +185,21 @@
       callJSX('signarama_helper_getArtboardScaleState()', raw => {
         let state = null;
         try { state = JSON.parse(raw || '{}'); } catch(_eParse) { state = null; }
-        const large = !!(state && state.isLargeArtboard);
+        const sfRaw = (state && state.scaleFactor !== undefined) ? state.scaleFactor : raw;
+        const sf = Number(sfRaw);
+        const large = !!((state && state.isLargeArtboard) || (isFinite(sf) && sf > 1.0001));
         isLargeArtboard = large;
         if (typeof window !== 'undefined') window.isLargeArtboard = large;
         const notice = $('lightboxArtboardScaleNotice');
         const icon = $('lightboxArtboardScaleIcon');
         const text = $('lightboxArtboardScaleText');
         if (!notice || !icon || !text) return;
-        const sf = state && state.scaleFactor ? Number(state.scaleFactor) : 1;
+        const sfText = isFinite(sf) && sf > 0 ? sf : 1;
+        log('doc.scaleFactor: ' + sfText);
         if (large) {
           notice.classList.add('large');
           icon.textContent = '⚠️';
-          text.textContent = 'Large artboard scale detected (1:' + sf + '). Lightbox + LED sizes will be adjusted automatically.';
+          text.textContent = 'Large artboard detected (1:' + sfText + '). Lightbox + LED sizes will be adjusted automatically.';
         } else {
           notice.classList.remove('large');
           icon.textContent = '✅';
