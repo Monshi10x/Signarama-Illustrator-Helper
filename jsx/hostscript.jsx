@@ -82,6 +82,41 @@ function _srh_mm2pt(mm) {return mm * 2.834645669291339;} // 72 / 25.4
 function _srh_pt2mm(pt) {return pt / 2.834645669291339;}
 function _srh_clamp(n, a, b) {return n < a ? a : (n > b ? b : n);}
 
+var _srh_scaleFactor = 1.0;
+var _srh_isLargeArtboard = false;
+
+function _srh_getScaleFactor() {
+  var scaleFactor = 1.0;
+  try {
+    var sfDoc = app.activeDocument.scaleFactor;
+    if(sfDoc && sfDoc > 0) scaleFactor = sfDoc;
+  } catch(_eSf) { scaleFactor = 1.0; }
+  _srh_scaleFactor = scaleFactor;
+  _srh_isLargeArtboard = scaleFactor > 1.0;
+  return scaleFactor;
+}
+
+function _srh_isLargeArtboardDoc() {
+  return _srh_getScaleFactor() > 1.0;
+}
+
+function _srh_mm2ptDoc(mm) {
+  return _srh_mm2pt(mm) / _srh_getScaleFactor();
+}
+
+function _srh_pxStrokeDoc(px) {
+  return px / _srh_getScaleFactor();
+}
+
+function signarama_helper_getArtboardScaleState() {
+  if(!app.documents.length) return '{"isLargeArtboard":false,"scaleFactor":1}';
+  var sf = _srh_getScaleFactor();
+  return JSON.stringify({
+    isLargeArtboard: _srh_isLargeArtboard,
+    scaleFactor: sf
+  });
+}
+
 function _srh_round(n, d) {
   var p = Math.pow(10, d || 2);
   return Math.round(n * p) / p;
@@ -1952,10 +1987,11 @@ function signarama_helper_createLightbox(jsonStr) {
 
   if(!(wMm > 0) || !(hMm > 0)) return 'Width and height must be > 0.';
 
-  var w = _dim_mm2pt(wMm);
-  var h = _dim_mm2pt(hMm);
-  var ledOffset = _dim_mm2pt(ledOffsetMm);
-  var supportW = _dim_mm2pt(25);
+  var w = _srh_mm2ptDoc(wMm);
+  var h = _srh_mm2ptDoc(hMm);
+  var ledOffset = _srh_mm2ptDoc(ledOffsetMm);
+  var supportW = _srh_mm2ptDoc(25);
+  var stroke1px = _srh_pxStrokeDoc(1);
   var lightboxId = _srh_generateLightboxId();
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
@@ -1973,7 +2009,7 @@ function signarama_helper_createLightbox(jsonStr) {
   var frameFill = _dim_hexToRGB('#848484');
 
   // Frame rectangle + inner offset as a minus-front compound shape
-  var inset = _dim_mm2pt(25);
+  var inset = _srh_mm2ptDoc(25);
   var innerW = w - (2 * inset);
   var innerH = h - (2 * inset);
   var outer = frameLayer.pathItems.rectangle(top, left, w, h);
@@ -1989,7 +2025,7 @@ function signarama_helper_createLightbox(jsonStr) {
         if(frameFill) it.fillColor = frameFill;
         it.opacity = 50;
         it.stroked = true;
-        it.strokeWidth = 1;
+        it.strokeWidth = stroke1px;
         it.strokeColor = black;
       } else if(it.typename === "CompoundPathItem") {
         for(var i = 0; i < it.pathItems.length; i++) _lb_applyStroke(it.pathItems[i]);
@@ -2035,7 +2071,7 @@ function signarama_helper_createLightbox(jsonStr) {
       var sx = left + gap * (i + 1) + supportW * i;
       var s = frameLayer.pathItems.rectangle(top, sx, supportW, h);
       try {s.filled = true; if(frameFill) s.fillColor = frameFill; s.opacity = 50;} catch(_eS0) { }
-      try {s.stroked = true; s.strokeWidth = 1; s.strokeColor = black;} catch(_eS1) { }
+      try {s.stroked = true; s.strokeWidth = stroke1px; s.strokeColor = black;} catch(_eS1) { }
       _srh_setLightboxItemTag(s, 'support', lightboxId);
       supportCenters.push(sx + (supportW / 2));
     }
@@ -2050,7 +2086,7 @@ function signarama_helper_createLightbox(jsonStr) {
       var pTop = top - ledOffset;
       var panel = panelLayer.pathItems.rectangle(pTop, pLeft, pw, ph);
       try {panel.filled = false;} catch(_eP0) { }
-      try {panel.stroked = true; panel.strokeWidth = 1; panel.strokeColor = black;} catch(_eP1) { }
+      try {panel.stroked = true; panel.strokeWidth = stroke1px; panel.strokeColor = black;} catch(_eP1) { }
     }
   }
 
@@ -2100,9 +2136,9 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
     var ab = app.activeDocument.artboards[app.activeDocument.artboards.getActiveArtboardIndex()].artboardRect;
     var centerX = (ab[0] + ab[2]) / 2;
     var centerY = (ab[1] + ab[3]) / 2;
-    var wPt = _srh_mm2pt(wMm);
-    var hPt = _srh_mm2pt(hMm);
-    var ledOffsetPt = _srh_mm2pt(ledOffsetMm);
+    var wPt = _srh_mm2ptDoc(wMm);
+    var hPt = _srh_mm2ptDoc(hMm);
+    var ledOffsetPt = _srh_mm2ptDoc(ledOffsetMm);
     var bounds = {
       left: centerX - (wPt / 2) + ledOffsetPt,
       top: centerY + (hPt / 2) - ledOffsetPt,
@@ -2216,8 +2252,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
       var ab = _getArtboardBounds(doc);
       var centerX = (ab.left + ab.right) / 2;
       var centerY = (ab.top + ab.bottom) / 2;
-      var wPt = _srh_mm2pt(layoutWidthMm);
-      var hPt = _srh_mm2pt(layoutHeightMm);
+      var wPt = _srh_mm2ptDoc(layoutWidthMm);
+      var hPt = _srh_mm2ptDoc(layoutHeightMm);
       return {
         left: centerX - (wPt / 2),
         top: centerY + (hPt / 2),
@@ -2231,8 +2267,8 @@ function signarama_helper_drawLedLayout(jsonStr) {
       var ab2 = _getArtboardBounds(doc);
       var cx = (ab2.left + ab2.right) / 2;
       var cy = (ab2.top + ab2.bottom) / 2;
-      var wPt2 = _srh_mm2pt(layoutWidthMm);
-      var hPt2 = _srh_mm2pt(layoutHeightMm);
+      var wPt2 = _srh_mm2ptDoc(layoutWidthMm);
+      var hPt2 = _srh_mm2ptDoc(layoutHeightMm);
       return [{
         left: cx - (wPt2 / 2),
         top: cy + (hPt2 / 2),
@@ -2246,13 +2282,13 @@ function signarama_helper_drawLedLayout(jsonStr) {
   var boundsList = _getTargetBounds(doc);
   if(!boundsList || !boundsList.length) return 'No bounds found.';
 
-  var depthPt = _srh_mm2pt(depthMm);
-  var ledWidthPt = _srh_mm2pt(ledWidthMm);
-  var ledHeightPt = _srh_mm2pt(ledHeightMm);
-  var allowanceWPt = _srh_mm2pt(allowanceWmm);
-  var allowanceHPt = _srh_mm2pt(allowanceHmm);
-  var panelInsetWPt = _srh_mm2pt(panelInsetWmm);
-  var panelInsetHPt = _srh_mm2pt(panelInsetHmm);
+  var depthPt = _srh_mm2ptDoc(depthMm);
+  var ledWidthPt = _srh_mm2ptDoc(ledWidthMm);
+  var ledHeightPt = _srh_mm2ptDoc(ledHeightMm);
+  var allowanceWPt = _srh_mm2ptDoc(allowanceWmm);
+  var allowanceHPt = _srh_mm2ptDoc(allowanceHmm);
+  var panelInsetWPt = _srh_mm2ptDoc(panelInsetWmm);
+  var panelInsetHPt = _srh_mm2ptDoc(panelInsetHmm);
 
   var panelLayer = _srh_getOrCreateLayer(doc, 'acm led panel');
   var ledLayer = _srh_getOrCreateLayer(doc, 'LEDs');
@@ -2263,6 +2299,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
   black.red = 0; black.green = 0; black.blue = 0;
   var red = new RGBColor();
   red.red = 255; red.green = 0; red.blue = 0;
+  var stroke1px = _srh_pxStrokeDoc(1);
 
   var totalRows = 0;
   var totalCols = 0;
@@ -2290,7 +2327,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
     var panelRect = panelLayer.pathItems.rectangle(bounds.top, bounds.left, boxWidthPt, boxHeightPt);
     try {panelRect.filled = false;} catch(_ePF) { }
-    try {panelRect.stroked = true; panelRect.strokeWidth = 1; panelRect.strokeColor = black;} catch(_ePS) { }
+    try {panelRect.stroked = true; panelRect.strokeWidth = stroke1px; panelRect.strokeColor = black;} catch(_ePS) { }
 
     // Column-major ordering (consider LEDs in columns)
     var ledRectsByColumn = [];
@@ -2305,7 +2342,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
 
         var rect = ledLayer.pathItems.rectangle(top, left, ledWidthPt, ledHeightPt);
         try {rect.filled = false;} catch(_eF) { }
-        try {rect.stroked = true; rect.strokeWidth = 1; rect.strokeColor = black;} catch(_eS) { }
+        try {rect.stroked = true; rect.strokeWidth = stroke1px; rect.strokeColor = black;} catch(_eS) { }
 
         var line = penLayer.pathItems.add();
         if(flipLed) {
@@ -2314,7 +2351,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
           line.setEntirePath([[cx - ledWidthPt / 2, cy], [cx + ledWidthPt / 2, cy]]);
         }
         try {line.filled = false;} catch(_eLF) { }
-        try {line.stroked = true; line.strokeWidth = 1; line.strokeColor = red;} catch(_eLS) { }
+        try {line.stroked = true; line.strokeWidth = stroke1px; line.strokeColor = red;} catch(_eLS) { }
 
         ledRectsByColumn[c].push({left: left, top: top, right: left + ledWidthPt, bottom: top - ledHeightPt});
       }
@@ -2357,11 +2394,11 @@ function signarama_helper_drawLedLayout(jsonStr) {
         var gHeight = gTop - gBottom;
         var grpRect = penGroupLayer.pathItems.rectangle(gTop, gLeft, gWidth, gHeight);
         try {grpRect.filled = false;} catch(_eGF) { }
-        try {grpRect.stroked = true; grpRect.strokeWidth = 1; grpRect.strokeColor = black;} catch(_eGS) { }
+        try {grpRect.stroked = true; grpRect.strokeWidth = stroke1px; grpRect.strokeColor = black;} catch(_eGS) { }
 
         // Label at bottom center with LED count
         try {
-          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2pt(5)]);
+          var label = penGroupLayer.textFrames.pointText([gLeft + (gWidth / 2), gBottom - _srh_mm2ptDoc(5)]);
           label.contents = count + " LEDs";
           try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eJust) { }
           try {label.textRange.characterAttributes.size = 20;} catch(_eSize) { }
@@ -2380,7 +2417,7 @@ function signarama_helper_drawLedLayout(jsonStr) {
       if(ledVoltage) ledBits.push(ledVoltage + 'V');
       if(ledBits.length) {
         var spec = ledBits.join(' | ');
-        var specLabel = penGroupLayer.textFrames.pointText([(bounds.left + bounds.right) * 0.5, bounds.bottom - _srh_mm2pt(3)]);
+        var specLabel = penGroupLayer.textFrames.pointText([(bounds.left + bounds.right) * 0.5, bounds.bottom - _srh_mm2ptDoc(3)]);
         specLabel.contents = spec;
         try {specLabel.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eSpecJust) { }
         try {specLabel.textRange.characterAttributes.size = 12;} catch(_eSpecSize) { }
