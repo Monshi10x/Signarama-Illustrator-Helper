@@ -37,6 +37,7 @@
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
   let isLargeArtboard = false;
+  let refreshLightboxArtboardScaleNotice = null;
 
   function buildDimensionPayload(){
     return {
@@ -78,6 +79,7 @@
       cs.evalScript('typeof signarama_helper_fitArtboardToArtwork', function (type) {
         log('JSX check: signarama_helper_fitArtboardToArtwork is ' + type);
         if (type !== 'function') log('ERROR: JSX not loaded (check path/case).');
+        if (typeof refreshLightboxArtboardScaleNotice === 'function') refreshLightboxArtboardScaleNotice();
       });
     });
   });
@@ -91,6 +93,9 @@
       panels.forEach(p => p.classList.toggle('hidden', p.id !== tabId));
       if (tabId === 'tab-colours' && typeof window.refreshColours === 'function') {
         window.refreshColours();
+      }
+      if (tabId === 'tab-lightbox' && typeof refreshLightboxArtboardScaleNotice === 'function') {
+        refreshLightboxArtboardScaleNotice();
       }
     }
 
@@ -184,7 +189,22 @@
     function refreshArtboardScaleNotice(){
       callJSX('signarama_helper_getArtboardScaleState()', raw => {
         let state = null;
-        try { state = JSON.parse(raw || '{}'); } catch(_eParse) { state = null; }
+        const rawText = (raw == null) ? '' : String(raw).trim();
+        try {
+          state = JSON.parse(rawText || '{}');
+        } catch(_eParse0) {
+          try { state = JSON.parse(rawText.replace(/^\"|\"$/g, '').replace(/\\"/g, '\"')); } catch(_eParse1) { state = null; }
+        }
+        if ((!state || typeof state !== 'object') && rawText) {
+          const largeMatch = /"isLargeArtboard"\s*:\s*(true|false)/i.exec(rawText);
+          const sfMatch = /"scaleFactor"\s*:\s*([0-9.]+)/i.exec(rawText);
+          if (largeMatch || sfMatch) {
+            state = {
+              isLargeArtboard: largeMatch ? largeMatch[1].toLowerCase() === 'true' : false,
+              scaleFactor: sfMatch ? Number(sfMatch[1]) : 1
+            };
+          }
+        }
         const large = !!(state && state.isLargeArtboard);
         isLargeArtboard = large;
         if (typeof window !== 'undefined') window.isLargeArtboard = large;
@@ -273,10 +293,9 @@
     const supportsField = $('lightboxSupportCount');
     if(widthField) widthField.addEventListener('input', updateSupportSpacingInfo);
     if(supportsField) supportsField.addEventListener('input', updateSupportSpacingInfo);
+    refreshLightboxArtboardScaleNotice = refreshArtboardScaleNotice;
     updateSupportSpacingInfo();
     refreshArtboardScaleNotice();
-    const lightboxTab = document.querySelector('.tab[data-tab="tab-lightbox"]');
-    if (lightboxTab) lightboxTab.addEventListener('click', refreshArtboardScaleNotice);
 
     const createBtn = $('btnCreateLightbox');
     if (!createBtn) return;
