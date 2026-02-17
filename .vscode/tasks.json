@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Illustrator",
+      "type": "process",
+      "command": "C:\\Program Files\\Adobe\\Adobe Illustrator 2025\\Support Files\\Contents\\Windows\\Illustrator.exe",
+      "problemMatcher": []
+    }
+  ]
+}

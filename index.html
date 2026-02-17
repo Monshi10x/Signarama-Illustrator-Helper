@@ -135,6 +135,18 @@
       background:#2b2200;
       color:#ffd35a;
     }
+    .bleed-options-card {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding:10px 12px;
+      border:1px solid #444;
+      border-radius:12px;
+      background:#202020;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
+                  5px 8px 10px rgba(0,0,0,0.45),
+                  0 0px 1px rgba(0,0,0,0.6);
+    }
   </style>
 </head>
 <body>
@@ -146,7 +158,7 @@
   <div class="tabs" role="tablist" aria-label="Signarama Helper Tabs">
     <button class="tab active" data-tab="tab-buttons" type="button">Artboards</button>
     <button class="tab" data-tab="tab-bleeds" type="button">Bleeds</button>
-    <button class="tab" data-tab="tab-cutfiles" type="button">Cutfiles</button>
+    <button class="tab" data-tab="tab-cutfiles" type="button">Router/Laser</button>
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
@@ -215,6 +227,18 @@
             <span class="info" data-tip="Expands selected items by the given amounts, handling asymmetric bleeds.">i</span>
           </button>
         </div>
+        <div class="row" style="margin-top:8px; align-items:flex-start;">
+          <div class="bleed-options-card">
+            <label class="chk">
+              <input id="bleedKeepOriginal" type="checkbox" checked>
+              <span>Keep original</span>
+            </label>
+            <label class="chk">
+              <input id="bleedExcludeClippedContent" type="checkbox" checked>
+              <span>Exclude clipped content</span>
+            </label>
+          </div>
+        </div>
 
         <div class="small" style="margin-top:8px;">
           Note: this expands artwork bounds; it does not change artboards.
@@ -234,12 +258,25 @@
           </label>
         </div>
 
-        <div class="row" style="margin-top:10px; align-items:center;">
-          <label class="chk">
-            <input id="pathBleedCutline" type="checkbox" checked>
-            <span>Create cutline</span>
-          </label>
-
+        <div class="row" style="margin-top:10px; align-items:flex-start;">
+          <div class="bleed-options-card">
+            <label class="chk">
+              <input id="pathBleedCutline" type="checkbox" checked>
+              <span>Create cutline</span>
+            </label>
+            <label class="chk">
+              <input id="pathBleedOutlineText" type="checkbox" checked>
+              <span>Outline text</span>
+            </label>
+            <label class="chk">
+              <input id="pathBleedOutlineStroke" type="checkbox" checked>
+              <span>Outline stroke</span>
+            </label>
+            <label class="chk">
+              <input id="pathBleedAutoWeld" type="checkbox" checked>
+              <span>Auto-weld</span>
+            </label>
+          </div>
           <button class="btn2" id="btnApplyPathBleed" type="button" style="margin-left:auto;">
             <span>Apply path bleed</span>
             <span class="info" data-tip="Moves the target to layer 'bleed' and offsets paths. If enabled, duplicates the original to layer 'cutline' with no fill and 'Cut Contour' spot stroke.">i</span>

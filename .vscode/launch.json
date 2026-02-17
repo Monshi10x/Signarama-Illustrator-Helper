@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "extendscript-debug",
+      "request": "attach",
+      "name": "Attach to Illustrator (auto-start)",
+      "preLaunchTask": "Start Illustrator",
+      "hostAppSpecifier": "illustrator-29",
+      "engineName": "main"
+    }
+  ]
+}

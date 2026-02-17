@@ -1,4 +1,4 @@
-#target illustrator;
+//#target illustrator;
 app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
 
 /* ---------------- JSON polyfill (ExtendScript) ---------------- */
@@ -32,6 +32,67 @@ function _srh_fmtBounds(b) {
   return '[L ' + r(b.left) + ', T ' + r(b.top) + ', R ' + r(b.right) + ', B ' + r(b.bottom) + ']';
 }
 
+function _srh_hasClippingAncestor(item) {
+  var p = null;
+  try {p = item.parent;} catch(_ePa0) { p = null; }
+  while(p) {
+    try {
+      if(p.typename === "GroupItem" && p.clipped) return true;
+    } catch(_ePa1) { }
+    try {p = p.parent;} catch(_ePa2) { p = null; }
+  }
+  return false;
+}
+
+function _srh_hasHiddenOrLockedAncestor(item) {
+  var p = null;
+  try {p = item.parent;} catch(_ePaL0) { p = null; }
+  while(p) {
+    try {if(p.hidden) return true;} catch(_ePaL1) { }
+    try {if(p.locked) return true;} catch(_ePaL2) { }
+    try {
+      if(p.layer && (p.layer.locked || !p.layer.visible)) return true;
+    } catch(_ePaL3) { }
+    try {p = p.parent;} catch(_ePaL4) { p = null; }
+  }
+  return false;
+}
+
+function _srh_getClippingPathBounds(groupItem) {
+  if(!groupItem) return null;
+  try {
+    if(!(groupItem.typename === "GroupItem" && groupItem.clipped)) return null;
+  } catch(_eGp0) { return null; }
+  try {
+    var items = groupItem.pageItems;
+    for(var i = 0; i < items.length; i++) {
+      var pi = items[i];
+      try {
+        if(pi.typename === "PathItem" && pi.clipping) {
+          var b0 = null;
+          try {b0 = pi.visibleBounds;} catch(_eCp0) { }
+          if(!b0 || b0.length !== 4) {try {b0 = pi.geometricBounds;} catch(_eCp1) { } }
+          if(b0 && b0.length === 4) return b0;
+        }
+      } catch(_eCp2) { }
+    }
+  } catch(_eGp1) { }
+  return null;
+}
+
+function _srh_getBoundsExcludeClipped(item) {
+  if(!item) return null;
+  if(_srh_hasClippingAncestor(item)) return null;
+  var b = _srh_getClippingPathBounds(item);
+  if(!b || b.length !== 4) {
+    try {b = item.visibleBounds;} catch(_eB0) { }
+  }
+  if(!b || b.length !== 4) {
+    try {b = item.geometricBounds;} catch(_eB1) { }
+  }
+  return (b && b.length === 4) ? b : null;
+}
+
 function _srh_getDocumentArtworkBounds(doc) {
   var left = null, top = null, right = null, bottom = null;
 
@@ -46,18 +107,14 @@ function _srh_getDocumentArtworkBounds(doc) {
     try {if(it.hidden) continue;} catch(_e0) { }
     try {if(it.locked) continue;} catch(_e1) { }
     try {if(it.layer && (it.layer.locked || !it.layer.visible)) continue;} catch(_e2) { }
+    if(_srh_hasHiddenOrLockedAncestor(it)) continue;
 
     // Skip guides
     try {if(it.guides) continue;} catch(_e3) { }
     // Skip guide PathItems (some versions use .guides on PathItem)
     try {if(it.typename === 'PathItem' && it.guides) continue;} catch(_e4) { }
 
-    // Some items can throw on bounds if empty
-    var gb = null;
-    try {gb = it.geometricBounds;} catch(_e5) { }
-    if(!gb) {
-      try {gb = it.visibleBounds;} catch(_e6) { }
-    }
+    var gb = _srh_getBoundsExcludeClipped(it);
     if(!gb || gb.length !== 4) continue;
 
     var l = gb[0], t = gb[1], r = gb[2], b = gb[3];
@@ -91,7 +148,7 @@ function _srh_getScaleFactor() {
     var sfDoc = app.activeDocument.scaleFactor;
     var sfNum = Number(sfDoc);
     if(sfNum && sfNum > 0) scaleFactor = sfNum;
-  } catch(_eSf) { scaleFactor = 1.0; }
+  } catch(_eSf) {scaleFactor = 1.0;}
   _srh_scaleFactor = scaleFactor;
   _srh_isLargeArtboard = scaleFactor > 1.0001;
   return scaleFactor;
@@ -191,7 +248,7 @@ function _srh_cmykToHex(cmyk) {
   if(!cmyk) return "#000000";
   try {
     var rgb = app.convertSampleColor(ColorSpace.CMYK, [cmyk.c, cmyk.m, cmyk.y, cmyk.k], ColorSpace.RGB, ColorConvertPurpose.defaultpurpose);
-    function h(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0"+s : s; }
+    function h(v) {v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0" + s : s;}
     return "#" + h(rgb[0]) + h(rgb[1]) + h(rgb[2]);
   } catch(e) {
     // Manual CMYK -> RGB fallback
@@ -202,7 +259,7 @@ function _srh_cmykToHex(cmyk) {
     var r = 255 * (1 - c) * (1 - k);
     var g = 255 * (1 - m) * (1 - k);
     var b = 255 * (1 - y) * (1 - k);
-    function h2(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s2 = v.toString(16); return s2.length === 1 ? "0"+s2 : s2; }
+    function h2(v) {v = Math.max(0, Math.min(255, Math.round(v))); var s2 = v.toString(16); return s2.length === 1 ? "0" + s2 : s2;}
     return "#" + h2(r) + h2(g) + h2(b);
   }
   return "#000000";
@@ -210,7 +267,7 @@ function _srh_cmykToHex(cmyk) {
 
 function _srh_rgbToHex(rgb) {
   if(!rgb) return "#000000";
-  function h(v){ v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0"+s : s; }
+  function h(v) {v = Math.max(0, Math.min(255, Math.round(v))); var s = v.toString(16); return s.length === 1 ? "0" + s : s;}
   return "#" + h(rgb.r) + h(rgb.g) + h(rgb.b);
 }
 
@@ -317,7 +374,7 @@ function signarama_helper_getDocumentColors() {
     });
   }
 
-  _srh_walkPageItems(doc, function(it){
+  _srh_walkPageItems(doc, function(it) {
     if(!it) return;
     debug.totalItems++;
     if(debug.sampleTypes.length < 10) debug.sampleTypes.push(it.typename);
@@ -398,11 +455,11 @@ function signarama_helper_replaceColor(jsonStr) {
 
   // Convert hex to RGB
   function _hexToRgb(hex) {
-    var h = hex.replace('#','');
-    if(h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-    var r = parseInt(h.substring(0,2),16);
-    var g = parseInt(h.substring(2,4),16);
-    var b = parseInt(h.substring(4,6),16);
+    var h = hex.replace('#', '');
+    if(h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var r = parseInt(h.substring(0, 2), 16);
+    var g = parseInt(h.substring(2, 4), 16);
+    var b = parseInt(h.substring(4, 6), 16);
     var c = new RGBColor();
     c.red = r; c.green = g; c.blue = b;
     return c;
@@ -453,7 +510,7 @@ function signarama_helper_replaceColor(jsonStr) {
   }
 
   var updated = 0;
-  _srh_walkPageItems(doc, function(it){
+  _srh_walkPageItems(doc, function(it) {
     if(!it) return;
     if(it.typename === "RasterItem" || it.typename === "PlacedItem") return;
     if(it.locked || it.hidden) return;
@@ -545,13 +602,36 @@ function signarama_helper_createArtboardsFromSelection() {
   if(!doc.selection || doc.selection.length === 0) return 'No selection. Select one or more items.';
 
   var sel = doc.selection;
+  var seenClippedParents = [];
   var created = 0;
   for(var i = 0; i < sel.length; i++) {
     var it = sel[i];
     if(!it) continue;
-    var b = null;
-    try {b = it.visibleBounds;} catch(_e0) { }
-    if(!b || b.length !== 4) {try {b = it.geometricBounds;} catch(_e1) { } }
+
+    var p = null;
+    try {p = it.parent;} catch(_eP0) { p = null; }
+    while(p) {
+      var isClippedParent = false;
+      try {isClippedParent = (p.typename === "GroupItem" && p.clipped);} catch(_eP1) { isClippedParent = false; }
+      if(isClippedParent) {
+        it = p;
+        break;
+      }
+      try {p = p.parent;} catch(_eP2) { p = null; }
+    }
+
+    var isClippedGroup = false;
+    try {isClippedGroup = (it.typename === "GroupItem" && it.clipped);} catch(_eP3) { isClippedGroup = false; }
+    if(isClippedGroup) {
+      var seen = false;
+      for(var s = 0; s < seenClippedParents.length; s++) {
+        if(seenClippedParents[s] === it) {seen = true; break;}
+      }
+      if(seen) continue;
+      seenClippedParents.push(it);
+    }
+
+    var b = _srh_getBoundsExcludeClipped(it);
     if(!b || b.length !== 4) continue;
 
     // visibleBounds/geometricBounds: [L, T, R, B]
@@ -640,59 +720,330 @@ function signarama_helper_duplicateOutlineScaleA4() {
 
 /**
  * Expands selected items by bleed amounts (mm) on each side.
- * Args: topMm, leftMm, bottomMm, rightMm
+ * Args: topMm, leftMm, bottomMm, rightMm, excludeClippedContent, keepOriginal
  */
-function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm) {
+function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeClippedContent, keepOriginal) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
   if(!doc.selection || doc.selection.length === 0) return 'No selection. Select one or more items.';
+  var excludeClipped = (excludeClippedContent === undefined) ? true : !!excludeClippedContent;
+  var preserveOriginal = (keepOriginal === undefined) ? true : !!keepOriginal;
+  var _dbgLines = [];
 
-  var t = _srh_mm2pt(Number(topMm) || 0);
-  var l = _srh_mm2pt(Number(leftMm) || 0);
-  var b = _srh_mm2pt(Number(bottomMm) || 0);
-  var r = _srh_mm2pt(Number(rightMm) || 0);
+  function _dbg(msg) {
+    try {$.writeln('[SRH][applyBleed] ' + msg);} catch(_eDbg0) { }
+    try {_dbgLines.push('[SRH][applyBleed] ' + msg);} catch(_eDbgPush) { }
+  }
+  function _dbgBounds(b) {
+    if(!b || b.length !== 4) return 'null';
+    function r(n) {return Math.round(Number(n) * 1000) / 1000;}
+    return '[' + r(b[0]) + ', ' + r(b[1]) + ', ' + r(b[2]) + ', ' + r(b[3]) + ']';
+  }
+  function _dbgType(item) {
+    if(!item) return 'null';
+    try {return String(item.typename || 'unknown');} catch(_eDbg1) { return 'unknown'; }
+  }
+  function _dbgName(item) {
+    if(!item) return '';
+    try {return String(item.name || '');} catch(_eDbg2) { return ''; }
+  }
+
+  var t = _srh_mm2ptDoc(Number(topMm) || 0);
+  var l = _srh_mm2ptDoc(Number(leftMm) || 0);
+  var b = _srh_mm2ptDoc(Number(bottomMm) || 0);
+  var r = _srh_mm2ptDoc(Number(rightMm) || 0);
+  var sf = _srh_getScaleFactor();
+  _dbg('START sel=' + doc.selection.length + ', excludeClipped=' + excludeClipped + ', keepOriginal=' + preserveOriginal + ', scaleFactor=' + sf);
+  _dbg('bleed input mm T/L/B/R=' + [topMm, leftMm, bottomMm, rightMm].join('/') + ', doc-pt=' + [t, l, b, r].join('/'));
 
   var sel = doc.selection;
 
-  var bleedLayer = _srh_getOrCreateLayer(doc, "bleed");
-  var originalLayer = _srh_getOrCreateLayer(doc, "original");
-  var cutLayer = _srh_getLayerByName(doc, "cutline");
-  _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer);
+  var bleedLayer = null;
+  var originalLayer = null;
+  if(preserveOriginal) {
+    bleedLayer = _srh_getOrCreateLayer(doc, "bleed");
+    originalLayer = _srh_getOrCreateLayer(doc, "original");
+    var cutLayer = _srh_getLayerByName(doc, "cutline");
+    _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer);
+    try {bleedLayer.visible = true; bleedLayer.locked = false;} catch(_eBL0) { }
+  }
   var changed = 0;
+  var originalsMoved = 0;
+
+  function _getItemBounds(item) {
+    if(!item) return null;
+    var b = null;
+    try {b = item.visibleBounds;} catch(_eIb0) { }
+    if(!b || b.length !== 4) {try {b = item.geometricBounds;} catch(_eIb1) { } }
+    return (b && b.length === 4) ? b : null;
+  }
+
+  function _getClippingMaskItem(groupItem) {
+    if(!groupItem) return null;
+    try {
+      if(!(groupItem.typename === "GroupItem" && groupItem.clipped)) return null;
+    } catch(_eGi0) { return null; }
+    try {
+      var items = groupItem.pageItems;
+      for(var i = 0; i < items.length; i++) {
+        var pi = items[i];
+        try {
+          if((pi.typename === "PathItem" || pi.typename === "CompoundPathItem") && pi.clipping) return pi;
+        } catch(_eGi1) { }
+        try {
+          if(pi.typename === "CompoundPathItem" && pi.pathItems && pi.pathItems.length) {
+            for(var j = 0; j < pi.pathItems.length; j++) {
+              try {
+                if(pi.pathItems[j].clipping) return pi;
+              } catch(_eGi2) { }
+            }
+          }
+        } catch(_eGi3) { }
+      }
+    } catch(_eGi4) { }
+    return null;
+  }
+
+  function _getNearestClippedGroup(item) {
+    var p = item;
+    while(p) {
+      var isClippedGroup = false;
+      try {isClippedGroup = (p.typename === "GroupItem" && p.clipped);} catch(_eCg0) { isClippedGroup = false; }
+      if(isClippedGroup) return p;
+      try {p = p.parent;} catch(_eCg1) { p = null; }
+    }
+    return null;
+  }
+
+  function _scalePathPoints(pathItem, sx, sy, cx, cy) {
+    if(!pathItem || pathItem.typename !== "PathItem") return false;
+    try {
+      var pts = pathItem.pathPoints;
+      for(var i = 0; i < pts.length; i++) {
+        var p = pts[i];
+        var a = p.anchor;
+        var l = p.leftDirection;
+        var r = p.rightDirection;
+        p.anchor = [cx + (a[0] - cx) * sx, cy + (a[1] - cy) * sy];
+        p.leftDirection = [cx + (l[0] - cx) * sx, cy + (l[1] - cy) * sy];
+        p.rightDirection = [cx + (r[0] - cx) * sx, cy + (r[1] - cy) * sy];
+      }
+      return true;
+    } catch(_eSpp0) { return false; }
+  }
+
+  function _scaleMaskGeometry(maskItem, sx, sy, cx, cy) {
+    if(!maskItem) return false;
+    try {
+      if(maskItem.typename === "PathItem") {
+        return _scalePathPoints(maskItem, sx, sy, cx, cy);
+      }
+      if(maskItem.typename === "CompoundPathItem") {
+        var ok = false;
+        var pItems = maskItem.pathItems;
+        for(var i = 0; i < pItems.length; i++) {
+          ok = _scalePathPoints(pItems[i], sx, sy, cx, cy) || ok;
+        }
+        return ok;
+      }
+    } catch(_eSmg0) { }
+    return false;
+  }
+
+  var processedItems = [];
 
   for(var i = 0; i < sel.length; i++) {
     var it = sel[i];
-    if(!it) continue;
+    if(!it) {
+      _dbg('sel[' + i + '] skipped: null item');
+      continue;
+    }
+    _dbg('sel[' + i + '] item type=' + _dbgType(it) + ', name="' + _dbgName(it) + '"');
+
+    var sourceItem = it;
+    if(excludeClipped) {
+      var nearestClipped = _getNearestClippedGroup(it);
+      if(nearestClipped) {
+        sourceItem = nearestClipped;
+        _dbg('sel[' + i + '] nearest clipped parent found -> type=' + _dbgType(sourceItem) + ', name="' + _dbgName(sourceItem) + '"');
+      } else {
+        _dbg('sel[' + i + '] no clipped parent found');
+      }
+    }
+
+    var seen = false;
+    for(var si = 0; si < processedItems.length; si++) {
+      if(processedItems[si] === sourceItem) { seen = true; break; }
+    }
+    if(seen) {
+      _dbg('sel[' + i + '] skipped: source already processed');
+      continue;
+    }
+    processedItems.push(sourceItem);
+
+    it = sourceItem;
+    var workItem = it;
+    if(preserveOriginal) {
+      try {
+        it.move(originalLayer, ElementPlacement.PLACEATBEGINNING);
+        originalsMoved++;
+        _dbg('sel[' + i + '] moved source to original layer');
+      } catch(_eMvOrig0) {
+        _dbg('sel[' + i + '] FAILED move to original layer: ' + _eMvOrig0);
+        continue;
+      }
+      try {
+        workItem = it.duplicate(bleedLayer, ElementPlacement.PLACEATBEGINNING);
+        _dbg('sel[' + i + '] duplicated source to bleed layer');
+      } catch(_eDupBleed0) {
+        _dbg('sel[' + i + '] FAILED duplicate to bleed layer: ' + _eDupBleed0);
+        continue;
+      }
+    }
 
     var vb = null;
-    try {vb = it.visibleBounds;} catch(_e0) { }
-    if(!vb || vb.length !== 4) {try {vb = it.geometricBounds;} catch(_e1) { } }
-    if(!vb || vb.length !== 4) continue;
+    var target = workItem;
+    var clippingMask = null;
+    if(excludeClipped) {
+      clippingMask = _getClippingMaskItem(workItem);
+      if(clippingMask) {
+        target = clippingMask;
+        _dbg('sel[' + i + '] clipping mask target found: type=' + _dbgType(target) + ', name="' + _dbgName(target) + '"');
+      } else {
+        _dbg('sel[' + i + '] clipping mask target NOT found. Using workItem type=' + _dbgType(workItem));
+      }
+    }
+    vb = _getItemBounds(target);
+    _dbg('sel[' + i + '] target bounds before=' + _dbgBounds(vb));
+    if(!vb || vb.length !== 4) {
+      _dbg('sel[' + i + '] skipped: invalid target bounds');
+      continue;
+    }
+    var origW = vb[2] - vb[0];
+    var origH = vb[1] - vb[3];
+    var expectW = origW + l + r;
+    var expectH = origH + t + b;
+    _dbg('sel[' + i + '] size before w/h=' + origW + '/' + origH + ', expected after w/h=' + expectW + '/' + expectH);
 
-    var w = vb[2] - vb[0];
-    var h = vb[1] - vb[3];
-    if(w <= 0 || h <= 0) continue;
+    var prevStrokeW = null;
+    try {prevStrokeW = target.strokeWidth;} catch(_eSw0) { prevStrokeW = null; }
 
-    try {it.duplicate(originalLayer, ElementPlacement.PLACEATBEGINNING);} catch(_eDup) { }
+    var resized = false;
+    var targetType = "";
+    try {targetType = target.typename || "";} catch(_eTy0) { targetType = ""; }
+    if(excludeClipped && clippingMask && (targetType === "PathItem" || targetType === "CompoundPathItem")) {
+      // For clipped groups, explicitly extend mask bounds by bleed each side.
+      // This avoids scale/anchor quirks on large-document and grouped clipping cases.
+      var desiredBounds = [vb[0] - l, vb[1] + t, vb[2] + r, vb[3] - b];
+      _dbg('sel[' + i + '] applying clipping-mask bounds set to=' + _dbgBounds(desiredBounds));
+      var wMask = vb[2] - vb[0];
+      var hMask = vb[1] - vb[3];
+      if(wMask > 0 && hMask > 0) {
+        var sxMask = (wMask + l + r) / wMask;
+        var syMask = (hMask + t + b) / hMask;
+        var cxMask = (vb[0] + vb[2]) / 2;
+        var cyMask = (vb[1] + vb[3]) / 2;
+        _dbg('sel[' + i + '] clipping-mask point-scale sx/sy=' + sxMask + '/' + syMask + ', center=' + cxMask + '/' + cyMask);
+        if(_scaleMaskGeometry(target, sxMask, syMask, cxMask, cyMask)) {
+          resized = true;
+          _dbg('sel[' + i + '] clipping-mask point-scale OK');
+        } else {
+          _dbg('sel[' + i + '] clipping-mask point-scale FAILED; trying bounds assignment');
+        }
+      }
+      if(resized) {
+        var dxb = (r - l) / 2;
+        var dyb = (t - b) / 2;
+        try {target.translate(dxb, dyb);} catch(_eTrMask0) { }
+        _dbg('sel[' + i + '] clipping-mask translate dx/dy=' + dxb + '/' + dyb);
+      }
+    }
+    if(excludeClipped && clippingMask && !resized && (targetType === "PathItem" || targetType === "CompoundPathItem")) {
+      try {
+        target.geometricBounds = desiredBounds;
+        resized = true;
+        _dbg('sel[' + i + '] geometricBounds set OK');
+      } catch(_eGb0) { resized = false; }
+      if(!resized) {
+        _dbg('sel[' + i + '] geometricBounds set FAILED: ' + _eGb0);
+        try {
+          target.visibleBounds = desiredBounds;
+          resized = true;
+          _dbg('sel[' + i + '] visibleBounds set OK');
+        } catch(_eGb1) { resized = false; }
+        if(!resized) _dbg('sel[' + i + '] visibleBounds set FAILED: ' + _eGb1);
+      }
+    }
 
-    var newW = w + l + r;
-    var newH = h + t + b;
-    if(newW <= 0 || newH <= 0) continue;
+    if(!resized) {
+      var w = vb[2] - vb[0];
+      var h = vb[1] - vb[3];
+      if(w <= 0 || h <= 0) {
+        _dbg('sel[' + i + '] skipped: non-positive size w=' + w + ', h=' + h);
+        continue;
+      }
 
-    var sx = (newW / w) * 100;
-    var sy = (newH / h) * 100;
+      var newW = w + l + r;
+      var newH = h + t + b;
+      if(newW <= 0 || newH <= 0) {
+        _dbg('sel[' + i + '] skipped: non-positive new size newW=' + newW + ', newH=' + newH);
+        continue;
+      }
 
-    try {it.resize(sx, sy, true, true, true, true, true, Transformation.CENTER);} catch(_e2) {continue;}
+      var sx = (newW / w) * 100;
+      var sy = (newH / h) * 100;
+      _dbg('sel[' + i + '] fallback resize sx/sy=' + sx + '/' + sy);
+      try {
+        target.resize(sx, sy, true, true, true, true, 100, Transformation.CENTER);
+        resized = true;
+        _dbg('sel[' + i + '] resize with lineScale=100 OK');
+      } catch(_e2a) {
+        _dbg('sel[' + i + '] resize with lineScale=100 FAILED: ' + _e2a);
+        try {
+          // Fallback for object types/builds that reject numeric line-width scaling param.
+          target.resize(sx, sy, true, true, true, true, true, Transformation.CENTER);
+          resized = true;
+          _dbg('sel[' + i + '] resize fallback boolean lineScale OK');
+        } catch(_e2b) { resized = false; }
+        if(!resized) _dbg('sel[' + i + '] resize fallback boolean lineScale FAILED: ' + _e2b);
+      }
+      if(!resized) {
+        _dbg('sel[' + i + '] skipped: unable to transform target');
+        continue;
+      }
 
-    // Shift for asymmetric bleeds
-    var dx = (r - l) / 2;
-    var dy = (t - b) / 2;
-    try {it.translate(dx, dy);} catch(_e3) { }
+      // Shift for asymmetric bleeds
+      var dx = (r - l) / 2;
+      var dy = (t - b) / 2;
+      try {target.translate(dx, dy);} catch(_e3) { }
+      _dbg('sel[' + i + '] translate dx/dy=' + dx + '/' + dy);
+    }
+    try {if(prevStrokeW !== null && isFinite(prevStrokeW)) target.strokeWidth = prevStrokeW;} catch(_eSw1) { }
+    var vbAfter = _getItemBounds(target);
+    _dbg('sel[' + i + '] target bounds after=' + _dbgBounds(vbAfter));
+    if(vbAfter && vbAfter.length === 4) {
+      var afterW = vbAfter[2] - vbAfter[0];
+      var afterH = vbAfter[1] - vbAfter[3];
+      _dbg('sel[' + i + '] size after w/h=' + afterW + '/' + afterH + ', delta w/h=' + (afterW - origW) + '/' + (afterH - origH));
+    }
 
     changed++;
+    _dbg('sel[' + i + '] changed OK');
   }
 
-  return changed ? ('Applied bleed to ' + changed + ' item(s).') : 'No items updated (could not read bounds).';
+  _dbg('END changed=' + changed + ', originalsMoved=' + originalsMoved);
+  var dbgText = '';
+  try {dbgText = _dbgLines.join('\n');} catch(_eDbgJoin) { dbgText = ''; }
+  function _withDbg(msg) {
+    if(!dbgText) return msg;
+    return msg + '\n' + dbgText;
+  }
+
+  if(!changed) return _withDbg('No items updated (could not read bounds).');
+  if(preserveOriginal) {
+    return _withDbg('Applied bleed to ' + changed + ' item(s) on bleed layer. Originals moved: ' + originalsMoved + '.');
+  }
+  return _withDbg('Applied bleed to ' + changed + ' item(s).');
 }
 
 /**
@@ -704,7 +1055,7 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm) {
  * Apply Offset Path bleed to selected items (paths/letters/shapes).
  * - Moves target items into layer "bleed"
  * - Optionally duplicates original into top layer "cutline" with no fill and 'Cut Contour' spot stroke
- * Args: JSON string {"offsetMm":number, "createCutline":boolean}
+ * Args: JSON string {"offsetMm":number, "createCutline":boolean, "outlineText":boolean, "outlineStroke":boolean, "autoWeld":boolean}
  */
 function signarama_helper_applyPathBleed(jsonStr) {
   var doc = app.activeDocument;
@@ -715,8 +1066,11 @@ function signarama_helper_applyPathBleed(jsonStr) {
   try {args = JSON.parse(String(jsonStr));} catch(e) {args = {};}
   var offsetMm = Number(args.offsetMm || 0);
   var createCutline = !!args.createCutline;
+  var outlineText = (typeof args.outlineText === 'undefined') ? true : !!args.outlineText;
+  var outlineStroke = (typeof args.outlineStroke === 'undefined') ? true : !!args.outlineStroke;
+  var autoWeld = (typeof args.autoWeld === 'undefined') ? true : !!args.autoWeld;
 
-  var offsetPt = _srh_mm2pt(offsetMm);
+  var offsetPt = _srh_mm2ptDoc(offsetMm);
   if(!(offsetPt > 0)) {return "Offset amount must be > 0 mm.";}
 
   function _getOrCreateCutContourSpot() {
@@ -749,145 +1103,164 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return sc;
   }
 
-  function _setCutlineStyleOnItem(it) {
-    // Apply to all path items within groups/compounds.
+  function _setCutlineStyleOnItem(it, opts) {
+    opts = opts || {};
+    var doOutlineText = (typeof opts.outlineText === 'undefined') ? true : !!opts.outlineText;
+    var doOutlineStroke = (typeof opts.outlineStroke === 'undefined') ? false : !!opts.outlineStroke;
     try {
       if(it.typename === "PathItem") {
-        it.filled = false;
-        it.stroked = true;
+        if(doOutlineStroke && it.stroked) {
+          try {
+            var prevSel0 = doc.selection;
+            doc.selection = null;
+            it.selected = true;
+            app.executeMenuCommand("OffsetPath v22");
+            doc.selection = prevSel0;
+          } catch(_eOlStroke0) { }
+        }
+        try {it.filled = false;} catch(_ePf0) { }
+        try {it.stroked = true;} catch(_ePs0) { }
+        try {it.strokeWidth = _srh_pxStrokeDoc(1);} catch(_eSw0) { }
         var sc = _getCutContourSpotColor();
         if(sc) {
-          it.strokeColor = sc;
+          try {it.strokeColor = sc;} catch(_eSc0) { }
         } else {
-          var c = new RGBColor(); c.red = 255; c.green = 0; c.blue = 255;
-          it.strokeColor = c;
+          try {
+            var c = new RGBColor();
+            c.red = 255; c.green = 0; c.blue = 255;
+            it.strokeColor = c;
+          } catch(_eRgb0) { }
         }
       } else if(it.typename === "CompoundPathItem") {
-        for(var i = 0; i < it.pathItems.length; i++) {_setCutlineStyleOnItem(it.pathItems[i]);}
+        for(var i = 0; i < it.pathItems.length; i++) {_setCutlineStyleOnItem(it.pathItems[i], opts);}
       } else if(it.typename === "GroupItem") {
-        for(var j = 0; j < it.pageItems.length; j++) {_setCutlineStyleOnItem(it.pageItems[j]);}
+        var items = [];
+        for(var j = 0; j < it.pageItems.length; j++) items.push(it.pageItems[j]);
+        for(var k = 0; k < items.length; k++) _setCutlineStyleOnItem(items[k], opts);
       } else if(it.typename === "TextFrame") {
-        // Convert then style
-        var outlined = it.createOutline();
-        it.remove();
-        _setCutlineStyleOnItem(outlined);
+        if(doOutlineText) {
+          try {
+            var outlined = it.createOutline();
+            try {it.remove();} catch(_eTrm0) { }
+            _setCutlineStyleOnItem(outlined, opts);
+          } catch(_eTxtOutline0) { }
+        } else {
+          try {it.filled = false;} catch(_eTf0) { }
+          try {it.stroked = true;} catch(_eTs0) { }
+          try {it.strokeWidth = _srh_pxStrokeDoc(1);} catch(_eTw0) { }
+          var tsc = _getCutContourSpotColor();
+          if(tsc) {
+            try {it.strokeColor = tsc;} catch(_eTsc0) { }
+          }
+        }
       } else {
         // Ignore unsupported
       }
     } catch(e) { }
   }
 
-  function _offsetOnePath(path) {
-    // Returns a new PathItem (offset result) if supported.
-    if(!path || path.typename !== "PathItem") return null;
-
-    // Preserve appearance
-    var wasFilled = path.filled;
-    var wasStroked = path.stroked;
-    var fillCol = path.fillColor;
-    var strokeCol = path.strokeColor;
-    var sw = path.strokeWidth;
-
-    var out = null;
-
-    // Preferred: PathItem.offsetPath (not present in all Illustrator builds)
-    if(typeof path.offsetPath === "function") {
-      try {
-        out = path.offsetPath(offsetPt, JoinType.MITERENDJOIN, 180);
-      } catch(e1) {
-        // Some versions use different signature.
-        try {out = path.offsetPath(offsetPt);} catch(e2) { }
+  function _runOnSelection(items, fn) {
+    if(!items) return false;
+    var list = items.length ? items : [items];
+    if(!list.length) return false;
+    var prevSel = null;
+    try {prevSel = doc.selection;} catch(_eS0) {prevSel = null;}
+    try {doc.selection = null;} catch(_eS1) { }
+    try {
+      for(var i = 0; i < list.length; i++) {
+        try {list[i].selected = true;} catch(_eSelOne) { }
       }
+      fn();
+      return true;
+    } catch(_eRun) {
+      return false;
+    } finally {
+      try {doc.selection = null;} catch(_eS2) { }
+      try {if(prevSel) doc.selection = prevSel;} catch(_eS3) { }
     }
-
-    // Fallback: apply the native "Adobe Offset Path" live effect and expand.
-    if(!out) {
-      try {
-        var dup = path.duplicate();
-        // Keep style on the duplicate; apply effect to change geometry.
-        // jntp: 0=miter, 1=round, 2=bevel. mlim: miter limit.
-        var ofst = Number(offsetPt);
-        // Illustrator is picky about the effect Dict string across versions, so try a couple of common encodings.
-        var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + ofst + ' I jntp 0 R mlim 180"/></LiveEffect>';
-        var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + ofst + ' I jntp 0"/></LiveEffect>';
-        try {
-          dup.applyEffect(fx1);
-        } catch(_eFx1) {
-          dup.applyEffect(fx2);
-        }
-
-        // Expand appearance so the offset becomes real paths.
-        // Different versions expose different APIs; try both.
-        try {
-          dup.expandAppearance();
-        } catch(_eExp1) {
-          try {
-            var prevSel = doc.selection;
-            doc.selection = null;
-            dup.selected = true;
-            app.executeMenuCommand('expandStyle');
-            app.executeMenuCommand('expand');
-            doc.selection = null;
-            // restore selection best-effort
-            doc.selection = prevSel;
-          } catch(_eExp2) { }
-        }
-
-        // After expanding, the duplicate may become a group/compound.
-        // We return the top-level expanded item (dup) and remove the original.
-        out = dup;
-      } catch(eFx) {
-        out = null;
-      }
-    }
-
-    if(out) {
-      try {
-        // Restore appearance if the operation stripped it.
-        out.filled = wasFilled;
-        if(wasFilled) out.fillColor = fillCol;
-        out.stroked = wasStroked;
-        if(wasStroked) {out.strokeColor = strokeCol; out.strokeWidth = sw;}
-      } catch(e3) { }
-      try {path.remove();} catch(e4) { }
-      return out;
-    }
-    return null;
   }
 
-  function _offsetItem(it) {
-    // Offsets paths inside item; returns count of paths offset.
+  function _expandSelection() {
+    try {app.executeMenuCommand('expandStyle');} catch(_eEx1) { }
+    try {app.executeMenuCommand('expand');} catch(_eEx2) { }
+  }
+
+  function _outlineTextInContainer(container) {
+    if(!container) return;
+    try {
+      var tfs = container.textFrames;
+      for(var i = tfs.length - 1; i >= 0; i--) {
+        try {tfs[i].createOutline();} catch(_eTxt0) { }
+      }
+    } catch(_eTxt1) { }
+  }
+
+  function _outlineStrokeInContainer(container) {
+    if(!container) return;
+    _runOnSelection(container, function() {
+      try {app.executeMenuCommand("OffsetPath v22");} catch(_eOs0) { }
+      _expandSelection();
+    });
+  }
+
+  function _applyOffsetToContainer(container, ofst) {
+    if(!container) return false;
+    var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(ofst) + ' I jntp 0 R mlim 180"/></LiveEffect>';
+    var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(ofst) + ' I jntp 0"/></LiveEffect>';
+    var applied = false;
+    try {
+      container.applyEffect(fx1);
+      applied = true;
+    } catch(_eFxA) {
+      try {
+        container.applyEffect(fx2);
+        applied = true;
+      } catch(_eFxB) { }
+    }
+    if(!applied) {
+      var kids = [];
+      try {for(var i = 0; i < container.pageItems.length; i++) kids.push(container.pageItems[i]);} catch(_eKid0) { }
+      for(var k = 0; k < kids.length; k++) {
+        var it = kids[k];
+        try {
+          it.applyEffect(fx1);
+          applied = true;
+        } catch(_eFxK1) {
+          try {
+            it.applyEffect(fx2);
+            applied = true;
+          } catch(_eFxK2) { }
+        }
+      }
+    }
+    if(applied) {
+      _runOnSelection(container, function() {_expandSelection();});
+    }
+    return applied;
+  }
+
+  function _countPathLikeItems(container) {
+    if(!container) return 0;
     var count = 0;
-    if(!it) return 0;
+    try {count += (container.pathItems ? container.pathItems.length : 0);} catch(_eC0) { }
+    try {
+      var compounds = container.compoundPathItems;
+      if(compounds && compounds.length) {
+        for(var i = 0; i < compounds.length; i++) {
+          try {count += compounds[i].pathItems.length;} catch(_eC1) {count++;}
+        }
+      }
+    } catch(_eC2) { }
+    return count;
+  }
 
-    if(it.typename === "TextFrame") {
-      var outlined = it.createOutline();
-      it.remove();
-      return _offsetItem(outlined);
-    }
-
-    if(it.typename === "PathItem") {
-      return _offsetOnePath(it) ? 1 : 0;
-    }
-
-    if(it.typename === "CompoundPathItem") {
-      // Offset each child path; compound will be destroyed and replaced by offset paths
-      var paths = [];
-      for(var i = 0; i < it.pathItems.length; i++) {paths.push(it.pathItems[i]);}
-      for(var j = 0; j < paths.length; j++) {if(_offsetOnePath(paths[j])) count++;}
-      return count;
-    }
-
-    if(it.typename === "GroupItem") {
-      // Offset all contained pageItems
-      var items = [];
-      for(var k = 0; k < it.pageItems.length; k++) {items.push(it.pageItems[k]);}
-      for(var m = 0; m < items.length; m++) {count += _offsetItem(items[m]);}
-      return count;
-    }
-
-    // Unsupported types ignored
-    return 0;
+  function _uniteContainer(container) {
+    if(!container) return false;
+    var ok = _runOnSelection(container, function() {
+      try {app.executeMenuCommand('Live Pathfinder Add');} catch(_eU0) { }
+      _expandSelection();
+    });
+    return !!ok;
   }
 
   var bleedLayer = _srh_getOrCreateLayer(doc, "bleed");
@@ -899,35 +1272,95 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var sel = [];
   for(var s = 0; s < doc.selection.length; s++) {sel.push(doc.selection[s]);}
 
-  var cutCount = 0;
-  var offsetCount = 0;
-
-  for(var n = 0; n < sel.length; n++) {
-    var item = sel[n];
-    if(!item || item.locked || item.hidden) continue;
-
-    // Original: duplicate before any changes
-    try {item.duplicate(originalLayer, ElementPlacement.PLACEATBEGINNING);} catch(eDupOrig) { }
-
-
-    // Cutline: duplicate original before bleed changes
-    if(createCutline && cutLayer) {
-      try {
-        var dup = item.duplicate(cutLayer, ElementPlacement.PLACEATBEGINNING);
-        _setCutlineStyleOnItem(dup);
-        cutCount++;
-      } catch(eDup) { }
-    }
-
-    // Move target into bleed layer and offset it
-    try {item.move(bleedLayer, ElementPlacement.PLACEATBEGINNING);} catch(eMv) { }
-    offsetCount += _offsetItem(item);
+  var bleedGroup = null;
+  var originalGroup = null;
+  var cutGroup = null;
+  try {
+    bleedGroup = bleedLayer.groupItems.add();
+    bleedGroup.name = 'SRH_BLEED_WORK';
+  } catch(_eG0) { }
+  try {
+    originalGroup = originalLayer.groupItems.add();
+    originalGroup.name = 'SRH_ORIGINAL_SNAPSHOT';
+  } catch(_eG1) {originalGroup = originalLayer;}
+  if(createCutline && cutLayer) {
+    try {
+      cutGroup = cutLayer.groupItems.add();
+      cutGroup.name = 'SRH_CUTLINE_WORK';
+    } catch(_eG2) {cutGroup = cutLayer;}
   }
 
-  // Refresh selection: set to bleed layer items if possible
-  try {doc.selection = null;} catch(eSel) { }
+  var originalCount = 0;
+  var cutCount = 0;
+  var movedCount = 0;
+  var originalItems = [];
 
-  return "Path bleed applied. Offset paths: " + offsetCount + (createCutline ? (", cutlines created: " + cutCount) : "");
+  // First operation: move selected source artwork to the original layer/group.
+  for(var n0 = 0; n0 < sel.length; n0++) {
+    var src = sel[n0];
+    if(!src || src.locked || src.hidden) continue;
+    try {
+      if(originalGroup) {
+        src.move(originalGroup, ElementPlacement.PLACEATEND);
+      } else {
+        src.move(originalLayer, ElementPlacement.PLACEATBEGINNING);
+      }
+      originalCount++;
+      originalItems.push(src);
+    } catch(_eMoveOrig0) { }
+  }
+
+  if(!originalCount) {
+    try {doc.selection = null;} catch(_eSelOrig0) { }
+    return "No eligible items to move into original layer.";
+  }
+
+  // Second pass: duplicate from originals into cutline/bleed work layers.
+  for(var n = 0; n < originalItems.length; n++) {
+    var item = originalItems[n];
+    if(!item) continue;
+
+    if(createCutline && cutGroup) {
+      try {item.duplicate(cutGroup, ElementPlacement.PLACEATEND); cutCount++;} catch(_eDupCut) { }
+    }
+
+    if(bleedGroup) {
+      try {item.duplicate(bleedGroup, ElementPlacement.PLACEATEND); movedCount++;} catch(_eDupBleed0) { }
+    } else {
+      try {item.duplicate(bleedLayer, ElementPlacement.PLACEATBEGINNING); movedCount++;} catch(_eDupBleed1) { }
+    }
+  }
+
+  if(!movedCount) {
+    try {doc.selection = null;} catch(_eSel0) { }
+    return "No eligible items to offset.";
+  }
+
+  // Hard isolate processing from originals: never restore commands onto original selection.
+  try {doc.selection = null;} catch(_eSelIso0) { }
+
+  if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
+  if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
+  var offsetApplied = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+
+  if(createCutline && cutGroup) {
+    if(outlineText) _outlineTextInContainer(cutGroup);
+    if(outlineStroke) _outlineStrokeInContainer(cutGroup);
+    _setCutlineStyleOnItem(cutGroup, {outlineText: outlineText, outlineStroke: false});
+    if(autoWeld) {
+      _uniteContainer(cutGroup);
+      // Re-apply style to welded result in cutline container only (never selection-based).
+      _setCutlineStyleOnItem(cutGroup, {outlineText: false, outlineStroke: false});
+    }
+  }
+
+  var offsetCount = _countPathLikeItems(bleedGroup || bleedLayer);
+  try {doc.selection = null;} catch(_eSel1) { }
+
+  var msg = "Path bleed applied (grouped). Originals: " + originalCount + ", targets: " + movedCount + ", bleed paths: " + offsetCount;
+  if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
+  if(!offsetApplied) msg += ". Note: Offset effect fallback was limited on this selection.";
+  return msg;
 }
 
 
@@ -1082,8 +1515,16 @@ function signarama_helper_setAllFillsStrokes() {
 
 /* ---------------- Dimensions (Atlas) ---------------- */
 function _dim_mm2pt(mm) {return mm * 72.0 / 25.4;}
-function _dim_mm2ptDoc(mm, scaleFactor) {return _dim_mm2pt(mm) / (scaleFactor || 1.0);}
-function _dim_ptDoc(pt, scaleFactor) {return (pt || 0) / (scaleFactor || 1.0);}
+function _dim_mm2ptDoc(mm, scaleFactor) {
+  var sf = Number(scaleFactor);
+  if(!(sf > 0)) sf = _srh_getScaleFactor();
+  return _dim_mm2pt(mm) / sf;
+}
+function _dim_ptDoc(pt, scaleFactor) {
+  var sf = Number(scaleFactor);
+  if(!(sf > 0)) sf = _srh_getScaleFactor();
+  return (pt || 0) / sf;
+}
 function _dim_pt2mm(pt) {return pt * 25.4 / 72.0;}
 function _dim_fmtMm(pt, decimals) {
   var mm = _dim_pt2mm(Math.abs(pt));
@@ -1148,7 +1589,7 @@ function _dim_makeLine(group, x1, y1, x2, y2, strokePt, opts) {
         lc = _dim_parseHexColorToRGBColor(opts.lineColor);
       }
     }
-  } catch(_eLc) { lc = null; }
+  } catch(_eLc) {lc = null;}
   if(!lc) lc = _dim_parseHexColorToRGBColor('#000000');
   try {p.strokeColor = lc;} catch(_eSc) { }
   p.filled = false;
@@ -1318,7 +1759,7 @@ function _dim_getMetricsFor(item, measureClippedContent) {
 
           var cb = null;
           try {cb = child.visibleBounds;} catch(_eC0) { }
-          if(!cb || cb.length !== 4) {try {cb = child.geometricBounds;} catch(_eC1) { cb = null; } }
+          if(!cb || cb.length !== 4) {try {cb = child.geometricBounds;} catch(_eC1) {cb = null;} }
           if(!cb || cb.length !== 4) continue;
 
           if(!vb) {
@@ -1542,7 +1983,7 @@ function _dim_run(opts) {
     if(!lineColor && opts.lineColor && typeof opts.lineColor === 'object' && typeof opts.lineColor.red !== 'undefined') {
       lineColor = opts.lineColor;
     }
-  } catch(_eLc2) { lineColor = null; }
+  } catch(_eLc2) {lineColor = null;}
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var includeArrowhead = !!opts.includeArrowhead;
   var arrowheadSizePt = _dim_ptDoc(opts.arrowheadSizePt || 0, scaleFactor);
@@ -1800,7 +2241,7 @@ function _srh_generateLightboxId() {
 function _srh_getLightboxTag(item) {
   if(!item) return null;
   var note = '';
-  try {note = String(item.note || '');} catch(_eN) { note = ''; }
+  try {note = String(item.note || '');} catch(_eN) {note = '';}
   if(note) {
     var noteParts = note.split('|');
     if(noteParts.length >= 3 && noteParts[0] === 'SRH_LIGHTBOX') {
@@ -1808,7 +2249,7 @@ function _srh_getLightboxTag(item) {
     }
   }
   var nm = '';
-  try {nm = String(item.name || '');} catch(_eNm) { nm = ''; }
+  try {nm = String(item.name || '');} catch(_eNm) {nm = '';}
   if(!nm) return null;
   var m = /^SRH_LIGHTBOX_(OUTER|SUPPORT)_(.+)$/.exec(nm);
   if(m && m.length >= 3) {
@@ -1835,7 +2276,7 @@ function _srh_getItemBounds(item) {
   var b = null;
   try {b = item.visibleBounds;} catch(_e0) { }
   if(!b || b.length !== 4) {
-    try {b = item.geometricBounds;} catch(_e1) { b = null; }
+    try {b = item.geometricBounds;} catch(_e1) {b = null;}
   }
   if(!b || b.length !== 4) return null;
   return {left: b[0], top: b[1], right: b[2], bottom: b[3]};
@@ -1854,7 +2295,7 @@ function _srh_buildLightboxSignature(bounds, supportCenters) {
 function _srh_findAllLightboxData(doc) {
   if(!doc) return null;
   var frameLayer = null;
-  try {frameLayer = doc.layers.getByName('lightbox frame');} catch(_e0) { return null; }
+  try {frameLayer = doc.layers.getByName('lightbox frame');} catch(_e0) {return null;}
   if(!frameLayer) return null;
 
   var outerCandidates = [];
@@ -1864,7 +2305,7 @@ function _srh_findAllLightboxData(doc) {
     var it = items[i];
     if(!it) continue;
     var nm = '';
-    try {nm = String(it.name || '');} catch(_eNm) { nm = ''; }
+    try {nm = String(it.name || '');} catch(_eNm) {nm = '';}
     var tag = _srh_getLightboxTag(it);
     if(tag && tag.role === 'outer') outerCandidates.push(it);
     else if(tag && tag.role === 'support') supportCandidates.push(it);
@@ -1942,7 +2383,7 @@ function _srh_tagLightboxMeasureGroup(groupItem, lightboxId) {
 function _srh_clearTaggedLightboxMeasures(doc, lightboxId) {
   if(!doc) return 0;
   var lyr = null;
-  try {lyr = doc.layers.getByName('Dimensions');} catch(_e0) { return 0; }
+  try {lyr = doc.layers.getByName('Dimensions');} catch(_e0) {return 0;}
   if(!lyr) return 0;
 
   var id = String(lightboxId || '');
@@ -1953,8 +2394,8 @@ function _srh_clearTaggedLightboxMeasures(doc, lightboxId) {
     var isTagged = false;
     var note = '';
     var name = '';
-    try {note = String(g.note || '');} catch(_eN0) { note = ''; }
-    try {name = String(g.name || '');} catch(_eN1) { name = ''; }
+    try {note = String(g.note || '');} catch(_eN0) {note = '';}
+    try {name = String(g.name || '');} catch(_eN1) {name = '';}
     if(id) {
       if(note === (_SRH_LIGHTBOX_MEASURE_NOTE + '|' + id)) isTagged = true;
       if(!isTagged && name === (_SRH_LIGHTBOX_MEASURE_NAME + '_' + id)) isTagged = true;
@@ -2461,7 +2902,7 @@ function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts, lightboxId)
   try {
     lineColor = _dim_hexToRGB(opts.lineColor);
     if(!lineColor) lineColor = _dim_parseHexColorToRGBColor(opts.lineColor);
-  } catch(_eLc2) { lineColor = null; }
+  } catch(_eLc2) {lineColor = null;}
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var textColor = opts.textColor;
 

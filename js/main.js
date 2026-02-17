@@ -150,7 +150,9 @@
         const r = num($('bleedRight').value);
         const b = num($('bleedBottom').value);
         const l = num($('bleedLeft').value);
-        callJSX('signarama_helper_applyBleed(' + [t, l, b, r].join(',') + ')', res => res && log(res));
+        const keepOriginal = !!(($('bleedKeepOriginal') && $('bleedKeepOriginal').checked));
+        const excludeClipped = !!(($('bleedExcludeClippedContent') && $('bleedExcludeClippedContent').checked));
+        callJSX('signarama_helper_applyBleed(' + [t, l, b, r, excludeClipped, keepOriginal].join(',') + ')', res => res && log(res));
       };
     }
 
@@ -160,7 +162,16 @@
       applyPathBleed.onclick = () => {
         const amt = num(($('pathBleedAmount') && $('pathBleedAmount').value) || 0);
         const cut = !!(($('pathBleedCutline') && $('pathBleedCutline').checked));
-        const payload = JSON.stringify({offsetMm: amt, createCutline: cut});
+        const outlineText = !!(($('pathBleedOutlineText') && $('pathBleedOutlineText').checked));
+        const outlineStroke = !!(($('pathBleedOutlineStroke') && $('pathBleedOutlineStroke').checked));
+        const autoWeld = !!(($('pathBleedAutoWeld') && $('pathBleedAutoWeld').checked));
+        const payload = JSON.stringify({
+          offsetMm: amt,
+          createCutline: cut,
+          outlineText: outlineText,
+          outlineStroke: outlineStroke,
+          autoWeld: autoWeld
+        });
         const safe = payload.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         callJSX("signarama_helper_applyPathBleed('" + safe + "')", res => res && log(res));
       };
@@ -187,41 +198,26 @@
 
   function wireLightbox() {
     function refreshArtboardScaleNotice() {
-      callJSX('signarama_helper_getArtboardScaleState()', raw => {
-        let state = null;
-        const rawText = (raw == null) ? '' : String(raw).trim();
-        try {
-          state = JSON.parse(rawText || '{}');
-        } catch(_eParse0) {
-          try {state = JSON.parse(rawText.replace(/^\"|\"$/g, '').replace(/\\"/g, '\"'));} catch(_eParse1) {state = null;}
-        }
-        if((!state || typeof state !== 'object') && rawText) {
-          const largeMatch = /"isLargeArtboard"\s*:\s*(true|false)/i.exec(rawText);
-          const sfMatch = /"scaleFactor"\s*:\s*([0-9.]+)/i.exec(rawText);
-          if(largeMatch || sfMatch) {
-            state = {
-              isLargeArtboard: largeMatch ? largeMatch[1].toLowerCase() === 'true' : false,
-              scaleFactor: sfMatch ? Number(sfMatch[1]) : 1
-            };
-          }
-        }
-        const large = !!(state && state.isLargeArtboard);
+      callJSX('app.documents.length ? app.activeDocument.scaleFactor : 1', sfRawDoc => {
+        const sf = Number(sfRawDoc);
+        const sfText = isFinite(sf) && sf > 0 ? sf : 1;
+        const invScale = 1 / sfText;
+        const large = sfText >= 10;
         isLargeArtboard = large;
         if(typeof window !== 'undefined') window.isLargeArtboard = large;
         const notice = $('lightboxArtboardScaleNotice');
         const icon = $('lightboxArtboardScaleIcon');
         const text = $('lightboxArtboardScaleText');
         if(!notice || !icon || !text) return;
-        const sfText = isFinite(sf) && sf > 0 ? sf : 1;
-        log('doc.scaleFactor: ' + sfText);
+        log('app.activeDocument.scaleFactor: ' + sfText);
         if(large) {
           notice.classList.add('large');
-          icon.textContent = '⚠️';
-          text.textContent = 'Large artboard detected (1:' + sfText + '). Lightbox + LED sizes will be adjusted automatically.';
+          icon.textContent = '!';
+          text.textContent = 'Large artboard detected (scaleFactor=' + sfText + '). Dimension/lightbox geometry uses x' + invScale.toFixed(4) + ' (1/' + sfText + ').';
         } else {
           notice.classList.remove('large');
-          icon.textContent = '✅';
-          text.textContent = 'Standard artboard scale detected (1:1).';
+          icon.textContent = 'OK';
+          text.textContent = 'Standard artboard scale detected (scaleFactor=1). Dimension/lightbox geometry uses x1.0000.';
         }
       });
     }
@@ -496,6 +492,62 @@
         if(!data || !Array.isArray(data)) return;
         if(countEl) countEl.textContent = 'Document colours: ' + data.length + (debug ? ' (items: ' + (debug.totalItems || 0) + ', scanned: ' + (debug.scanned || 0) + ', path: ' + (debug.pathItems || 0) + ', text: ' + (debug.textFrames || 0) + ', fallback: ' + (debug.fallbackUsed ? 'yes' : 'no') + ')' : '');
 
+        function round1(v) {
+          return Math.round(v * 10) / 10;
+        }
+        function clamp(v, min, max) {
+          return Math.max(min, Math.min(max, v));
+        }
+        function hexToRgb(hex) {
+          const s0 = String(hex || '').trim().replace('#', '');
+          const s = s0.length === 3 ? s0.split('').map(ch => ch + ch).join('') : s0;
+          if (s.length !== 6) return null;
+          const r = parseInt(s.slice(0, 2), 16);
+          const g = parseInt(s.slice(2, 4), 16);
+          const b = parseInt(s.slice(4, 6), 16);
+          if (![r, g, b].every(v => isFinite(v))) return null;
+          return {r, g, b};
+        }
+        function rgbToCmykValues(r, g, b) {
+          const rn = clamp(num(r), 0, 255) / 255;
+          const gn = clamp(num(g), 0, 255) / 255;
+          const bn = clamp(num(b), 0, 255) / 255;
+          const k = 1 - Math.max(rn, gn, bn);
+          if (k >= 0.9999) return {c: 0, m: 0, y: 0, k: 100};
+          const d = 1 - k;
+          return {
+            c: ((1 - rn - k) / d) * 100,
+            m: ((1 - gn - k) / d) * 100,
+            y: ((1 - bn - k) / d) * 100,
+            k: k * 100
+          };
+        }
+        function getDisplayCmyk(entry) {
+          const c = Number(entry.c);
+          const m = Number(entry.m);
+          const y = Number(entry.y);
+          const k = Number(entry.k);
+          if ([c, m, y, k].every(v => isFinite(v))) {
+            return {c, m, y, k};
+          }
+          const rgb = hexToRgb(entry.hex);
+          if (rgb) return rgbToCmykValues(rgb.r, rgb.g, rgb.b);
+          return rgbToCmykValues(entry.r || 0, entry.g || 0, entry.b || 0);
+        }
+        function isNearRichBlack(cmyk, tolerance) {
+          const tol = isFinite(tolerance) ? tolerance : 8;
+          return Math.abs(cmyk.c - 60) <= tol &&
+            Math.abs(cmyk.m - 60) <= tol &&
+            Math.abs(cmyk.y - 60) <= tol &&
+            Math.abs(cmyk.k - 100) <= 3;
+        }
+        function isBlackLike(cmyk, hex) {
+          const byCmyk = cmyk.k >= 90 && (cmyk.c + cmyk.m + cmyk.y) <= 210;
+          const rgb = hexToRgb(hex);
+          const byRgb = !!(rgb && rgb.r <= 28 && rgb.g <= 28 && rgb.b <= 28);
+          return byCmyk || byRgb;
+        }
+
         data.forEach((entry) => {
           if(colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type &&
             colourEditState.lastEdit.mode === colourEditState.mode) {
@@ -553,14 +605,37 @@
           const swatch = document.createElement('div');
           swatch.style.width = '34px';
           swatch.style.height = '34px';
+          swatch.style.minWidth = '34px';
+          swatch.style.minHeight = '34px';
+          swatch.style.maxWidth = '34px';
+          swatch.style.maxHeight = '34px';
+          swatch.style.flex = '0 0 34px';
           swatch.style.border = '1px solid #444';
           swatch.style.borderRadius = '6px';
           swatch.style.background = entry.hex || '#000000';
 
+          const cmyk = getDisplayCmyk(entry);
+          const typeText = String(entry.type || 'fill').toUpperCase();
+          const cmykLine = 'C ' + round1(cmyk.c) + '  M ' + round1(cmyk.m) + '  Y ' + round1(cmyk.y) + '  K ' + round1(cmyk.k);
+          const showBlackHazard = isBlackLike(cmyk, entry.hex) && !isNearRichBlack(cmyk, 8);
+
           const label = document.createElement('div');
-          label.textContent = entry.label || '';
-          label.style.fontSize = '12px';
-          label.style.color = '#bcbcbc';
+          label.style.display = 'flex';
+          label.style.flexDirection = 'column';
+          label.style.gap = '2px';
+          label.style.minWidth = '180px';
+          label.style.flex = '1 1 auto';
+          const labelTop = document.createElement('div');
+          labelTop.textContent = typeText;
+          labelTop.style.fontSize = '12px';
+          labelTop.style.fontWeight = '700';
+          labelTop.style.color = '#d7d7d7';
+          const labelBottom = document.createElement('div');
+          labelBottom.textContent = cmykLine;
+          labelBottom.style.fontSize = '11px';
+          labelBottom.style.color = '#bcbcbc';
+          label.appendChild(labelTop);
+          label.appendChild(labelBottom);
 
           const inputs = [];
           if(colourEditState.mode === 'RGB') {
@@ -698,6 +773,16 @@
           row.appendChild(swatch);
           row.appendChild(label);
           inputs.forEach(inp => row.appendChild(inp));
+          if (showBlackHazard) {
+            const hazard = document.createElement('span');
+            hazard.textContent = '\u26A0';
+            hazard.title = 'Black colour is not close to target rich black (C60 M60 Y60 K100).';
+            hazard.style.color = '#ffba00';
+            hazard.style.fontWeight = '800';
+            hazard.style.fontSize = '16px';
+            hazard.style.marginLeft = '6px';
+            row.appendChild(hazard);
+          }
           list.appendChild(row);
         });
 
@@ -822,3 +907,4 @@
     cs.evalScript(wrapped, function(res) {if(cb) cb(res);});
   }
 })();
+
