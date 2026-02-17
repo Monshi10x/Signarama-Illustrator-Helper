@@ -36,6 +36,8 @@
   };
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
+  let isLargeArtboard = false;
+  let refreshLightboxArtboardScaleNotice = null;
 
   function buildDimensionPayload(){
     return {
@@ -77,6 +79,7 @@
       cs.evalScript('typeof signarama_helper_fitArtboardToArtwork', function (type) {
         log('JSX check: signarama_helper_fitArtboardToArtwork is ' + type);
         if (type !== 'function') log('ERROR: JSX not loaded (check path/case).');
+        if (typeof refreshLightboxArtboardScaleNotice === 'function') refreshLightboxArtboardScaleNotice();
       });
     });
   });
@@ -90,6 +93,9 @@
       panels.forEach(p => p.classList.toggle('hidden', p.id !== tabId));
       if (tabId === 'tab-colours' && typeof window.refreshColours === 'function') {
         window.refreshColours();
+      }
+      if (tabId === 'tab-lightbox' && typeof refreshLightboxArtboardScaleNotice === 'function') {
+        refreshLightboxArtboardScaleNotice();
       }
     }
 
@@ -180,6 +186,45 @@
   }
 
   function wireLightbox(){
+    function refreshArtboardScaleNotice(){
+      callJSX('signarama_helper_getArtboardScaleState()', raw => {
+        let state = null;
+        const rawText = (raw == null) ? '' : String(raw).trim();
+        try {
+          state = JSON.parse(rawText || '{}');
+        } catch(_eParse0) {
+          try { state = JSON.parse(rawText.replace(/^\"|\"$/g, '').replace(/\\"/g, '\"')); } catch(_eParse1) { state = null; }
+        }
+        if ((!state || typeof state !== 'object') && rawText) {
+          const largeMatch = /"isLargeArtboard"\s*:\s*(true|false)/i.exec(rawText);
+          const sfMatch = /"scaleFactor"\s*:\s*([0-9.]+)/i.exec(rawText);
+          if (largeMatch || sfMatch) {
+            state = {
+              isLargeArtboard: largeMatch ? largeMatch[1].toLowerCase() === 'true' : false,
+              scaleFactor: sfMatch ? Number(sfMatch[1]) : 1
+            };
+          }
+        }
+        const large = !!(state && state.isLargeArtboard);
+        isLargeArtboard = large;
+        if (typeof window !== 'undefined') window.isLargeArtboard = large;
+        const notice = $('lightboxArtboardScaleNotice');
+        const icon = $('lightboxArtboardScaleIcon');
+        const text = $('lightboxArtboardScaleText');
+        if (!notice || !icon || !text) return;
+        const sf = state && state.scaleFactor ? Number(state.scaleFactor) : 1;
+        if (large) {
+          notice.classList.add('large');
+          icon.textContent = '⚠️';
+          text.textContent = 'Large artboard scale detected (1:' + sf + '). Lightbox + LED sizes will be adjusted automatically.';
+        } else {
+          notice.classList.remove('large');
+          icon.textContent = '✅';
+          text.textContent = 'Standard artboard scale detected (1:1).';
+        }
+      });
+    }
+
     function updateSupportSpacingInfo(){
       const out = $('lightboxSupportSpacingInfo');
       if(!out) return;
@@ -204,7 +249,8 @@
       lightboxMeasureLiveInFlight = true;
       const payload = {
         force: !!force,
-        measureOptions: buildDimensionPayload()
+        measureOptions: buildDimensionPayload(),
+        isLargeArtboard: isLargeArtboard
       };
       const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
       callJSX('signarama_helper_updateLightboxMeasures("' + json + '")', res => {
@@ -247,11 +293,14 @@
     const supportsField = $('lightboxSupportCount');
     if(widthField) widthField.addEventListener('input', updateSupportSpacingInfo);
     if(supportsField) supportsField.addEventListener('input', updateSupportSpacingInfo);
+    refreshLightboxArtboardScaleNotice = refreshArtboardScaleNotice;
     updateSupportSpacingInfo();
+    refreshArtboardScaleNotice();
 
     const createBtn = $('btnCreateLightbox');
     if (!createBtn) return;
     createBtn.onclick = () => {
+      refreshArtboardScaleNotice();
       const payload = {
         widthMm: num(($('lightboxWidthMm') && $('lightboxWidthMm').value) || 0),
         heightMm: num(($('lightboxHeightMm') && $('lightboxHeightMm').value) || 0),
@@ -261,7 +310,8 @@
         ledOffsetMm: num(($('lightboxLedOffsetMm') && $('lightboxLedOffsetMm').value) || 0),
         addMeasures: !!($('lightboxAddMeasures') && $('lightboxAddMeasures').checked),
         updateMeasuresLive: !!($('lightboxUpdateMeasuresLive') && $('lightboxUpdateMeasuresLive').checked),
-        measureOptions: buildDimensionPayload()
+        measureOptions: buildDimensionPayload(),
+        isLargeArtboard: isLargeArtboard
       };
       const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
       callJSX('signarama_helper_createLightbox("' + json + '")', res => {
@@ -276,6 +326,7 @@
     const createBtnLed = $('btnCreateLightboxWithLedPanel');
     if (createBtnLed) {
       createBtnLed.onclick = () => {
+        refreshArtboardScaleNotice();
         const payload = {
           widthMm: num(($('lightboxWidthMm') && $('lightboxWidthMm').value) || 0),
           heightMm: num(($('lightboxHeightMm') && $('lightboxHeightMm').value) || 0),
@@ -294,7 +345,8 @@
           flipLed: !!($('ledFlip') && $('ledFlip').checked),
           addMeasures: !!($('lightboxAddMeasures') && $('lightboxAddMeasures').checked),
           updateMeasuresLive: !!($('lightboxUpdateMeasuresLive') && $('lightboxUpdateMeasuresLive').checked),
-          measureOptions: buildDimensionPayload()
+          measureOptions: buildDimensionPayload(),
+          isLargeArtboard: isLargeArtboard
         };
         const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
         callJSX('signarama_helper_createLightboxWithLedPanel("' + json + '")', res => {
@@ -326,7 +378,8 @@
         layoutHeightMm: num(($('ledLayoutHeightMm') && $('ledLayoutHeightMm').value) || 0),
         depthMm: num(($('lightboxDepthMm') && $('lightboxDepthMm').value) || 0),
         boxWidthMm: num(($('lightboxWidthMm') && $('lightboxWidthMm').value) || 0),
-        boxHeightMm: num(($('lightboxHeightMm') && $('lightboxHeightMm').value) || 0)
+        boxHeightMm: num(($('lightboxHeightMm') && $('lightboxHeightMm').value) || 0),
+        isLargeArtboard: isLargeArtboard
       };
       const json = JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g, '\\"');
       callJSX('signarama_helper_drawLedLayout("' + json + '")', res => res && log(res));
