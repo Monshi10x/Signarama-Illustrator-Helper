@@ -4,10 +4,28 @@
   <meta charset="utf-8" />
   <title>Signarama Helper</title>
   <style>
-    :root { font-family: ui-sans-serif,-apple-system,Segoe UI,Roboto,Arial; color:#eee; }
+    :root {
+      font-family: ui-sans-serif,-apple-system,Segoe UI,Roboto,Arial;
+      color:#eee;
+      --signarama-red:#c8102e;
+    }
     html, body { height:100%; }
     body { margin:0; background:#1f1f1f; display:flex; flex-direction:column; min-width:280px; min-height:380px; }
     header { padding:12px; font-weight:800; border-bottom:1px solid #333; background:#121212; display:flex; align-items:center; justify-content:space-between; }
+    .brand { display:flex; align-items:center; gap:8px; }
+    .brand-logo {
+      width:24px;
+      height:24px;
+      border-radius:6px;
+      overflow:hidden;
+      border:1px solid #5a0c1c;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
+                  4px 6px 8px rgba(0,0,0,0.45),
+                  0 0px 1px rgba(0,0,0,0.6);
+      background:var(--signarama-red);
+      flex:0 0 auto;
+    }
+    .brand-title { font-weight:800; }
     .tabs { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid #333; background:#161616; flex-wrap:wrap; }
     .tab {
       appearance:none;
@@ -20,7 +38,26 @@
       font-weight:700;
       cursor:pointer;
     }
-    .tab.active { background:#2a2a2a; border-color:#555; color:#fff; }
+    .tab.active {
+      background:var(--signarama-red);
+      border-color:#8f0d23;
+      color:#fff;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
+                  4px 6px 8px rgba(0,0,0,0.35),
+                  0 0px 1px rgba(0,0,0,0.6);
+    }
+    .tab:focus,
+    .tab:focus-visible {
+      outline:none;
+      box-shadow:none;
+    }
+    .tab.active:focus,
+    .tab.active:focus-visible {
+      outline:none;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
+                  4px 6px 8px rgba(0,0,0,0.35),
+                  0 0px 1px rgba(0,0,0,0.6);
+    }
     .content { flex:1; overflow:auto; }
     .wrap { padding:12px; display:grid; gap:10px; }
 
@@ -80,6 +117,10 @@
     }
     .dim-btn:hover { background:#242424; }
     .dim-btn svg { width:50px; height:50px; }
+    .dim-selection-hint {
+      margin-top:8px;
+      text-align:center;
+    }
     .dim-center {
       display:grid; place-items:center;
       color:#bbb;
@@ -147,11 +188,49 @@
                   5px 8px 10px rgba(0,0,0,0.45),
                   0 0px 1px rgba(0,0,0,0.6);
     }
+    .theme-grid {
+      margin-top:10px;
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:8px;
+    }
+    .theme-tile {
+      position:relative;
+      min-height:62px;
+      border:1px solid #444;
+      border-radius:12px;
+      cursor:pointer;
+      background:#202020;
+      padding:6px;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
+                  5px 8px 10px rgba(0,0,0,0.45),
+                  0 0px 1px rgba(0,0,0,0.6);
+    }
+    .theme-tile:hover { filter:brightness(1.06); }
+    .theme-tile:active { transform: translateY(1px); }
+    .theme-tile-inner {
+      width:100%;
+      height:100%;
+      border-radius:8px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.12);
+      display:grid;
+      grid-template-rows: 1fr 1fr;
+      background:#111;
+    }
+    .theme-half { width:100%; height:100%; }
+    .theme-half + .theme-half { border-top:1px solid rgba(255,255,255,0.28); }
   </style>
 </head>
 <body>
   <header>
-    <div>Signarama Helper</div>
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="0" y="0" width="24" height="24" fill="#c8102e"/>
+        <path d="M6 8c0-2 1.7-3.5 4.3-3.5h7v3h-6.6c-.9 0-1.5.3-1.5.9s.6.9 1.8 1.2l2 .5c2.8.7 4.4 1.8 4.4 4 0 2.4-2 4-5 4H6v-3h6.2c1.1 0 1.8-.4 1.8-1.1s-.7-1-2-1.4l-2.2-.6C7.5 11.4 6 10.3 6 8z" fill="#ffffff"/>
+      </svg>
+      <div class="brand-title">Signarama Helper</div>
+    </div>
     <div style="font-size:12px; color:#aaa; font-weight:700;" id="status"></div>
   </header>
 
@@ -237,11 +316,15 @@
               <input id="bleedExcludeClippedContent" type="checkbox" checked>
               <span>Exclude clipped content</span>
             </label>
+            <label class="chk">
+              <input id="bleedExpandArtboards" type="checkbox" checked>
+              <span>Expand artboards</span>
+            </label>
           </div>
         </div>
 
         <div class="small" style="margin-top:8px;">
-          Note: this expands artwork bounds; it does not change artboards.
+          Note: this expands artwork bounds. Artboards expand only when "Expand artboards" is enabled.
         </div>
       </div>
 
@@ -254,7 +337,7 @@
         <div class="row">
           <label class="fld" style="flex:1;">
             <span>Offset amount (mm)</span>
-            <input id="pathBleedAmount" type="number" step="0.1" value="0">
+            <input id="pathBleedAmount" type="number" step="0.1" value="10">
           </label>
         </div>
 
@@ -440,6 +523,7 @@
             </svg>
           </button>
         </div>
+        <div id="dimSelectionHint" class="small dim-selection-hint hidden">Nothing Selected. Measure Artboards</div>
       </div>
 
       <div class="card" style="margin-top:12px;">
@@ -484,18 +568,24 @@
             <span>Label gap from line (mm)</span>
             <input type="number" id="labelGapMm" step="0.1" value="20">
           </label>
-          <label class="chk" style="align-items:center; gap:8px; margin-top:6px;">
-            <input type="checkbox" id="measureClippedContent">
-            <span>Measure clipped content</span>
-          </label>
           <label class="fld">
             <span>Arrowhead size (pt)</span>
             <input type="number" id="arrowheadSizePt" step="0.5" value="50">
           </label>
-          <label class="chk" style="align-items:center; gap:8px; margin-top:6px;">
-            <input type="checkbox" id="includeArrowhead" checked>
-            <span>Include arrowhead</span>
-          </label>
+          <div class="bleed-options-card" style="grid-column:1 / -1;">
+            <label class="chk">
+              <input type="checkbox" id="measureIncludeStroke">
+              <span>Measures include stroke</span>
+            </label>
+            <label class="chk">
+              <input type="checkbox" id="measureClippedContent">
+              <span>Measure clipped content</span>
+            </label>
+            <label class="chk">
+              <input type="checkbox" id="includeArrowhead" checked>
+              <span>Include arrowhead</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -510,6 +600,39 @@
           <label class="fld">Line colour
             <input type="color" id="lineColor" value="#000000">
           </label>
+        </div>
+        <div class="small" style="margin-top:10px;">Quick Theme Colours</div>
+        <div class="theme-grid">
+          <button class="theme-tile" type="button" title="Black / Black" data-text-color="#000000" data-line-color="#000000">
+            <span class="theme-tile-inner">
+              <span class="theme-half" style="background:#000000;"></span>
+              <span class="theme-half" style="background:#000000;"></span>
+            </span>
+          </button>
+          <button class="theme-tile" type="button" title="Pink / Pink" data-text-color="#ff00ff" data-line-color="#ff00ff">
+            <span class="theme-tile-inner">
+              <span class="theme-half" style="background:#ff00ff;"></span>
+              <span class="theme-half" style="background:#ff00ff;"></span>
+            </span>
+          </button>
+          <button class="theme-tile" type="button" title="Red / Red" data-text-color="#ff0000" data-line-color="#ff0000">
+            <span class="theme-tile-inner">
+              <span class="theme-half" style="background:#ff0000;"></span>
+              <span class="theme-half" style="background:#ff0000;"></span>
+            </span>
+          </button>
+          <button class="theme-tile" type="button" title="Red / Black" data-text-color="#ff0000" data-line-color="#000000">
+            <span class="theme-tile-inner">
+              <span class="theme-half" style="background:#ff0000;"></span>
+              <span class="theme-half" style="background:#000000;"></span>
+            </span>
+          </button>
+          <button class="theme-tile" type="button" title="White / White" data-text-color="#ffffff" data-line-color="#ffffff">
+            <span class="theme-tile-inner">
+              <span class="theme-half" style="background:#ffffff;"></span>
+              <span class="theme-half" style="background:#ffffff;"></span>
+            </span>
+          </button>
         </div>
       </div>
 

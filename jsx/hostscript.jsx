@@ -720,15 +720,17 @@ function signarama_helper_duplicateOutlineScaleA4() {
 
 /**
  * Expands selected items by bleed amounts (mm) on each side.
- * Args: topMm, leftMm, bottomMm, rightMm, excludeClippedContent, keepOriginal
+ * Args: topMm, leftMm, bottomMm, rightMm, excludeClippedContent, keepOriginal, expandArtboards
  */
-function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeClippedContent, keepOriginal) {
+function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeClippedContent, keepOriginal, expandArtboards) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
   if(!doc.selection || doc.selection.length === 0) return 'No selection. Select one or more items.';
   var excludeClipped = (excludeClippedContent === undefined) ? true : !!excludeClippedContent;
   var preserveOriginal = (keepOriginal === undefined) ? true : !!keepOriginal;
+  var expandAb = (expandArtboards === undefined) ? false : !!expandArtboards;
   var _dbgLines = [];
+  var artboardBoundsByIndex = {};
 
   function _dbg(msg) {
     try {$.writeln('[SRH][applyBleed] ' + msg);} catch(_eDbg0) { }
@@ -747,13 +749,54 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
     if(!item) return '';
     try {return String(item.name || '');} catch(_eDbg2) { return ''; }
   }
+  function _boundsUnion(a, b2) {
+    if(!a || a.length !== 4) return b2;
+    if(!b2 || b2.length !== 4) return a;
+    return [
+      Math.min(a[0], b2[0]),
+      Math.max(a[1], b2[1]),
+      Math.max(a[2], b2[2]),
+      Math.min(a[3], b2[3])
+    ];
+  }
+  function _rectIntersects(a, b2) {
+    if(!a || a.length !== 4 || !b2 || b2.length !== 4) return false;
+    if(a[2] < b2[0]) return false;
+    if(a[0] > b2[2]) return false;
+    if(a[1] < b2[3]) return false;
+    if(a[3] > b2[1]) return false;
+    return true;
+  }
+  function _pointInRect(x, y, r2) {
+    if(!r2 || r2.length !== 4) return false;
+    return (x >= r2[0] && x <= r2[2] && y <= r2[1] && y >= r2[3]);
+  }
+  function _findArtboardIndexForBounds(bounds) {
+    if(!bounds || bounds.length !== 4) return -1;
+    var cx = (bounds[0] + bounds[2]) / 2;
+    var cy = (bounds[1] + bounds[3]) / 2;
+    var i;
+    try {
+      for(i = 0; i < doc.artboards.length; i++) {
+        var r3 = doc.artboards[i].artboardRect;
+        if(_pointInRect(cx, cy, r3)) return i;
+      }
+      for(i = 0; i < doc.artboards.length; i++) {
+        var r4 = doc.artboards[i].artboardRect;
+        if(_rectIntersects(bounds, r4)) return i;
+      }
+      return doc.artboards.getActiveArtboardIndex();
+    } catch(_eAbi0) {
+      return -1;
+    }
+  }
 
   var t = _srh_mm2ptDoc(Number(topMm) || 0);
   var l = _srh_mm2ptDoc(Number(leftMm) || 0);
   var b = _srh_mm2ptDoc(Number(bottomMm) || 0);
   var r = _srh_mm2ptDoc(Number(rightMm) || 0);
   var sf = _srh_getScaleFactor();
-  _dbg('START sel=' + doc.selection.length + ', excludeClipped=' + excludeClipped + ', keepOriginal=' + preserveOriginal + ', scaleFactor=' + sf);
+  _dbg('START sel=' + doc.selection.length + ', excludeClipped=' + excludeClipped + ', keepOriginal=' + preserveOriginal + ', expandArtboards=' + expandAb + ', scaleFactor=' + sf);
   _dbg('bleed input mm T/L/B/R=' + [topMm, leftMm, bottomMm, rightMm].join('/') + ', doc-pt=' + [t, l, b, r].join('/'));
 
   var sel = doc.selection;
@@ -766,6 +809,7 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
     var cutLayer = _srh_getLayerByName(doc, "cutline");
     _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer);
     try {bleedLayer.visible = true; bleedLayer.locked = false;} catch(_eBL0) { }
+    try {originalLayer.visible = true; originalLayer.locked = false;} catch(_eOL0) { }
   }
   var changed = 0;
   var originalsMoved = 0;
@@ -1025,6 +1069,15 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
       var afterW = vbAfter[2] - vbAfter[0];
       var afterH = vbAfter[1] - vbAfter[3];
       _dbg('sel[' + i + '] size after w/h=' + afterW + '/' + afterH + ', delta w/h=' + (afterW - origW) + '/' + (afterH - origH));
+      if(expandAb) {
+        var abIdx = _findArtboardIndexForBounds(vb);
+        if(abIdx >= 0) {
+          var existing = null;
+          try {existing = artboardBoundsByIndex[abIdx];} catch(_eAbG0) {existing = null;}
+          artboardBoundsByIndex[abIdx] = _boundsUnion(existing, vbAfter);
+          _dbg('sel[' + i + '] mapped to artboard ' + abIdx + ' for expansion');
+        }
+      }
     }
 
     changed++;
@@ -1032,6 +1085,23 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
   }
 
   _dbg('END changed=' + changed + ', originalsMoved=' + originalsMoved);
+  var expandedArtboards = 0;
+  if(expandAb) {
+    for(var abKey in artboardBoundsByIndex) {
+      if(!artboardBoundsByIndex.hasOwnProperty(abKey)) continue;
+      var idx = parseInt(abKey, 10);
+      if(!(idx >= 0)) continue;
+      try {
+        var abRect = doc.artboards[idx].artboardRect;
+        var u = _boundsUnion(abRect, artboardBoundsByIndex[abKey]);
+        doc.artboards[idx].artboardRect = u;
+        expandedArtboards++;
+      } catch(_eAbSet0) { }
+    }
+  }
+  if(preserveOriginal && originalLayer) {
+    try {originalLayer.visible = false;} catch(_eOL1) { }
+  }
   var dbgText = '';
   try {dbgText = _dbgLines.join('\n');} catch(_eDbgJoin) { dbgText = ''; }
   function _withDbg(msg) {
@@ -1041,9 +1111,13 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
 
   if(!changed) return _withDbg('No items updated (could not read bounds).');
   if(preserveOriginal) {
-    return _withDbg('Applied bleed to ' + changed + ' item(s) on bleed layer. Originals moved: ' + originalsMoved + '.');
+    var msgKeep = 'Applied bleed to ' + changed + ' item(s) on bleed layer. Originals moved: ' + originalsMoved + '.';
+    if(expandAb) msgKeep += ' Artboards expanded: ' + expandedArtboards + '.';
+    return _withDbg(msgKeep);
   }
-  return _withDbg('Applied bleed to ' + changed + ' item(s).');
+  var msg = 'Applied bleed to ' + changed + ' item(s).';
+  if(expandAb) msg += ' Artboards expanded: ' + expandedArtboards + '.';
+  return _withDbg(msg);
 }
 
 /**
@@ -1267,6 +1341,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var originalLayer = _srh_getOrCreateLayer(doc, "original");
   var cutLayer = createCutline ? _srh_getOrCreateLayer(doc, "cutline") : _srh_getLayerByName(doc, "cutline");
   _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer);
+  try {originalLayer.visible = true; originalLayer.locked = false;} catch(_eOlShow0) { }
 
   // Snapshot selection because we'll move items to layers.
   var sel = [];
@@ -1312,6 +1387,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   if(!originalCount) {
     try {doc.selection = null;} catch(_eSelOrig0) { }
+    try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide0) { }
     return "No eligible items to move into original layer.";
   }
 
@@ -1333,6 +1409,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   if(!movedCount) {
     try {doc.selection = null;} catch(_eSel0) { }
+    try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide1) { }
     return "No eligible items to offset.";
   }
 
@@ -1360,6 +1437,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var msg = "Path bleed applied (grouped). Originals: " + originalCount + ", targets: " + movedCount + ", bleed paths: " + offsetCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
   if(!offsetApplied) msg += ". Note: Offset effect fallback was limited on this selection.";
+  try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide2) { }
   return msg;
 }
 
@@ -1740,7 +1818,18 @@ function _dim_captureSelection() {
 function _dim_restoreSelection(list) {
   try {app.activeDocument.selection = list || [];} catch(_) { }
 }
-function _dim_getMetricsFor(item, measureClippedContent) {
+function _dim_getBoundsArray(item, includeStroke) {
+  var b = null;
+  if(includeStroke) {
+    try {b = item.visibleBounds;} catch(_eV0) { }
+    if(!b || b.length !== 4) {try {b = item.geometricBounds;} catch(_eG0) {b = null;} }
+  } else {
+    try {b = item.geometricBounds;} catch(_eG1) { }
+    if(!b || b.length !== 4) {try {b = item.visibleBounds;} catch(_eV1) {b = null;} }
+  }
+  return (b && b.length === 4) ? b : null;
+}
+function _dim_getMetricsFor(item, measureClippedContent, includeStroke) {
   if(!item) throw new Error('Invalid selection item.');
 
   // If this is a clipping group, use the clipping path bounds (mask) unless measuring clipped content.
@@ -1757,9 +1846,7 @@ function _dim_getMetricsFor(item, measureClippedContent) {
             if(child.typename === "CompoundPathItem" && child.pathItems && child.pathItems.length && child.pathItems[0].clipping) continue;
           } catch(_eSkip) { }
 
-          var cb = null;
-          try {cb = child.visibleBounds;} catch(_eC0) { }
-          if(!cb || cb.length !== 4) {try {cb = child.geometricBounds;} catch(_eC1) {cb = null;} }
+          var cb = _dim_getBoundsArray(child, includeStroke);
           if(!cb || cb.length !== 4) continue;
 
           if(!vb) {
@@ -1794,10 +1881,8 @@ function _dim_getMetricsFor(item, measureClippedContent) {
         } catch(_eMask) { }
       }
       if(maskItem) {
-        try {return _dim_getMetricsFor(maskItem);} catch(_eMaskM) { }
-        var mb = null;
-        try {mb = maskItem.visibleBounds;} catch(_eM0) { }
-        if(!mb || mb.length !== 4) {try {mb = maskItem.geometricBounds;} catch(_eM1) { } }
+        try {return _dim_getMetricsFor(maskItem, false, includeStroke);} catch(_eMaskM) { }
+        var mb = _dim_getBoundsArray(maskItem, includeStroke);
         if(mb && mb.length === 4) {
           return {
             left: mb[0],
@@ -1814,24 +1899,24 @@ function _dim_getMetricsFor(item, measureClippedContent) {
     }
   } catch(_eClip) { }
 
+  var vb = _dim_getBoundsArray(item, includeStroke);
+  if(vb && vb.length === 4) {
+    return {
+      left: vb[0],
+      top: vb[1],
+      right: vb[2],
+      bottom: vb[3],
+      width: vb[2] - vb[0],
+      height: vb[1] - vb[3],
+      x: vb[0],
+      y: vb[1]
+    };
+  }
+
   if(typeof item.position === 'undefined' ||
     typeof item.width === 'undefined' ||
     typeof item.height === 'undefined') {
-    var vb = item.visibleBounds; // [top, left, bottom, right]
-    var leftVB = vb[1];
-    var topVB = vb[0];
-    var rightVB = vb[3];
-    var bottomVB = vb[2];
-    return {
-      left: leftVB,
-      top: topVB,
-      right: rightVB,
-      bottom: bottomVB,
-      width: rightVB - leftVB,
-      height: topVB - bottomVB,
-      x: leftVB,
-      y: topVB
-    };
+    throw new Error('Unable to read item bounds.');
   }
 
   var pos = item.position; // [left, top]
@@ -1963,7 +2048,7 @@ function _dim_run(opts) {
   if(!doc) return "No document open.";
 
   var originalSel = _dim_captureSelection();
-  if(!originalSel || !originalSel.length) return "Nothing selected.";
+  var hasSelection = !!(originalSel && originalSel.length);
 
   var scaleFactor = _srh_getScaleFactor();
   var offsetPt = _dim_mm2ptDoc(opts.offsetMm || 10, scaleFactor);
@@ -1973,6 +2058,7 @@ function _dim_run(opts) {
   var decimals = (opts.decimals | 0);
   var textOffsetPt = _dim_mm2ptDoc(opts.labelGapMm || 0, scaleFactor);
   var measureClippedContent = !!opts.measureClippedContent;
+  var measureIncludeStroke = !!opts.measureIncludeStroke;
 
   var lyr = _dim_ensureLayer('Dimensions');
   var textColor = opts.textColor;
@@ -2007,24 +2093,43 @@ function _dim_run(opts) {
   var objectsProcessed = 0;
   var measuresAdded = 0;
 
-  try {
-    for(var i = 0; i < originalSel.length; i++) {
-      var item = originalSel[i];
-      try {if(item.locked || item.hidden) continue;} catch(_) { }
-      var b; try {b = _dim_getMetricsFor(item, measureClippedContent);} catch(e) {continue;}
-      measuresAdded += _dim_drawForBounds(b, lyr, dOpts);
-      objectsProcessed++;
+  if(hasSelection) {
+    try {
+      for(var i = 0; i < originalSel.length; i++) {
+        var item = originalSel[i];
+        try {if(item.locked || item.hidden) continue;} catch(_) { }
+        var b; try {b = _dim_getMetricsFor(item, measureClippedContent, measureIncludeStroke);} catch(e) {continue;}
+        measuresAdded += _dim_drawForBounds(b, lyr, dOpts);
+        objectsProcessed++;
+      }
+    } catch(e) {
+      _dim_restoreSelection(originalSel);
+      return 'Error: ' + e.message;
     }
-  } catch(e) {
-    _dim_restoreSelection(originalSel);
-    return 'Error: ' + e.message;
+  } else {
+    try {
+      var abCount = doc.artboards.length;
+      for(var a = 0; a < abCount; a++) {
+        var rect = doc.artboards[a].artboardRect; // [L,T,R,B]
+        if(!rect || rect.length !== 4) continue;
+        var abBounds = {left: rect[0], top: rect[1], right: rect[2], bottom: rect[3]};
+        measuresAdded += _dim_drawForBounds(abBounds, lyr, dOpts);
+        objectsProcessed++;
+      }
+    } catch(e2) {
+      return 'Error: ' + e2.message;
+    }
   }
 
-  _dim_restoreSelection(originalSel);
+  if(hasSelection) _dim_restoreSelection(originalSel);
 
-  if(objectsProcessed === 0) return 'No measurable objects in selection.';
+  if(objectsProcessed === 0) {
+    if(hasSelection) return 'No measurable objects in selection.';
+    return 'No artboards found.';
+  }
+  var targetLabel = hasSelection ? 'object' : 'artboard';
   var msg = 'Added ' + measuresAdded + ' measure' + (measuresAdded === 1 ? '' : 's') +
-    ' on ' + objectsProcessed + ' object' + (objectsProcessed === 1 ? '' : 's') + '.';
+    ' on ' + objectsProcessed + ' ' + targetLabel + (objectsProcessed === 1 ? '' : 's') + '.';
   return msg;
 }
 
@@ -2156,6 +2261,63 @@ this.atlas_dimensions_run = function(json) {
     return _dim_run(opts);
   } catch(e) {
     return 'Error: ' + e.message;
+  }
+};
+
+this.atlas_dimensions_hasSelection = function() {
+  try {
+    if(!app.documents.length) return '0';
+    var sel = _dim_captureSelection();
+    return (sel && sel.length) ? '1' : '0';
+  } catch(_eSelCheck) {
+    return '0';
+  }
+};
+
+function _srh_panelSettingsFile() {
+  var root = null;
+  try {root = Folder.userData;} catch(_eRoot) {root = null;}
+  if(!root) return null;
+  var dir = new Folder(root.fsName + '/Signarama-Illustrator-Helper');
+  try {if(!dir.exists) dir.create();} catch(_eMk) { }
+  return new File(dir.fsName + '/panel-settings.json');
+}
+
+this.signarama_helper_panelSettingsSave = function(json) {
+  try {
+    var txt = '';
+    if(typeof json === 'string') txt = json;
+    else txt = String(json || '{}');
+    // Validate and normalize JSON payload before writing.
+    var parsed = JSON.parse(txt);
+    var out = JSON.stringify(parsed);
+    var f = _srh_panelSettingsFile();
+    if(!f) return 'Error: Could not resolve settings path.';
+    f.encoding = 'UTF-8';
+    if(!f.open('w')) return 'Error: Could not open settings file for write.';
+    f.write(out);
+    f.close();
+    return 'OK';
+  } catch(e) {
+    try {if(f && f.opened) f.close();} catch(_eClose) { }
+    return 'Error: ' + e.message;
+  }
+};
+
+this.signarama_helper_panelSettingsLoad = function() {
+  var f = null;
+  try {
+    f = _srh_panelSettingsFile();
+    if(!f || !f.exists) return 'NO_SETTINGS';
+    f.encoding = 'UTF-8';
+    if(!f.open('r')) return 'NO_SETTINGS';
+    var txt = f.read();
+    f.close();
+    if(!txt) return 'NO_SETTINGS';
+    return String(txt);
+  } catch(e) {
+    try {if(f && f.opened) f.close();} catch(_eClose2) { }
+    return 'NO_SETTINGS';
   }
 };
 

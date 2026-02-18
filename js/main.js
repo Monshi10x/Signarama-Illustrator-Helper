@@ -19,6 +19,114 @@
     var n = parseFloat(v);
     return isFinite(n) ? n : 0;
   }
+  function ensureToastUi() {
+    if($('srhToastRoot')) return;
+    const style = document.createElement('style');
+    style.id = 'srhToastStyles';
+    style.textContent = [
+      '#srhToastRoot{position:fixed;top:14px;right:14px;z-index:2147483000;display:flex;flex-direction:column;gap:10px;pointer-events:none;}',
+      '.srh-toast{min-width:250px;max-width:420px;background:#141414;color:#f2f2f2;border:1px solid #3a3a3a;border-radius:12px;box-shadow:inset 0px 1px 2px rgba(255,255,255,0.12),5px 8px 10px rgba(0,0,0,0.45),0 0px 1px rgba(0,0,0,0.6);overflow:hidden;pointer-events:auto;opacity:0;transform:translateY(-6px);transition:opacity .14s ease,transform .14s ease;}',
+      '.srh-toast.in{opacity:1;transform:translateY(0);}',
+      '.srh-toast-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 4px 10px;font-size:12px;font-weight:800;}',
+      '.srh-toast-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '.srh-toast-close{appearance:none;border:1px solid #4b4b4b;background:#1f1f1f;color:#d9d9d9;border-radius:8px;width:20px;height:20px;line-height:16px;cursor:pointer;padding:0;}',
+      '.srh-toast-close:hover{background:#2a2a2a;}',
+      '.srh-toast-body{padding:0 10px 9px 10px;font-size:12px;line-height:1.35;word-break:break-word;}',
+      '.srh-toast-progressWrap{height:4px;background:#222;}',
+      '.srh-toast-progress{height:100%;width:100%;transform-origin:left center;background:#5a5a5a;}',
+      '.srh-toast.info{border-left:3px solid #3b82f6;}',
+      '.srh-toast.success{border-left:3px solid #22c55e;}',
+      '.srh-toast.warn{border-left:3px solid #f59e0b;}',
+      '.srh-toast.error{border-left:3px solid #dc2626;}'
+    ].join('');
+    document.head.appendChild(style);
+
+    const root = document.createElement('div');
+    root.id = 'srhToastRoot';
+    document.body.appendChild(root);
+  }
+  function showToast(message, options) {
+    ensureToastUi();
+    const opts = options || {};
+    const type = opts.type || 'info';
+    const duration = typeof opts.duration === 'number' ? Math.max(400, opts.duration) : 5000;
+    const title = opts.title || (type === 'error' ? 'Operation failed' : 'Operation finished');
+    const root = $('srhToastRoot');
+    if(!root) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'srh-toast ' + type;
+    const head = document.createElement('div');
+    head.className = 'srh-toast-head';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'srh-toast-title';
+    titleEl.textContent = title;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'srh-toast-close';
+    close.textContent = 'x';
+    const body = document.createElement('div');
+    body.className = 'srh-toast-body';
+    body.textContent = String(message || title);
+    const pWrap = document.createElement('div');
+    pWrap.className = 'srh-toast-progressWrap';
+    const pBar = document.createElement('div');
+    pBar.className = 'srh-toast-progress';
+
+    head.appendChild(titleEl);
+    head.appendChild(close);
+    pWrap.appendChild(pBar);
+    toast.appendChild(head);
+    toast.appendChild(body);
+    toast.appendChild(pWrap);
+    root.prepend(toast);
+
+    let raf = null;
+    const start = performance.now();
+    let closed = false;
+    function finish() {
+      if(closed) return;
+      closed = true;
+      if(raf) cancelAnimationFrame(raf);
+      toast.classList.remove('in');
+      setTimeout(() => {if(toast.isConnected) toast.remove();}, 180);
+    }
+    function tick(now) {
+      if(closed) return;
+      const elapsed = now - start;
+      const frac = Math.min(1, elapsed / duration);
+      pBar.style.transform = 'scaleX(' + (1 - frac) + ')';
+      if(frac >= 1) {
+        finish();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    close.addEventListener('click', (e) => {e.stopPropagation(); finish();});
+    requestAnimationFrame(() => {
+      toast.classList.add('in');
+      raf = requestAnimationFrame(tick);
+    });
+  }
+  function notifyOperationResult(res, options) {
+    const opts = options || {};
+    if(opts.showToast === false) return;
+    const text = String(res || '').trim();
+    const isError = /^error:/i.test(text);
+    const isWarn = !isError && (/^no\b/i.test(text) || /\bno\s+(selection|document|items?|artboards?)\b/i.test(text));
+    const type = isError ? 'error' : (isWarn ? 'warn' : 'success');
+    const title = opts.toastTitle || (isError ? 'Operation failed' : 'Operation finished');
+    const message = text || opts.emptyMessage || title;
+    showToast(message, {type: type, title: title, duration: opts.toastDuration || 5000});
+  }
+  function runButtonJsxOperation(fnCall, options) {
+    const opts = options || {};
+    callJSX(fnCall, function(res) {
+      if(opts.logFn && res) opts.logFn(res);
+      if(opts.onResult) opts.onResult(res);
+      notifyOperationResult(res, opts);
+    });
+  }
 
   function cmykKey(c, m, y, k) {
     function r(v) {return Math.round(v * 100) / 100;}
@@ -38,6 +146,90 @@
   let lightboxMeasureLiveInFlight = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
+  let activateTabFn = null;
+  let persistSettingsTimer = null;
+  let isApplyingPanelSettings = false;
+  let schedulePanelSettingsSave = null;
+
+  function jsxEscapeDoubleQuoted(text) {
+    return String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function collectPanelSettings() {
+    const settings = {};
+    $all('input[id], select[id], textarea[id]').forEach((el) => {
+      if(!el || !el.id) return;
+      const type = (el.type || '').toLowerCase();
+      if(type === 'checkbox' || type === 'radio') settings[el.id] = !!el.checked;
+      else settings[el.id] = el.value;
+    });
+    const activeTab = document.querySelector('.tab[data-tab].active');
+    if(activeTab) settings.__activeTab = activeTab.getAttribute('data-tab') || '';
+    return settings;
+  }
+
+  function applyPanelSettings(settings) {
+    if(!settings || typeof settings !== 'object') return;
+    isApplyingPanelSettings = true;
+    try {
+      Object.keys(settings).forEach((key) => {
+        if(key === '__activeTab') return;
+        const el = $(key);
+        if(!el) return;
+        const type = (el.type || '').toLowerCase();
+        const value = settings[key];
+        if(type === 'checkbox' || type === 'radio') el.checked = !!value;
+        else if(value != null) el.value = String(value);
+        try {el.dispatchEvent(new Event('input', {bubbles: true}));} catch(_eInp) { }
+        try {el.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eChg) { }
+      });
+      if(settings.__activeTab && activateTabFn) activateTabFn(String(settings.__activeTab));
+    } finally {
+      isApplyingPanelSettings = false;
+    }
+  }
+
+  function persistPanelSettings() {
+    if(isApplyingPanelSettings) return;
+    const payload = collectPanelSettings();
+    const json = JSON.stringify(payload);
+    const safe = jsxEscapeDoubleQuoted(json);
+    callJSX('signarama_helper_panelSettingsSave("' + safe + '")', function(res) {
+      if(res && String(res).indexOf('Error:') === 0) log('Settings save failed: ' + res);
+    });
+  }
+
+  function setupPanelSettingsPersistence() {
+    function scheduleSave() {
+      if(isApplyingPanelSettings) return;
+      if(persistSettingsTimer) clearTimeout(persistSettingsTimer);
+      persistSettingsTimer = setTimeout(persistPanelSettings, 120);
+    }
+    schedulePanelSettingsSave = scheduleSave;
+
+    $all('input[id], select[id], textarea[id]').forEach((el) => {
+      el.addEventListener('input', scheduleSave);
+      el.addEventListener('change', scheduleSave);
+    });
+    $all('.tab[data-tab]').forEach((el) => {
+      el.addEventListener('click', scheduleSave);
+    });
+  }
+
+  function loadPanelSettings(done) {
+    callJSX('signarama_helper_panelSettingsLoad()', function(res) {
+      const txt = String(res || '');
+      if(txt && txt !== 'NO_SETTINGS') {
+        try {
+          applyPanelSettings(JSON.parse(txt));
+          log('Panel settings loaded.');
+        } catch(e) {
+          log('Panel settings parse failed: ' + (e && e.message ? e.message : e));
+        }
+      }
+      if(done) done();
+    });
+  }
 
   function buildDimensionPayload() {
     return {
@@ -47,6 +239,7 @@
       strokePt: num(($('strokePt') && $('strokePt').value) || 0),
       decimals: parseInt((($('decimals') && $('decimals').value) || 0), 10),
       labelGapMm: num(($('labelGapMm') && $('labelGapMm').value) || 0),
+      measureIncludeStroke: !!($('measureIncludeStroke') && $('measureIncludeStroke').checked),
       measureClippedContent: !!($('measureClippedContent') && $('measureClippedContent').checked),
       arrowheadSizePt: num(($('arrowheadSizePt') && $('arrowheadSizePt').value) || 0),
       includeArrowhead: !!($('includeArrowhead') && $('includeArrowhead').checked),
@@ -79,7 +272,10 @@
       cs.evalScript('typeof signarama_helper_fitArtboardToArtwork', function(type) {
         log('JSX check: signarama_helper_fitArtboardToArtwork is ' + type);
         if(type !== 'function') log('ERROR: JSX not loaded (check path/case).');
-        if(typeof refreshLightboxArtboardScaleNotice === 'function') refreshLightboxArtboardScaleNotice();
+        loadPanelSettings(function() {
+          setupPanelSettingsPersistence();
+          if(typeof refreshLightboxArtboardScaleNotice === 'function') refreshLightboxArtboardScaleNotice();
+        });
       });
     });
   });
@@ -98,6 +294,7 @@
         refreshLightboxArtboardScaleNotice();
       }
     }
+    activateTabFn = activate;
 
     tabs.forEach(t => {
       t.addEventListener('click', () => activate(t.getAttribute('data-tab')));
@@ -121,13 +318,13 @@
 
   function wireActions() {
     const fit = $('btnFitArtboard');
-    if(fit) fit.onclick = () => callJSX('signarama_helper_fitArtboardToArtwork()', res => res && log(res));
+    if(fit) fit.onclick = () => runButtonJsxOperation('signarama_helper_fitArtboardToArtwork()', {logFn: log, toastTitle: 'Fit artboard'});
 
     const ab = $('btnArtboardPerItem');
-    if(ab) ab.onclick = () => callJSX('signarama_helper_createArtboardsFromSelection()', res => res && log(res));
+    if(ab) ab.onclick = () => runButtonJsxOperation('signarama_helper_createArtboardsFromSelection()', {logFn: log, toastTitle: 'Artboard per selection'});
 
     const a4 = $('btnCopyOutlineScaleA4');
-    if(a4) a4.onclick = () => callJSX('signarama_helper_duplicateOutlineScaleA4()', res => res && log(res));
+    if(a4) a4.onclick = () => runButtonJsxOperation('signarama_helper_duplicateOutlineScaleA4()', {logFn: log, toastTitle: 'Scale artwork for proof'});
 
     const preset = $('bleedPreset');
     if(preset) {
@@ -152,7 +349,8 @@
         const l = num($('bleedLeft').value);
         const keepOriginal = !!(($('bleedKeepOriginal') && $('bleedKeepOriginal').checked));
         const excludeClipped = !!(($('bleedExcludeClippedContent') && $('bleedExcludeClippedContent').checked));
-        callJSX('signarama_helper_applyBleed(' + [t, l, b, r, excludeClipped, keepOriginal].join(',') + ')', res => res && log(res));
+        const expandArtboards = !!(($('bleedExpandArtboards') && $('bleedExpandArtboards').checked));
+        runButtonJsxOperation('signarama_helper_applyBleed(' + [t, l, b, r, excludeClipped, keepOriginal, expandArtboards].join(',') + ')', {logFn: log, toastTitle: 'Apply bleed'});
       };
     }
 
@@ -173,18 +371,18 @@
           autoWeld: autoWeld
         });
         const safe = payload.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        callJSX("signarama_helper_applyPathBleed('" + safe + "')", res => res && log(res));
+        runButtonJsxOperation("signarama_helper_applyPathBleed('" + safe + "')", {logFn: log, toastTitle: 'Apply path bleed'});
       };
     }
 
     const path = $('btnAddPathText');
-    if(path) path.onclick = () => callJSX('signarama_helper_addFilePathTextToArtboards()', res => res && log(res));
+    if(path) path.onclick = () => runButtonJsxOperation('signarama_helper_addFilePathTextToArtboards()', {logFn: log, toastTitle: 'Add path labels'});
 
     const outlineAll = $('btnOutlineAllText');
-    if(outlineAll) outlineAll.onclick = () => callJSX('signarama_helper_outlineAllText()', res => res && log(res));
+    if(outlineAll) outlineAll.onclick = () => runButtonJsxOperation('signarama_helper_outlineAllText()', {logFn: log, toastTitle: 'Outline all text'});
 
     const setFillsStrokes = $('btnSetFillsStrokes');
-    if(setFillsStrokes) setFillsStrokes.onclick = () => callJSX('signarama_helper_setAllFillsStrokes()', res => res && log(res));
+    if(setFillsStrokes) setFillsStrokes.onclick = () => runButtonJsxOperation('signarama_helper_setAllFillsStrokes()', {logFn: log, toastTitle: 'Set fills/strokes'});
 
     wireDimensions();
     wireLightbox();
@@ -193,7 +391,7 @@
     wireColours();
 
     const clear = $('btnClearLog');
-    if(clear) clear.onclick = () => {const el = $('log'); if(el) el.textContent = '';};
+    if(clear) clear.onclick = () => {const el = $('log'); if(el) el.textContent = ''; showToast('Console cleared.', {type: 'info', title: 'Log', duration: 2500});};
   }
 
   function wireLightbox() {
@@ -311,11 +509,14 @@
         isLargeArtboard: isLargeArtboard
       };
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      callJSX('signarama_helper_createLightbox("' + json + '")', res => {
-        if(res) log(res);
-        if(payload.updateMeasuresLive && payload.addMeasures) {
-          runLightboxMeasureLiveTick(true);
-          startLightboxMeasureLive();
+      runButtonJsxOperation('signarama_helper_createLightbox("' + json + '")', {
+        logFn: log,
+        toastTitle: 'Create lightbox',
+        onResult: () => {
+          if(payload.updateMeasuresLive && payload.addMeasures) {
+            runLightboxMeasureLiveTick(true);
+            startLightboxMeasureLive();
+          }
         }
       });
     };
@@ -346,11 +547,14 @@
           isLargeArtboard: isLargeArtboard
         };
         const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        callJSX('signarama_helper_createLightboxWithLedPanel("' + json + '")', res => {
-          if(res) log(res);
-          if(payload.updateMeasuresLive && payload.addMeasures) {
-            runLightboxMeasureLiveTick(true);
-            startLightboxMeasureLive();
+        runButtonJsxOperation('signarama_helper_createLightboxWithLedPanel("' + json + '")', {
+          logFn: log,
+          toastTitle: 'Create lightbox + LED',
+          onResult: () => {
+            if(payload.updateMeasuresLive && payload.addMeasures) {
+              runLightboxMeasureLiveTick(true);
+              startLightboxMeasureLive();
+            }
           }
         });
       };
@@ -379,7 +583,7 @@
         isLargeArtboard: isLargeArtboard
       };
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      callJSX('signarama_helper_drawLedLayout("' + json + '")', res => res && log(res));
+      runButtonJsxOperation('signarama_helper_drawLedLayout("' + json + '")', {logFn: log, toastTitle: 'Draw LED layout'});
     };
   }
 
@@ -438,11 +642,12 @@
 
   function wireColours() {
     const refreshBtn = $('btnRefreshColours');
-    if(refreshBtn) refreshBtn.onclick = () => refreshColours();
+    if(refreshBtn) refreshBtn.onclick = () => refreshColours({showToastOnComplete: true});
     window.refreshColours = refreshColours;
   }
 
-  function refreshColours() {
+  function refreshColours(options) {
+    const showToastOnComplete = !!(options && options.showToastOnComplete);
     const list = $('coloursList');
     const countEl = $('coloursCount');
     if(!list) return;
@@ -466,7 +671,11 @@
       }
 
       callJSX('signarama_helper_getDocumentColors()', function(res) {
-        if(!res) {log('Colours: no response from JSX.'); return;}
+        if(!res) {
+          log('Colours: no response from JSX.');
+          if(showToastOnComplete) showToast('No response from colour scan.', {type: 'warn', title: 'Refresh colours'});
+          return;
+        }
         let data = null;
         let debug = null;
         try {data = JSON.parse(res);} catch(_e1) {
@@ -476,6 +685,7 @@
         }
         if(!data) {
           log('Colours raw response: ' + res);
+          if(showToastOnComplete) showToast('Failed to parse colour scan response.', {type: 'error', title: 'Refresh colours'});
           return;
         }
         if(data && data.colors && Array.isArray(data.colors)) {
@@ -491,6 +701,7 @@
         }
         if(!data || !Array.isArray(data)) return;
         if(countEl) countEl.textContent = 'Document colours: ' + data.length + (debug ? ' (items: ' + (debug.totalItems || 0) + ', scanned: ' + (debug.scanned || 0) + ', path: ' + (debug.pathItems || 0) + ', text: ' + (debug.textFrames || 0) + ', fallback: ' + (debug.fallbackUsed ? 'yes' : 'no') + ')' : '');
+        if(showToastOnComplete) showToast('Found ' + data.length + ' document colours.', {type: 'success', title: 'Refresh colours'});
 
         function round1(v) {
           return Math.round(v * 10) / 10;
@@ -851,22 +1062,43 @@
 
   function wireDimensions() {
     const dimClear = $('btnDimClear');
-    if(dimClear) dimClear.onclick = () => callJSX('atlas_dimensions_clear()', res => res && logDim(res));
+    if(dimClear) dimClear.onclick = () => runButtonJsxOperation('atlas_dimensions_clear()', {logFn: logDim, toastTitle: 'Clear dimensions'});
+    const dimSelectionHint = $('dimSelectionHint');
+    const textColorInput = $('textColor');
+    const lineColorInput = $('lineColor');
+
+    function refreshDimensionSelectionHint() {
+      if(!dimSelectionHint) return;
+      const dimPanel = $('tab-dimensions');
+      if(!dimPanel || dimPanel.classList.contains('hidden')) return;
+      callJSX('atlas_dimensions_hasSelection()', function(res) {
+        const hasSelection = String(res || '') === '1';
+        dimSelectionHint.classList.toggle('hidden', hasSelection);
+      });
+    }
 
     function runSides(sides) {
       const payload = buildDimensionPayload();
       payload.sides = sides;
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      callJSX('atlas_dimensions_runMulti("' + json + '")', function(res) {
-        if(res) logDim(res);
+      runButtonJsxOperation('atlas_dimensions_runMulti("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Add dimensions',
+        onResult: function() {
+          refreshDimensionSelectionHint();
+        }
       });
     }
 
     function runLineMeasure() {
       const payload = buildDimensionPayload();
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      callJSX('atlas_dimensions_runLine("' + json + '")', function(res) {
-        if(res) logDim(res);
+      runButtonJsxOperation('atlas_dimensions_runLine("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Measure line/path',
+        onResult: function() {
+          refreshDimensionSelectionHint();
+        }
       });
     }
 
@@ -887,6 +1119,21 @@
       const el = $(id);
       if(el) el.onclick = map[id];
     });
+
+    $all('.theme-tile[data-text-color][data-line-color]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const textHex = tile.getAttribute('data-text-color') || '';
+        const lineHex = tile.getAttribute('data-line-color') || '';
+        if(textColorInput && textHex) textColorInput.value = textHex;
+        if(lineColorInput && lineHex) lineColorInput.value = lineHex;
+        try {if(textColorInput) textColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eTC) { }
+        try {if(lineColorInput) lineColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eLC) { }
+        if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+      });
+    });
+
+    refreshDimensionSelectionHint();
+    setInterval(refreshDimensionSelectionHint, 1500);
   }
 
   function loadJSX(done) {
