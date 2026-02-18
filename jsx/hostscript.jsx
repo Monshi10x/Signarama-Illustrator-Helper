@@ -1441,6 +1441,228 @@ function signarama_helper_applyPathBleed(jsonStr) {
   return msg;
 }
 
+function _srh_transform_getBounds(item, includeStroke) {
+  if(!item) return null;
+  var b = null;
+  if(includeStroke) {
+    try {b = item.visibleBounds;} catch(_eTb0) { }
+    if(!b || b.length !== 4) {try {b = item.geometricBounds;} catch(_eTb1) {b = null;} }
+  } else {
+    try {b = item.geometricBounds;} catch(_eTb2) { }
+    if(!b || b.length !== 4) {try {b = item.visibleBounds;} catch(_eTb3) {b = null;} }
+  }
+  return (b && b.length === 4) ? b : null;
+}
+function _srh_transform_getClippingMaskItem(groupItem) {
+  if(!groupItem) return null;
+  try {
+    if(!(groupItem.typename === "GroupItem" && groupItem.clipped && groupItem.pageItems && groupItem.pageItems.length)) return null;
+  } catch(_eCk0) { return null; }
+  try {
+    for(var i = 0; i < groupItem.pageItems.length; i++) {
+      var pi = groupItem.pageItems[i];
+      if(!pi) continue;
+      try {
+        if(pi.typename === "PathItem" && pi.clipping) return pi;
+      } catch(_eCk1) { }
+      try {
+        if(pi.typename === "CompoundPathItem" && pi.pathItems && pi.pathItems.length && pi.pathItems[0].clipping) return pi;
+      } catch(_eCk2) { }
+    }
+  } catch(_eCk3) { }
+  return null;
+}
+function _srh_transform_getTargetBounds(item, includeStroke) {
+  // For clipped groups, size should be derived from the clipping mask only.
+  try {
+    if(item && item.typename === "GroupItem" && item.clipped) {
+      var mask = _srh_transform_getClippingMaskItem(item);
+      if(mask) {
+        var mb = _srh_transform_getBounds(mask, includeStroke);
+        if(mb) return mb;
+      }
+    }
+  } catch(_eTbM0) { }
+  return _srh_transform_getBounds(item, includeStroke);
+}
+function _srh_transform_originToTransformation(origin) {
+  switch(String(origin || 'C')) {
+    case 'TL': return Transformation.TOPLEFT;
+    case 'TM': return Transformation.TOP;
+    case 'TR': return Transformation.TOPRIGHT;
+    case 'LM': return Transformation.LEFT;
+    case 'RM': return Transformation.RIGHT;
+    case 'BL': return Transformation.BOTTOMLEFT;
+    case 'BM': return Transformation.BOTTOM;
+    case 'BR': return Transformation.BOTTOMRIGHT;
+    case 'C':
+    default: return Transformation.CENTER;
+  }
+}
+function _srh_transform_originFractions(origin) {
+  switch(String(origin || 'C')) {
+    case 'TL': return {fx: 0, fy: 1};
+    case 'TM': return {fx: 0.5, fy: 1};
+    case 'TR': return {fx: 1, fy: 1};
+    case 'LM': return {fx: 0, fy: 0.5};
+    case 'RM': return {fx: 1, fy: 0.5};
+    case 'BL': return {fx: 0, fy: 0};
+    case 'BM': return {fx: 0.5, fy: 0};
+    case 'BR': return {fx: 1, fy: 0};
+    case 'C':
+    default: return {fx: 0.5, fy: 0.5};
+  }
+}
+function _srh_transform_makeSize_impl(json) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var opts = {};
+  try {
+    if(typeof json === 'string') {
+      try {opts = JSON.parse(json);}
+      catch(_eParse0) {opts = eval('(' + json + ')');}
+    } else {
+      opts = json || {};
+    }
+  } catch(_eParse1) {
+    opts = {};
+  }
+
+  var mode = String(opts.mode || 'selection');
+  var origin = String(opts.origin || 'C');
+  var excludeStroke = (opts.excludeStroke === undefined) ? true : !!opts.excludeStroke;
+  var includeStroke = !excludeStroke;
+  var widthSpec = (typeof opts.widthSpec !== 'undefined') ? opts.widthSpec : opts.widthMm;
+  var heightSpec = (typeof opts.heightSpec !== 'undefined') ? opts.heightSpec : opts.heightMm;
+  var hasWidthSpec = !(widthSpec == null || String(widthSpec).replace(/^\s+|\s+$/g, '') === '');
+  var hasHeightSpec = !(heightSpec == null || String(heightSpec).replace(/^\s+|\s+$/g, '') === '');
+  var sf = _srh_getScaleFactor();
+  function _ptDocToMmScaled(ptDoc) {
+    return _dim_pt2mm(ptDoc * (sf || 1));
+  }
+  function _resolveSizeSpecMm(spec, currentMm) {
+    if(spec == null) return currentMm;
+    var raw = String(spec).replace(/^\s+|\s+$/g, '');
+    if(!raw) return currentMm;
+    var op = raw.charAt(0);
+    var hasOp = (op === '+' || op === '-' || op === '*' || op === '/');
+    var out = null;
+    if(hasOp) {
+      var nRaw = String(raw.substring(1)).replace(/^\s+|\s+$/g, '');
+      var n = Number(nRaw);
+      if(!(n >= 0)) return null;
+      if(op === '+') out = currentMm + n;
+      else if(op === '-') out = currentMm - n;
+      else if(op === '*') out = currentMm * n;
+      else if(op === '/') out = (n === 0) ? null : (currentMm / n);
+    } else {
+      out = Number(raw);
+    }
+    if(!(out > 0)) return null;
+    return out;
+  }
+  if(!hasWidthSpec && !hasHeightSpec) return 'No size provided.';
+
+  if(mode === 'artboard') {
+    var idx = doc.artboards.getActiveArtboardIndex();
+    var rect = doc.artboards[idx].artboardRect; // [L,T,R,B]
+    var left = rect[0], top = rect[1], right = rect[2], bottom = rect[3];
+    var curW = right - left;
+    var curH = top - bottom;
+    if(!(curW > 0) || !(curH > 0)) return 'Active artboard has invalid size.';
+
+    var newW = curW;
+    var newH = curH;
+    if(hasWidthSpec) {
+      var curWmm = _ptDocToMmScaled(curW);
+      var resolvedWmm = _resolveSizeSpecMm(widthSpec, curWmm);
+      if(resolvedWmm == null) return 'Invalid width expression.';
+      newW = _srh_mm2ptDoc(resolvedWmm);
+    }
+    if(hasHeightSpec) {
+      var curHmm = _ptDocToMmScaled(curH);
+      var resolvedHmm = _resolveSizeSpecMm(heightSpec, curHmm);
+      if(resolvedHmm == null) return 'Invalid height expression.';
+      newH = _srh_mm2ptDoc(resolvedHmm);
+    }
+    var o = _srh_transform_originFractions(origin);
+    var ax = left + (curW * o.fx);
+    var ay = bottom + (curH * o.fy);
+    var newLeft = ax - (newW * o.fx);
+    var newBottom = ay - (newH * o.fy);
+    var newRect = [newLeft, newBottom + newH, newLeft + newW, newBottom];
+    doc.artboards[idx].artboardRect = newRect;
+    return 'Transformed active artboard to ' + Math.round(_dim_pt2mm(newW) * 100) / 100 + ' x ' + Math.round(_dim_pt2mm(newH) * 100) / 100 + ' mm.';
+  }
+
+  var sel = doc.selection;
+  if(!sel || !sel.length) return 'No selection. Select one or more items.';
+  var xformOrigin = _srh_transform_originToTransformation(origin);
+  function _getNearestClippedGroup(item) {
+    var p = item;
+    while(p) {
+      var isClippedGroup = false;
+      try {isClippedGroup = (p.typename === "GroupItem" && p.clipped);} catch(_eCg0) { isClippedGroup = false; }
+      if(isClippedGroup) return p;
+      try {p = p.parent;} catch(_eCg1) { p = null; }
+    }
+    return null;
+  }
+  var targets = [];
+  for(var s = 0; s < sel.length; s++) {
+    var raw = sel[s];
+    if(!raw) continue;
+    var target = _getNearestClippedGroup(raw) || raw;
+    var already = false;
+    for(var t = 0; t < targets.length; t++) {
+      if(targets[t] === target) {already = true; break;}
+    }
+    if(!already) targets.push(target);
+  }
+  var changed = 0;
+  for(var i = 0; i < targets.length; i++) {
+    var it = targets[i];
+    if(!it) continue;
+    try {if(it.locked || it.hidden) continue;} catch(_eLock) { }
+    var b = _srh_transform_getTargetBounds(it, includeStroke);
+    if(!b) continue;
+    var curItemW = b[2] - b[0];
+    var curItemH = b[1] - b[3];
+    if(!(curItemW > 0) || !(curItemH > 0)) continue;
+    var sx = 100;
+    var sy = 100;
+    if(hasWidthSpec) {
+      var curItemWmm = _ptDocToMmScaled(curItemW);
+      var resolvedItemWmm = _resolveSizeSpecMm(widthSpec, curItemWmm);
+      if(resolvedItemWmm == null) continue;
+      var targetWpt = _srh_mm2ptDoc(resolvedItemWmm);
+      sx = (targetWpt / curItemW) * 100;
+    }
+    if(hasHeightSpec) {
+      var curItemHmm = _ptDocToMmScaled(curItemH);
+      var resolvedItemHmm = _resolveSizeSpecMm(heightSpec, curItemHmm);
+      if(resolvedItemHmm == null) continue;
+      var targetHpt = _srh_mm2ptDoc(resolvedItemHmm);
+      sy = (targetHpt / curItemH) * 100;
+    }
+    try {
+      it.resize(sx, sy, true, true, true, true, 100, xformOrigin);
+      changed++;
+    } catch(_eResize0) { }
+  }
+  if(!changed) return 'No eligible selection items to transform.';
+  return 'Transformed ' + changed + ' selection item' + (changed === 1 ? '' : 's') + '.';
+}
+this.signarama_helper_transform_makeSize = function(json) {
+  return _srh_transform_makeSize_impl(json);
+};
+this.atlas_transform_makeSize = function(json) {
+  return _srh_transform_makeSize_impl(json);
+};
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize; } catch(_eTg0) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_makeSize = this.atlas_transform_makeSize; } catch(_eTg2) { }
+try { signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize; } catch(_eTg1) { }
+
 
 
 function signarama_helper_addFilePathTextToArtboards() {
@@ -2275,51 +2497,92 @@ this.atlas_dimensions_hasSelection = function() {
 };
 
 function _srh_panelSettingsFile() {
+  var candidates = _srh_panelSettingsFileCandidates();
+  return (candidates && candidates.length) ? candidates[0] : null;
+}
+function _srh_panelSettingsFileCandidates() {
+  var out = [];
+  var dir = null;
+  try {
+    var extRoot = new Folder($.fileName).parent.parent; // .../Signarama-Illustrator-Helper
+    var localDir = new Folder(extRoot.fsName + '/.local');
+    try {if(!localDir.exists) localDir.create();} catch(_eMk0) { }
+    var localFile = new File(localDir.fsName + '/panel-settings.json');
+    try {if(localFile) out.push(localFile);} catch(_eTryLocal) { }
+  } catch(_eLocalRoot) { }
+
+  // Fallback for restricted installs (e.g. Program Files without write permission).
   var root = null;
   try {root = Folder.userData;} catch(_eRoot) {root = null;}
-  if(!root) return null;
-  var dir = new Folder(root.fsName + '/Signarama-Illustrator-Helper');
-  try {if(!dir.exists) dir.create();} catch(_eMk) { }
-  return new File(dir.fsName + '/panel-settings.json');
+  if(root) {
+    dir = new Folder(root.fsName + '/Signarama-Illustrator-Helper');
+    try {if(!dir.exists) dir.create();} catch(_eMk1) { }
+    try {out.push(new File(dir.fsName + '/panel-settings.json'));} catch(_ePushU) { }
+  }
+  return out;
 }
 
 this.signarama_helper_panelSettingsSave = function(json) {
+  var f = null;
   try {
     var txt = '';
     if(typeof json === 'string') txt = json;
     else txt = String(json || '{}');
-    // Validate and normalize JSON payload before writing.
-    var parsed = JSON.parse(txt);
-    var out = JSON.stringify(parsed);
-    var f = _srh_panelSettingsFile();
-    if(!f) return 'Error: Could not resolve settings path.';
-    f.encoding = 'UTF-8';
-    if(!f.open('w')) return 'Error: Could not open settings file for write.';
-    f.write(out);
-    f.close();
-    return 'OK';
+    // Validate JSON payload before writing; preserve strict JSON text from panel.
+    JSON.parse(txt);
+    var out = txt;
+    var files = _srh_panelSettingsFileCandidates();
+    if(!files || !files.length) return 'Error: Could not resolve settings path.';
+    var lastErr = '';
+    for(var i = 0; i < files.length; i++) {
+      f = files[i];
+      if(!f) continue;
+      try {
+        f.encoding = 'UTF-8';
+        if(!f.open('w')) {lastErr = 'Could not open settings file for write.'; continue;}
+        f.write(out);
+        f.close();
+        return 'OK';
+      } catch(_eWriteOne) {
+        try {if(f && f.opened) f.close();} catch(_eCloseOne) { }
+        lastErr = String(_eWriteOne);
+      }
+    }
+    return 'Error: ' + (lastErr || 'Could not write settings file.');
   } catch(e) {
     try {if(f && f.opened) f.close();} catch(_eClose) { }
     return 'Error: ' + e.message;
   }
 };
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_panelSettingsSave = this.signarama_helper_panelSettingsSave; } catch(_ePss0) { }
+try { signarama_helper_panelSettingsSave = this.signarama_helper_panelSettingsSave; } catch(_ePss1) { }
 
 this.signarama_helper_panelSettingsLoad = function() {
   var f = null;
   try {
-    f = _srh_panelSettingsFile();
-    if(!f || !f.exists) return 'NO_SETTINGS';
-    f.encoding = 'UTF-8';
-    if(!f.open('r')) return 'NO_SETTINGS';
-    var txt = f.read();
-    f.close();
-    if(!txt) return 'NO_SETTINGS';
-    return String(txt);
+    var files = _srh_panelSettingsFileCandidates();
+    if(!files || !files.length) return 'NO_SETTINGS';
+    for(var i = 0; i < files.length; i++) {
+      f = files[i];
+      if(!f || !f.exists) continue;
+      try {
+        f.encoding = 'UTF-8';
+        if(!f.open('r')) continue;
+        var txt = f.read();
+        f.close();
+        if(txt) return String(txt);
+      } catch(_eReadOne) {
+        try {if(f && f.opened) f.close();} catch(_eCloseOne2) { }
+      }
+    }
+    return 'NO_SETTINGS';
   } catch(e) {
     try {if(f && f.opened) f.close();} catch(_eClose2) { }
     return 'NO_SETTINGS';
   }
 };
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_panelSettingsLoad = this.signarama_helper_panelSettingsLoad; } catch(_ePsl0) { }
+try { signarama_helper_panelSettingsLoad = this.signarama_helper_panelSettingsLoad; } catch(_ePsl1) { }
 
 this.atlas_dimensions_runMulti = function(json) {
   var opts;

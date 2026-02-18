@@ -24,7 +24,7 @@
     const style = document.createElement('style');
     style.id = 'srhToastStyles';
     style.textContent = [
-      '#srhToastRoot{position:fixed;top:14px;right:14px;z-index:2147483000;display:flex;flex-direction:column;gap:10px;pointer-events:none;}',
+      '#srhToastRoot{position:fixed;top:14px;right:14px;left:auto;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none;}',
       '.srh-toast{min-width:250px;max-width:420px;background:#141414;color:#f2f2f2;border:1px solid #3a3a3a;border-radius:12px;box-shadow:inset 0px 1px 2px rgba(255,255,255,0.12),5px 8px 10px rgba(0,0,0,0.45),0 0px 1px rgba(0,0,0,0.6);overflow:hidden;pointer-events:auto;opacity:0;transform:translateY(-6px);transition:opacity .14s ease,transform .14s ease;}',
       '.srh-toast.in{opacity:1;transform:translateY(0);}',
       '.srh-toast-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 4px 10px;font-size:12px;font-weight:800;}',
@@ -116,7 +116,7 @@
     const isWarn = !isError && (/^no\b/i.test(text) || /\bno\s+(selection|document|items?|artboards?)\b/i.test(text));
     const type = isError ? 'error' : (isWarn ? 'warn' : 'success');
     const title = opts.toastTitle || (isError ? 'Operation failed' : 'Operation finished');
-    const message = text || opts.emptyMessage || title;
+    const message = (!isError && !isWarn && opts.toastMessage) ? opts.toastMessage : (text || opts.emptyMessage || title);
     showToast(message, {type: type, title: title, duration: opts.toastDuration || 5000});
   }
   function runButtonJsxOperation(fnCall, options) {
@@ -194,7 +194,7 @@
     const payload = collectPanelSettings();
     const json = JSON.stringify(payload);
     const safe = jsxEscapeDoubleQuoted(json);
-    callJSX('signarama_helper_panelSettingsSave("' + safe + '")', function(res) {
+    callJSX('((typeof signarama_helper_panelSettingsSave === "function") ? signarama_helper_panelSettingsSave : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_panelSettingsSave === "function") ? $.global.signarama_helper_panelSettingsSave : function(){return "Error: settings save function not loaded.";}))("' + safe + '")', function(res) {
       if(res && String(res).indexOf('Error:') === 0) log('Settings save failed: ' + res);
     });
   }
@@ -217,14 +217,26 @@
   }
 
   function loadPanelSettings(done) {
-    callJSX('signarama_helper_panelSettingsLoad()', function(res) {
+    callJSX('((typeof signarama_helper_panelSettingsLoad === "function") ? signarama_helper_panelSettingsLoad : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_panelSettingsLoad === "function") ? $.global.signarama_helper_panelSettingsLoad : function(){return "NO_SETTINGS";}))()', function(res) {
       const txt = String(res || '');
       if(txt && txt !== 'NO_SETTINGS') {
         try {
-          applyPanelSettings(JSON.parse(txt));
+          const parsed = JSON.parse(txt);
+          applyPanelSettings(parsed);
           log('Panel settings loaded.');
         } catch(e) {
-          log('Panel settings parse failed: ' + (e && e.message ? e.message : e));
+          try {
+            const migrated = Function('return ' + txt)();
+            if(migrated && typeof migrated === 'object') {
+              applyPanelSettings(migrated);
+              persistPanelSettings();
+              log('Panel settings loaded (migrated legacy format).');
+            } else {
+              log('Panel settings parse failed: ' + (e && e.message ? e.message : e));
+            }
+          } catch(_eLegacy) {
+            log('Panel settings parse failed: ' + (e && e.message ? e.message : e));
+          }
         }
       }
       if(done) done();
@@ -243,7 +255,7 @@
       measureClippedContent: !!($('measureClippedContent') && $('measureClippedContent').checked),
       arrowheadSizePt: num(($('arrowheadSizePt') && $('arrowheadSizePt').value) || 0),
       includeArrowhead: !!($('includeArrowhead') && $('includeArrowhead').checked),
-      textColor: ($('textColor') && $('textColor').value) || '#ff00ff',
+      textColor: ($('textColor') && $('textColor').value) || '#000000',
       lineColor: ($('lineColor') && $('lineColor').value) || '#000000',
       scaleAppearance: num(($('scaleAppearance') && $('scaleAppearance').value) || 100) / 100
     };
@@ -269,7 +281,7 @@
     });
 
     loadJSX(() => {
-      cs.evalScript('typeof signarama_helper_fitArtboardToArtwork', function(type) {
+      cs.evalScript('((typeof signarama_helper_fitArtboardToArtwork==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_fitArtboardToArtwork==="function")) ? "function" : "undefined")', function(type) {
         log('JSX check: signarama_helper_fitArtboardToArtwork is ' + type);
         if(type !== 'function') log('ERROR: JSX not loaded (check path/case).');
         loadPanelSettings(function() {
@@ -332,12 +344,21 @@
         const v = preset.value;
         if(v === 'acm') {
           $('bleedTop').value = 20; $('bleedRight').value = 20; $('bleedBottom').value = 20; $('bleedLeft').value = 20;
-        } else if(v === 'print') {
-          $('bleedTop').value = 3; $('bleedRight').value = 3; $('bleedBottom').value = 3; $('bleedLeft').value = 3;
+        } else if(v === 'windowGraphics') {
+          $('bleedTop').value = 0; $('bleedRight').value = 20; $('bleedBottom').value = 20; $('bleedLeft').value = 0;
+        } else if(v === 'wallGraphics') {
+          $('bleedTop').value = 20; $('bleedRight').value = 50; $('bleedBottom').value = 50; $('bleedLeft').value = 0;
+        } else if(v === 'flyers') {
+          $('bleedTop').value = 2; $('bleedRight').value = 2; $('bleedBottom').value = 2; $('bleedLeft').value = 2;
+        } else if(v === 'aframes') {
+          $('bleedTop').value = 20; $('bleedRight').value = 20; $('bleedBottom').value = 20; $('bleedLeft').value = 20;
+        } else if(v === 'pullupBanners') {
+          $('bleedTop').value = 0; $('bleedRight').value = 0; $('bleedBottom').value = 100; $('bleedLeft').value = 0;
         } else if(v === 'none') {
           $('bleedTop').value = 0; $('bleedRight').value = 0; $('bleedBottom').value = 0; $('bleedLeft').value = 0;
         }
       };
+      preset.onchange();
     }
 
     const applyBleed = $('btnApplyBleed');
@@ -350,7 +371,7 @@
         const keepOriginal = !!(($('bleedKeepOriginal') && $('bleedKeepOriginal').checked));
         const excludeClipped = !!(($('bleedExcludeClippedContent') && $('bleedExcludeClippedContent').checked));
         const expandArtboards = !!(($('bleedExpandArtboards') && $('bleedExpandArtboards').checked));
-        runButtonJsxOperation('signarama_helper_applyBleed(' + [t, l, b, r, excludeClipped, keepOriginal, expandArtboards].join(',') + ')', {logFn: log, toastTitle: 'Apply bleed'});
+        runButtonJsxOperation('signarama_helper_applyBleed(' + [t, l, b, r, excludeClipped, keepOriginal, expandArtboards].join(',') + ')', {logFn: log, toastTitle: 'Apply bleed', toastMessage: 'Finished apply bleed.'});
       };
     }
 
@@ -385,6 +406,7 @@
     if(setFillsStrokes) setFillsStrokes.onclick = () => runButtonJsxOperation('signarama_helper_setAllFillsStrokes()', {logFn: log, toastTitle: 'Set fills/strokes'});
 
     wireDimensions();
+    wireTransform();
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
@@ -1136,13 +1158,79 @@
     setInterval(refreshDimensionSelectionHint, 1500);
   }
 
+  function wireTransform() {
+    const originField = $('transformOrigin');
+    const originButtons = $all('#transformOriginGrid .origin-btn');
+    const applyBtn = $('btnTransformApply');
+    const modeField = $('transformMode');
+    const widthField = $('transformWidthMm');
+    const heightField = $('transformHeightMm');
+    const excludeStrokeField = $('transformExcludeStroke');
+
+    function syncOriginButtons(originCode) {
+      const val = String(originCode || 'C');
+      originButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-origin') === val);
+      });
+    }
+    function setOrigin(originCode) {
+      const val = String(originCode || 'C');
+      if(originField) originField.value = val;
+      syncOriginButtons(val);
+      try {if(originField) originField.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eOrgChg) { }
+      if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+    }
+
+    originButtons.forEach(btn => {
+      btn.addEventListener('click', () => setOrigin(btn.getAttribute('data-origin')));
+    });
+    if(originField) {
+      originField.addEventListener('change', () => syncOriginButtons(originField.value));
+    }
+    syncOriginButtons((originField && originField.value) || 'C');
+
+    if(!applyBtn) return;
+    applyBtn.onclick = () => {
+      const widthRaw = String((widthField && widthField.value) || '').trim();
+      const heightRaw = String((heightField && heightField.value) || '').trim();
+      if(!widthRaw && !heightRaw) {
+        showToast('Enter width and/or height in mm.', {type: 'warn', title: 'Transform'});
+        return;
+      }
+
+      const payload = {
+        mode: (modeField && modeField.value) || 'selection',
+        widthSpec: widthRaw || null,
+        heightSpec: heightRaw || null,
+        origin: (originField && originField.value) || 'C',
+        excludeStroke: !!(excludeStrokeField && excludeStrokeField.checked)
+      };
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      loadJSX(function() {
+        runButtonJsxOperation('((typeof atlas_transform_makeSize === "function") ? atlas_transform_makeSize : ((typeof $ !== "undefined" && $.global && typeof $.global.atlas_transform_makeSize === "function") ? $.global.atlas_transform_makeSize : function(){return "Error: Transform function not loaded.";}))("' + json + '")', {logFn: log, toastTitle: 'Transform'});
+      });
+    };
+  }
+
   function loadJSX(done) {
     try {
       var extDir = cs.getSystemPath(SystemPath.EXTENSION).replace(/\\/g, '/');
-      var cmd = '$.evalFile("' + extDir + '/jsx/hostscript.jsx")';
-      cs.evalScript(cmd, function() {
-        log('JSX loaded.');
-        if(done) done();
+      var jsxPath = extDir + '/jsx/hostscript.jsx';
+      var cmd = 'try{' +
+        'var f=new File("' + jsxPath + '");' +
+        'if(!f.exists) {' +
+          '"ERR: Missing JSX file at " + f.fsName;' +
+        '} else {' +
+          '$.evalFile(f);' +
+          '"OK: fit=" + (typeof signarama_helper_fitArtboardToArtwork) + ' +
+          '", settingsSave=" + ((typeof signarama_helper_panelSettingsSave==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_panelSettingsSave==="function")) ? "function" : "undefined") + ' +
+          '", transform=" + ((typeof atlas_transform_makeSize==="function" || (typeof $!=="undefined" && $.global && typeof $.global.atlas_transform_makeSize==="function")) ? "function" : "undefined");' +
+        '}' +
+      '}catch(e){ "ERR: " + e; }';
+      cs.evalScript(cmd, function(res) {
+        var txt = String(res || '');
+        log('JSX load result: ' + txt);
+        if(done) done(txt);
       });
     } catch(e) {
       log('Failed to load JSX: ' + (e && e.message ? e.message : e));
