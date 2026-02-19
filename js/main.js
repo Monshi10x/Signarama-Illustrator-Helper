@@ -144,6 +144,8 @@
   };
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
+  let corebridgeWatchTimer = null;
+  let corebridgeWasSelected = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -429,6 +431,64 @@
 
     const path = $('btnAddPathText');
     if(path) path.onclick = () => runButtonJsxOperation('signarama_helper_addFilePathTextToArtboards()', {logFn: log, toastTitle: 'Add path labels'});
+
+    function ensureCorebridgeSelectionWatcher() {
+      if(corebridgeWatchTimer) return;
+      corebridgeWatchTimer = setInterval(() => {
+        callJSX('((typeof signarama_helper_corebridge_isLinkSelected === "function") ? signarama_helper_corebridge_isLinkSelected : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_isLinkSelected === "function") ? $.global.signarama_helper_corebridge_isLinkSelected : function(){return "0";}))()', (res) => {
+          const selected = String(res || '').trim() === '1';
+          if(selected && !corebridgeWasSelected) {
+            try {cs.openURLInDefaultBrowser('https://sar10686.corebridge.net/Login.aspx?ReturnUrl=%2fsales%2fdashboard');} catch(_eCbOpen) { }
+          }
+          corebridgeWasSelected = selected;
+        });
+      }, 800);
+    }
+
+    const corebridgeCreate = $('btnCorebridgeCreateLink');
+    if(corebridgeCreate) {
+      corebridgeCreate.onclick = () => {
+        runButtonJsxOperation('signarama_helper_corebridge_createLink()', {logFn: log, toastTitle: 'Corebridge link'});
+        ensureCorebridgeSelectionWatcher();
+      };
+    }
+
+    const corebridgePullData = $('btnCorebridgePullData');
+    const corebridgeDump = $('corebridgeDataDump');
+    if(corebridgePullData) {
+      corebridgePullData.onclick = async () => {
+        const url = 'https://signschedulerapp.ts.r.appspot.com/CB_DesignBoard_Data';
+        if(corebridgeDump) corebridgeDump.value = 'Loading...\n' + url;
+        try {
+          const res = await fetch(url, {method: 'GET', cache: 'no-store'});
+          const text = await res.text();
+          let formatted = text;
+          try {
+            const parsed = JSON.parse(text);
+            formatted = JSON.stringify(parsed, null, 2);
+          } catch(_eJson) { }
+          if(corebridgeDump) {
+            corebridgeDump.value =
+              'URL: ' + url + '\n' +
+              'Status: ' + res.status + ' ' + res.statusText + '\n' +
+              'Fetched: ' + (new Date()).toLocaleString() + '\n\n' +
+              formatted;
+          }
+          log('Corebridge pull data: ' + res.status + ' ' + res.statusText);
+          showToast('Corebridge data pulled.', {type: 'success', title: 'Corebridge'});
+        } catch(err) {
+          const msg = (err && err.message) ? err.message : String(err);
+          if(corebridgeDump) {
+            corebridgeDump.value =
+              'URL: ' + url + '\n' +
+              'Fetched: ' + (new Date()).toLocaleString() + '\n\n' +
+              'ERROR:\n' + msg;
+          }
+          log('Corebridge pull data failed: ' + msg);
+          showToast('Failed to pull Corebridge data.', {type: 'error', title: 'Corebridge'});
+        }
+      };
+    }
 
     const outlineAll = $('btnOutlineAllText');
     if(outlineAll) outlineAll.onclick = () => runButtonJsxOperation('signarama_helper_outlineAllText()', {logFn: log, toastTitle: 'Outline all text'});

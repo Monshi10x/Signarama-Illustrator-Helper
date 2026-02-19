@@ -1982,6 +1982,88 @@ function signarama_helper_transform_debugArtboards() {
   }
   return JSON.stringify(debug);
 }
+
+function signarama_helper_corebridge_createLink() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var view = null;
+  try {view = doc.activeView;} catch(_eCbV0) { view = null; }
+  if(!view) return 'No active view.';
+  var center = null;
+  try {center = view.centerPoint;} catch(_eCbV1) { center = null; }
+  if(!center || center.length < 2) return 'Could not determine viewport center.';
+
+  var cx = Number(center[0]);
+  var cy = Number(center[1]);
+  var w = _srh_mm2ptDoc(70);
+  var h = _srh_mm2ptDoc(20);
+  var r = _srh_mm2ptDoc(4);
+  var left = cx - (w / 2);
+  var top = cy + (h / 2);
+
+  var grp = doc.activeLayer.groupItems.add();
+  grp.name = 'SRH_COREBRIDGE_LINK';
+
+  var rect = grp.pathItems.roundedRectangle(top, left, w, h, r, r);
+  rect.name = 'SRH_COREBRIDGE_LINK_BG';
+  try {rect.stroked = true;} catch(_eCbR0) { }
+  try {rect.strokeWidth = _srh_pxStrokeDoc(1);} catch(_eCbR1) { }
+  try {rect.filled = true;} catch(_eCbR2) { }
+  try {
+    var fill = new RGBColor();
+    fill.red = 6; fill.green = 82; fill.blue = 152;
+    rect.fillColor = fill;
+  } catch(_eCbR3) { }
+  try {
+    var stroke = new RGBColor();
+    stroke.red = 255; stroke.green = 255; stroke.blue = 255;
+    rect.strokeColor = stroke;
+  } catch(_eCbR4) { }
+
+  var tf = grp.textFrames.pointText([cx, cy - _srh_mm2ptDoc(1)]);
+  tf.name = 'SRH_COREBRIDGE_LINK_TEXT';
+  tf.contents = 'corebridge';
+  try {tf.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eCbT0) { }
+  try {tf.textRange.characterAttributes.size = _srh_ptDoc(14);} catch(_eCbT1) { }
+  try {
+    var txt = new RGBColor();
+    txt.red = 255; txt.green = 255; txt.blue = 255;
+    tf.textRange.characterAttributes.fillColor = txt;
+  } catch(_eCbT2) { }
+
+  // Prevent immediate click-detection trigger after creation.
+  try {grp.selected = false;} catch(_eCbSel0) { }
+  try {rect.selected = false;} catch(_eCbSel1) { }
+  try {tf.selected = false;} catch(_eCbSel2) { }
+  try {doc.selection = null;} catch(_eCbSel3) { }
+  try {app.executeMenuCommand('deselectall');} catch(_eCbSel4) { }
+
+  return 'Corebridge link created.';
+}
+
+function signarama_helper_corebridge_isLinkSelected() {
+  if(!app.documents.length) return '0';
+  var doc = app.activeDocument;
+  var sel = null;
+  try {sel = doc.selection;} catch(_eCbS0) { sel = null; }
+  if(!sel || !sel.length) return '0';
+
+  function _hasCorebridgeAncestor(item) {
+    var p = item;
+    while(p) {
+      try {
+        if(String(p.name || '') === 'SRH_COREBRIDGE_LINK') return true;
+      } catch(_eCbS1) { }
+      try {p = p.parent;} catch(_eCbS2) { p = null; }
+    }
+    return false;
+  }
+
+  for(var i = 0; i < sel.length; i++) {
+    if(_hasCorebridgeAncestor(sel[i])) return '1';
+  }
+  return '0';
+}
 this.signarama_helper_transform_makeSize = function(json) {
   return _srh_transform_makeSize_impl(json);
 };
@@ -1995,6 +2077,10 @@ try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transfo
 try { signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards; } catch(_eTg4) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg5) { }
 try { signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg6) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg7) { }
+try { signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg8) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg9) { }
+try { signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg10) { }
 
 
 

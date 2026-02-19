@@ -284,6 +284,7 @@
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
+    <button class="tab" data-tab="tab-corebridge" type="button">Corebridge</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
@@ -769,6 +770,19 @@
           <button id="btnTransformApply" class="btn2" type="button">Transform</button>
         </div>
       </div>
+    </section>
+
+    <!-- TAB: COREBRIDGE -->
+    <section id="tab-corebridge" class="wrap hidden" role="tabpanel">
+      <button class="btn" id="btnCorebridgeCreateLink" type="button">
+        <span class="btnText">Create Link</span>
+        <span class="info" data-tip="Creates a Corebridge link badge in the center of the current view. Select it to open Corebridge in browser.">i</span>
+      </button>
+      <button class="btn" id="btnCorebridgePullData" type="button">
+        <span class="btnText">Pull Data</span>
+        <span class="info" data-tip="Fetches async JSON from the Corebridge design endpoint and dumps it below.">i</span>
+      </button>
+      <textarea id="corebridgeDataDump" class="log" style="height:220px;" readonly></textarea>
     </section>
 
     <!-- TAB: LIGHTBOX -->
