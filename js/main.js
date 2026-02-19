@@ -336,7 +336,38 @@
     if(ab) ab.onclick = () => runButtonJsxOperation('signarama_helper_createArtboardsFromSelection()', {logFn: log, toastTitle: 'Artboard per selection'});
 
     const a4 = $('btnCopyOutlineScaleA4');
-    if(a4) a4.onclick = () => runButtonJsxOperation('signarama_helper_duplicateOutlineScaleA4()', {logFn: log, toastTitle: 'Scale artwork for proof'});
+    const a4Rasterize = $('a4Rasterize');
+    const a4RasterizeQuality = $('a4RasterizeQuality');
+    if(a4Rasterize) {
+      const rasterizeLabel = a4Rasterize.closest('label');
+      if(rasterizeLabel) {
+        rasterizeLabel.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
+      a4Rasterize.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      a4Rasterize.addEventListener('change', (e) => {
+        e.stopPropagation();
+      });
+    }
+    if(a4RasterizeQuality) {
+      a4RasterizeQuality.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      a4RasterizeQuality.addEventListener('change', (e) => {
+        e.stopPropagation();
+      });
+    }
+    if(a4) a4.onclick = () => {
+      const payload = {
+        rasterize: !!(a4Rasterize && a4Rasterize.checked),
+        rasterizeQuality: (a4RasterizeQuality && a4RasterizeQuality.value) ? a4RasterizeQuality.value : 'high'
+      };
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runButtonJsxOperation('signarama_helper_duplicateOutlineScaleA4("' + json + '")', {logFn: log, toastTitle: 'Scale artwork for proof'});
+    };
 
     const preset = $('bleedPreset');
     if(preset) {
@@ -1166,6 +1197,123 @@
     const widthField = $('transformWidthMm');
     const heightField = $('transformHeightMm');
     const excludeStrokeField = $('transformExcludeStroke');
+    const artboardsWrap = $('transformArtboardsWrap');
+    const artboardsList = $('transformArtboardsList');
+    const refreshArtboardsBtn = $('btnTransformRefreshArtboards');
+    const artboardIndicesField = $('transformArtboardIndices');
+
+    function parseArtboardIndicesField() {
+      const raw = String((artboardIndicesField && artboardIndicesField.value) || '').trim();
+      if(!raw) return [];
+      return raw.split(',')
+        .map(v => parseInt(String(v).trim(), 10))
+        .filter(v => Number.isFinite(v) && v >= 0);
+    }
+    function setArtboardIndicesField(indices) {
+      const unique = [];
+      indices.forEach((n) => {
+        if(!Number.isFinite(n) || n < 0) return;
+        if(unique.indexOf(n) === -1) unique.push(n);
+      });
+      unique.sort((a, b) => a - b);
+      if(artboardIndicesField) artboardIndicesField.value = unique.join(',');
+      if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+    }
+    function readCheckedArtboardsFromList() {
+      if(!artboardsList) return [];
+      return Array.prototype.slice.call(artboardsList.querySelectorAll('input[type="checkbox"][data-artboard-index]'))
+        .filter(cb => cb.checked)
+        .map(cb => parseInt(cb.getAttribute('data-artboard-index'), 10))
+        .filter(v => Number.isFinite(v) && v >= 0);
+    }
+    function renderArtboardList(items) {
+      if(!artboardsList) return;
+      artboardsList.innerHTML = '';
+      const saved = parseArtboardIndicesField();
+      const savedSet = {};
+      saved.forEach(i => {savedSet[i] = true;});
+      if(!items || !items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'artboards-empty';
+        empty.textContent = 'No artboards found.';
+        artboardsList.appendChild(empty);
+        return;
+      }
+      items.forEach((ab) => {
+        const idx = parseInt(ab.index, 10);
+        if(!Number.isFinite(idx) || idx < 0) return;
+        const row = document.createElement('label');
+        row.className = 'chk';
+        row.style.marginBottom = '4px';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.setAttribute('data-artboard-index', String(idx));
+        cb.checked = !!savedSet[idx];
+        const text = document.createElement('span');
+        const name = String(ab.name || '').trim() || ('Artboard ' + (idx + 1));
+        const size = (Number.isFinite(ab.widthMm) && Number.isFinite(ab.heightMm))
+          ? (' (' + (Math.round(ab.widthMm * 100) / 100) + ' x ' + (Math.round(ab.heightMm * 100) / 100) + ' mm)')
+          : '';
+        text.textContent = '#' + (idx + 1) + ' ' + name + size + (ab.isActive ? ' [active]' : '');
+        row.appendChild(cb);
+        row.appendChild(text);
+        cb.addEventListener('change', () => {
+          setArtboardIndicesField(readCheckedArtboardsFromList());
+        });
+        artboardsList.appendChild(row);
+      });
+      // First load convenience: if nothing saved, preselect active artboard entry.
+      if(!parseArtboardIndicesField().length) {
+        const active = Array.prototype.slice.call(artboardsList.querySelectorAll('input[type="checkbox"][data-artboard-index]')).find((cb) => {
+          const t = cb.parentElement && cb.parentElement.textContent;
+          return t && t.indexOf('[active]') >= 0;
+        });
+        if(active) {
+          active.checked = true;
+          setArtboardIndicesField(readCheckedArtboardsFromList());
+        }
+      }
+    }
+    function refreshTransformArtboards() {
+      if(!artboardsList) return;
+      function loadArtboardDebug(reason) {
+        callJSX('((typeof signarama_helper_transform_debugArtboards === "function") ? signarama_helper_transform_debugArtboards : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_transform_debugArtboards === "function") ? $.global.signarama_helper_transform_debugArtboards : function(){return "{\\"error\\":\\"debug function not loaded\\"}";}))()', (dbgRes) => {
+          const dbgRaw = String(dbgRes || '');
+          log('Transform artboard debug (' + reason + '): ' + dbgRaw);
+          if(artboardsList && artboardsList.innerHTML.indexOf('No artboards found.') >= 0) {
+            artboardsList.innerHTML = '<div class="artboards-empty">No artboards found. See panel log for debug details.</div>';
+          }
+        });
+      }
+      callJSX('((typeof signarama_helper_transform_listArtboards === "function") ? signarama_helper_transform_listArtboards : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_transform_listArtboards === "function") ? $.global.signarama_helper_transform_listArtboards : function(){return "Error: artboard list function not loaded.";}))()', (res) => {
+        const raw = String(res || '');
+        if(raw.indexOf('Error:') === 0 || raw.indexOf('EvalScript error') === 0) {
+          log('Transform artboard list failed: ' + raw);
+          if(artboardsList) artboardsList.innerHTML = '<div class="artboards-empty">Failed to load artboards.</div>';
+          loadArtboardDebug('list-error');
+          return;
+        }
+        let items = [];
+        try {
+          const parsed = JSON.parse(raw || '[]');
+          if(Array.isArray(parsed)) items = parsed;
+        } catch(_eList) {
+          try {
+            const migrated = Function('return ' + raw)();
+            if(Array.isArray(migrated)) items = migrated;
+          } catch(_eListLegacy) {
+            items = [];
+          }
+        }
+        renderArtboardList(items);
+        if(!items.length) loadArtboardDebug('empty-list');
+      });
+    }
+    function updateTransformModeUi() {
+      const modeVal = String((modeField && modeField.value) || 'selection');
+      if(artboardsWrap) artboardsWrap.classList.toggle('hidden', modeVal !== 'artboards');
+      if(modeVal === 'artboards') refreshTransformArtboards();
+    }
 
     function syncOriginButtons(originCode) {
       const val = String(originCode || 'C');
@@ -1188,6 +1336,9 @@
       originField.addEventListener('change', () => syncOriginButtons(originField.value));
     }
     syncOriginButtons((originField && originField.value) || 'C');
+    if(modeField) modeField.addEventListener('change', updateTransformModeUi);
+    if(refreshArtboardsBtn) refreshArtboardsBtn.addEventListener('click', refreshTransformArtboards);
+    updateTransformModeUi();
 
     if(!applyBtn) return;
     applyBtn.onclick = () => {
@@ -1203,8 +1354,13 @@
         widthSpec: widthRaw || null,
         heightSpec: heightRaw || null,
         origin: (originField && originField.value) || 'C',
-        excludeStroke: !!(excludeStrokeField && excludeStrokeField.checked)
+        excludeStroke: !!(excludeStrokeField && excludeStrokeField.checked),
+        artboardIndices: parseArtboardIndicesField()
       };
+      if(payload.mode === 'artboards' && (!payload.artboardIndices || !payload.artboardIndices.length)) {
+        showToast('Select one or more target artboards in the list.', {type: 'warn', title: 'Transform'});
+        return;
+      }
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       loadJSX(function() {
         runButtonJsxOperation('((typeof atlas_transform_makeSize === "function") ? atlas_transform_makeSize : ((typeof $ !== "undefined" && $.global && typeof $.global.atlas_transform_makeSize === "function") ? $.global.atlas_transform_makeSize : function(){return "Error: Transform function not loaded.";}))("' + json + '")', {logFn: log, toastTitle: 'Transform'});

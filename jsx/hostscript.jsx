@@ -646,13 +646,26 @@ function signarama_helper_createArtboardsFromSelection() {
 }
 
 /**
- * Duplicates selection, converts text to outlines, outlines strokes, then scales DOWN
+ * Duplicates selection, then scales DOWN
  * so the duplicate fits within 297×210mm (A4 landscape) by either dimension.
+ * Keeps artwork live (no outlining). Workflow: scale geometry first, then scale strokes.
  */
-function signarama_helper_duplicateOutlineScaleA4() {
+function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
   if(!doc.selection || doc.selection.length === 0) return 'No selection. Select one or more items.';
+  var args = {};
+  try {args = jsonStr ? JSON.parse(String(jsonStr)) : {};} catch(_eArgs) { args = {}; }
+  var shouldRasterize = !!args.rasterize;
+  var rasterizeQuality = String(args.rasterizeQuality || 'high').toLowerCase();
+  var rasterizeDpi = 300;
+  if(rasterizeQuality === 'draft') rasterizeDpi = 72;
+  else if(rasterizeQuality === 'medium') rasterizeDpi = 150;
+  else if(rasterizeQuality === 'print') rasterizeDpi = 600;
+  else if(rasterizeQuality === 'ultra') rasterizeDpi = 1200;
+  else if(rasterizeQuality === 'max') rasterizeDpi = 2400;
+  else if(rasterizeQuality === 'super') rasterizeDpi = 7200;
+  else if(rasterizeQuality === 'insane') rasterizeDpi = 30000;
 
   var layer = doc.activeLayer;
   var grp = layer.groupItems.add();
@@ -668,34 +681,89 @@ function signarama_helper_duplicateOutlineScaleA4() {
   doc.selection = null;
   grp.selected = true;
 
-  // Convert all text types to outlines (within group), then expand appearance if needed
-  try {
-    var tfs = grp.textFrames;
-    for(var t = tfs.length - 1; t >= 0; t--) {
-      try {
-        var tf = tfs[t];
-        tf.createOutline();
-      } catch(_e1) { }
+  // Keep all objects live (fills/strokes/text); no outlining/expanding.
+
+  function _srh_scaleAllStrokesInContainer(container, factorScale) {
+    if(!container || !(factorScale > 0)) return 0;
+    var scaled = 0;
+    var minStroke = 0.01; // keep valid non-zero stroke values after heavy downscales
+    var seen = [];
+    function _scaleStrokeNumber(value) {
+      var n = Number(value);
+      if(!(isFinite(n) && n > 0)) return null;
+      var out = n * factorScale;
+      if(out < minStroke) out = minStroke;
+      return out;
     }
-  } catch(_e2) { }
+    function _scaleTextFrameStrokes(tf) {
+      if(!tf) return;
+      try {
+        var tr = tf.textRange;
+        if(tr && tr.characterAttributes) {
+          try {
+            var tw = _scaleStrokeNumber(tr.characterAttributes.strokeWeight);
+            if(tw !== null) {tr.characterAttributes.strokeWeight = tw; scaled++;}
+          } catch(_eSiTr0) { }
+        }
+      } catch(_eSiTr1) { }
+      try {
+        if(tf.textRange && tf.textRange.characters) {
+          var chars = tf.textRange.characters;
+          for(var ci = 0; ci < chars.length; ci++) {
+            try {
+              var ca = chars[ci].characterAttributes;
+              if(!ca) continue;
+              var cw = _scaleStrokeNumber(ca.strokeWeight);
+              if(cw !== null) {ca.strokeWeight = cw; scaled++;}
+            } catch(_eSiCh0) { }
+          }
+        }
+      } catch(_eSiCh1) { }
+    }
+    function _scaleItemStroke(it) {
+      if(!it) return;
+      for(var siSeen = 0; siSeen < seen.length; siSeen++) {
+        if(seen[siSeen] === it) return;
+      }
+      seen.push(it);
 
-  // Ensure any remaining text types are converted to outlines/expanded
-  try {
-    doc.selection = null;
-    grp.selected = true;
-    app.executeMenuCommand("Expand3");
-  } catch(_eExp3) { }
+      try {
+        var hasStroke = true;
+        try {if(it.stroked === false) hasStroke = false;} catch(_eSiSt0) { }
+        if(hasStroke) {
+          var sw = _scaleStrokeNumber(it.strokeWidth);
+          if(sw !== null) {
+            try {it.strokeWidth = sw; scaled++;} catch(_eSiSw0) { }
+          }
+        }
+      } catch(_eSiSw1) { }
+      try {
+        if(it.typename === "TextFrame") _scaleTextFrameStrokes(it);
+      } catch(_eSiTf0) { }
+      try {
+        if(it.typename === "CompoundPathItem" && it.pathItems) {
+          for(var pi = 0; pi < it.pathItems.length; pi++) {
+            _scaleItemStroke(it.pathItems[pi]);
+          }
+        }
+      } catch(_eSiCp0) { }
+      try {
+        if(it.typename === "GroupItem" && it.pageItems) {
+          for(var gi = 0; gi < it.pageItems.length; gi++) {
+            _scaleItemStroke(it.pageItems[gi]);
+          }
+        }
+      } catch(_eSiGp0) { }
+    }
 
-  // Outline strokes after text has been converted (all paths)
-  try {
-    doc.selection = null;
-    grp.selected = true;
-    app.executeMenuCommand("OffsetPath v22");
-  } catch(_e3) { }
+    _scaleItemStroke(container);
+    return scaled;
+  }
 
-  // Scale down to fit within 297x210mm
-  var targetW = _srh_mm2pt(297);
-  var targetH = _srh_mm2pt(210);
+  // Scale down to fit within 297x210mm.
+  // Large artboards use a document scale factor, so convert the A4 target into doc-space points.
+  var targetW = _srh_mm2ptDoc(297);
+  var targetH = _srh_mm2ptDoc(210);
 
   var b = null;
   try {b = grp.visibleBounds;} catch(_e4) { }
@@ -711,11 +779,80 @@ function signarama_helper_duplicateOutlineScaleA4() {
 
   if(factor < 0.999) {
     var pct = factor * 100;
-    try {grp.resize(pct, pct, true, true, true, true, true, Transformation.CENTER);} catch(_e6) { }
-    return 'Duplicate outlined + scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%).';
+    try {grp.resize(pct, pct, true, true, true, true, 100, Transformation.CENTER);} catch(_e6) { }
+    var strokeCount = _srh_scaleAllStrokesInContainer(grp, factor);
+    if(shouldRasterize) {
+      try {
+        // Rasterize each selected item using visible bounds.
+        doc.selection = null;
+        var gi = null;
+        try {gi = grp.pageItems;} catch(_eSelA) { gi = null; }
+        if(!gi || gi.length === 0) {
+          try {grp.selected = true;} catch(_eSelB) { }
+        } else {
+          for(var s = 0; s < gi.length; s++) {
+            try {gi[s].selected = true;} catch(_eSelC) { }
+          }
+        }
+
+        var selection = doc.selection;
+        if(!selection || selection.length === 0) {
+          return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + '). Rasterize skipped (no selectable items).';
+        }
+
+        var itemsToRasterize = [];
+        for(var rs = 0; rs < selection.length; rs++) {
+          itemsToRasterize.push(selection[rs]);
+        }
+
+        var options = new RasterizeOptions();
+        var rasterSf = _srh_getScaleFactor();
+        if(!(rasterSf > 0)) rasterSf = 1;
+        // Workaround for large-canvas docs: rasterize an upscaled copy, then scale raster back down.
+        var useTempUpscale = rasterSf > 1.0001;
+        var baseDpi = rasterizeDpi;
+        if(baseDpi < 72) baseDpi = 72;
+        if(baseDpi > 2400) baseDpi = 2400;
+        var upscalePct = rasterSf * 100;
+        var downscalePct = 100 / rasterSf;
+        var effectiveDpi = baseDpi * rasterSf;
+        try {options.antiAliasingMethod = AntiAliasingMethod.ARTOPTIMIZED;} catch(_eRo0) { }
+        try {options.colorModel = RasterizationColorModel.DEFAULTCOLORMODEL;} catch(_eRo1) { }
+        try {options.resolution = baseDpi;} catch(_eRo2) { }
+        try {options.transparency = true;} catch(_eRo3) { }
+
+        var rasterizedCount = 0;
+        for(var r = 0; r < itemsToRasterize.length; r++) {
+          var item = itemsToRasterize[r];
+          if(!item) continue;
+          if(useTempUpscale) {
+            // Temporary upscale must include stroke widths so raster detail matches normal-canvas output.
+            try {item.resize(upscalePct, upscalePct, true, true, true, true, upscalePct, Transformation.CENTER);} catch(_eUp0) { }
+          }
+          var bounds = null;
+          try {bounds = item.visibleBounds;} catch(_eRb0) { bounds = null; }
+          if(!bounds || bounds.length !== 4) continue;
+          try {
+            var rasterItem = doc.rasterize(item, bounds, options);
+            if(useTempUpscale && rasterItem) {
+              try {rasterItem.resize(downscalePct, downscalePct, true, true, true, true, 100, Transformation.CENTER);} catch(_eDown0) { }
+            }
+            rasterizedCount++;
+          } catch(_eROne) { }
+        }
+
+        if(rasterizedCount > 0) {
+          return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + ', rasterized ' + rasterizedCount + ' item(s) at base ' + baseDpi + ' dpi' + (useTempUpscale ? (' with temp x' + (Math.round(rasterSf * 1000) / 1000) + ' upscale (effective ~' + (Math.round(effectiveDpi * 100) / 100) + ' dpi)') : '') + ').';
+        }
+        return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + '). Rasterize skipped (no valid visible bounds).';
+      } catch(_eRast0) {
+        return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + '). Rasterize failed: ' + _eRast0;
+      }
+    }
+    return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + ').';
   }
 
-  return 'Duplicate outlined. No scaling needed (already within 297×210mm).';
+  return 'Duplicate created. No scaling needed (already within 297×210mm).';
 }
 
 /**
@@ -1529,6 +1666,22 @@ function _srh_transform_makeSize_impl(json) {
   }
 
   var mode = String(opts.mode || 'selection');
+  var requestedArtboardIndices = [];
+  try {
+    if(opts.artboardIndices && opts.artboardIndices.length) {
+      for(var ari = 0; ari < opts.artboardIndices.length; ari++) {
+        var aiv = Number(opts.artboardIndices[ari]);
+        if(!(aiv >= 0)) continue;
+        var ai = Math.round(aiv);
+        if(ai < 0 || ai >= doc.artboards.length) continue;
+        var existsAi = false;
+        for(var aie = 0; aie < requestedArtboardIndices.length; aie++) {
+          if(requestedArtboardIndices[aie] === ai) {existsAi = true; break;}
+        }
+        if(!existsAi) requestedArtboardIndices.push(ai);
+      }
+    }
+  } catch(_eReqAb0) { requestedArtboardIndices = []; }
   var origin = String(opts.origin || 'C');
   var excludeStroke = (opts.excludeStroke === undefined) ? true : !!opts.excludeStroke;
   var includeStroke = !excludeStroke;
@@ -1563,36 +1716,136 @@ function _srh_transform_makeSize_impl(json) {
   }
   if(!hasWidthSpec && !hasHeightSpec) return 'No size provided.';
 
-  if(mode === 'artboard') {
-    var idx = doc.artboards.getActiveArtboardIndex();
-    var rect = doc.artboards[idx].artboardRect; // [L,T,R,B]
-    var left = rect[0], top = rect[1], right = rect[2], bottom = rect[3];
-    var curW = right - left;
-    var curH = top - bottom;
-    if(!(curW > 0) || !(curH > 0)) return 'Active artboard has invalid size.';
+  if(mode === 'artboard' || mode === 'artboards') {
+    function _rectsEqual(a, b) {
+      if(!a || !b || a.length !== 4 || b.length !== 4) return false;
+      var eps = 1.0;
+      return (Math.abs(a[0] - b[0]) <= eps &&
+              Math.abs(a[1] - b[1]) <= eps &&
+              Math.abs(a[2] - b[2]) <= eps &&
+              Math.abs(a[3] - b[3]) <= eps);
+    }
+    function _findArtboardIndexByRect(rect) {
+      if(!rect || rect.length !== 4) return -1;
+      for(var ai = 0; ai < doc.artboards.length; ai++) {
+        var ar = null;
+        try {ar = doc.artboards[ai].artboardRect;} catch(_eAbIdx0) { ar = null; }
+        if(_rectsEqual(rect, ar)) return ai;
+      }
+      return -1;
+    }
+    function _rectFromUnknown(obj) {
+      if(!obj) return null;
+      var r = null;
+      try {r = obj.artboardRect;} catch(_eRu0) { r = null; }
+      if(r && r.length === 4) return r;
+      try {r = obj.visibleBounds;} catch(_eRu1) { r = null; }
+      if(r && r.length === 4) return r;
+      try {r = obj.geometricBounds;} catch(_eRu2) { r = null; }
+      if(r && r.length === 4) return r;
+      try {
+        if(typeof obj.left !== 'undefined' && typeof obj.top !== 'undefined' &&
+           typeof obj.right !== 'undefined' && typeof obj.bottom !== 'undefined') {
+          return [Number(obj.left), Number(obj.top), Number(obj.right), Number(obj.bottom)];
+        }
+      } catch(_eRu3) { }
+      return null;
+    }
+    function _pushUniqueIndex(arr, idx) {
+      if(!(idx >= 0)) return;
+      for(var iU = 0; iU < arr.length; iU++) {
+        if(arr[iU] === idx) return;
+      }
+      arr.push(idx);
+    }
+    function _getSelectedArtboardIndices() {
+      var indices = [];
+      // Attempt 1: direct artboard selected flags (if available in this host/version).
+      for(var iA = 0; iA < doc.artboards.length; iA++) {
+        try {
+          if(doc.artboards[iA].selected) _pushUniqueIndex(indices, iA);
+        } catch(_eAbSel0) { }
+      }
+      // Attempt 2: selection may contain artboard-like objects in some host versions.
+      var selAny = null;
+      try {selAny = doc.selection;} catch(_eAbSel1) { selAny = null; }
+      if(selAny && selAny.length) {
+        for(var sA = 0; sA < selAny.length; sA++) {
+          var si = selAny[sA];
+          if(!si) continue;
+          var selIdx = -1;
+          try {selIdx = Number(si.artboardIndex);} catch(_eAbSelIdx0) { selIdx = -1; }
+          if(!(selIdx >= 0)) {
+            try {selIdx = Number(si.index);} catch(_eAbSelIdx1) { selIdx = -1; }
+          }
+          if(selIdx >= 0 && selIdx < doc.artboards.length) {
+            _pushUniqueIndex(indices, selIdx);
+            continue;
+          }
+          var sRect = _rectFromUnknown(si);
+          var matchIdx = _findArtboardIndexByRect(sRect);
+          if(matchIdx >= 0) _pushUniqueIndex(indices, matchIdx);
+        }
+      }
+      return indices;
+    }
 
-    var newW = curW;
-    var newH = curH;
-    if(hasWidthSpec) {
-      var curWmm = _ptDocToMmScaled(curW);
-      var resolvedWmm = _resolveSizeSpecMm(widthSpec, curWmm);
-      if(resolvedWmm == null) return 'Invalid width expression.';
-      newW = _srh_mm2ptDoc(resolvedWmm);
+    var targetIndices = [];
+    if(mode === 'artboard') {
+      _pushUniqueIndex(targetIndices, doc.artboards.getActiveArtboardIndex());
+    } else {
+      if(requestedArtboardIndices.length) {
+        targetIndices = requestedArtboardIndices.slice(0);
+      } else {
+        targetIndices = _getSelectedArtboardIndices();
+        if(!targetIndices.length) {
+          _pushUniqueIndex(targetIndices, doc.artboards.getActiveArtboardIndex());
+        }
+      }
     }
-    if(hasHeightSpec) {
-      var curHmm = _ptDocToMmScaled(curH);
-      var resolvedHmm = _resolveSizeSpecMm(heightSpec, curHmm);
-      if(resolvedHmm == null) return 'Invalid height expression.';
-      newH = _srh_mm2ptDoc(resolvedHmm);
+    if(!targetIndices.length) return 'No artboards available to transform.';
+
+    var changedAb = 0;
+    var lastW = null;
+    var lastH = null;
+    for(var ti = 0; ti < targetIndices.length; ti++) {
+      var idx = targetIndices[ti];
+      var rect = doc.artboards[idx].artboardRect; // [L,T,R,B]
+      var left = rect[0], top = rect[1], right = rect[2], bottom = rect[3];
+      var curW = right - left;
+      var curH = top - bottom;
+      if(!(curW > 0) || !(curH > 0)) continue;
+
+      var newW = curW;
+      var newH = curH;
+      if(hasWidthSpec) {
+        var curWmm = _ptDocToMmScaled(curW);
+        var resolvedWmm = _resolveSizeSpecMm(widthSpec, curWmm);
+        if(resolvedWmm == null) return 'Invalid width expression.';
+        newW = _srh_mm2ptDoc(resolvedWmm);
+      }
+      if(hasHeightSpec) {
+        var curHmm = _ptDocToMmScaled(curH);
+        var resolvedHmm = _resolveSizeSpecMm(heightSpec, curHmm);
+        if(resolvedHmm == null) return 'Invalid height expression.';
+        newH = _srh_mm2ptDoc(resolvedHmm);
+      }
+      var o = _srh_transform_originFractions(origin);
+      var ax = left + (curW * o.fx);
+      var ay = bottom + (curH * o.fy);
+      var newLeft = ax - (newW * o.fx);
+      var newBottom = ay - (newH * o.fy);
+      var newRect = [newLeft, newBottom + newH, newLeft + newW, newBottom];
+      doc.artboards[idx].artboardRect = newRect;
+      changedAb++;
+      lastW = newW;
+      lastH = newH;
     }
-    var o = _srh_transform_originFractions(origin);
-    var ax = left + (curW * o.fx);
-    var ay = bottom + (curH * o.fy);
-    var newLeft = ax - (newW * o.fx);
-    var newBottom = ay - (newH * o.fy);
-    var newRect = [newLeft, newBottom + newH, newLeft + newW, newBottom];
-    doc.artboards[idx].artboardRect = newRect;
-    return 'Transformed active artboard to ' + Math.round(_dim_pt2mm(newW) * 100) / 100 + ' x ' + Math.round(_dim_pt2mm(newH) * 100) / 100 + ' mm.';
+    if(!changedAb) return (mode === 'artboard') ? 'Active artboard has invalid size.' : 'No selected artboards could be transformed.';
+    if(mode === 'artboard') {
+      return 'Transformed active artboard to ' + Math.round(_dim_pt2mm(lastW) * 100) / 100 + ' x ' + Math.round(_dim_pt2mm(lastH) * 100) / 100 + ' mm.';
+    }
+    return 'Transformed ' + changedAb + ' artboard' + (changedAb === 1 ? '' : 's') + '.';
   }
 
   var sel = doc.selection;
@@ -1653,6 +1906,82 @@ function _srh_transform_makeSize_impl(json) {
   if(!changed) return 'No eligible selection items to transform.';
   return 'Transformed ' + changed + ' selection item' + (changed === 1 ? '' : 's') + '.';
 }
+
+function signarama_helper_transform_listArtboards() {
+  if(!app.documents.length) return '[]';
+  var doc = app.activeDocument;
+  var out = [];
+  function _normalizeRect4(r) {
+    if(!r) return null;
+    try {
+      if(typeof r.length !== 'undefined' && r.length >= 4) {
+        return [Number(r[0]), Number(r[1]), Number(r[2]), Number(r[3])];
+      }
+    } catch(_eNr0) { }
+    try {
+      if(typeof r.left !== 'undefined' && typeof r.top !== 'undefined' &&
+         typeof r.right !== 'undefined' && typeof r.bottom !== 'undefined') {
+        return [Number(r.left), Number(r.top), Number(r.right), Number(r.bottom)];
+      }
+    } catch(_eNr1) { }
+    return null;
+  }
+  var activeIdx = 0;
+  try {activeIdx = doc.artboards.getActiveArtboardIndex();} catch(_eAbL0) { activeIdx = 0; }
+  for(var i = 0; i < doc.artboards.length; i++) {
+    var ab = doc.artboards[i];
+    var r = null;
+    try {r = _normalizeRect4(ab.artboardRect);} catch(_eAbL1) { r = null; }
+    if(!r) continue;
+    var w = r[2] - r[0];
+    var h = r[1] - r[3];
+    var name = '';
+    try {name = String(ab.name || '');} catch(_eAbL2) { name = ''; }
+    out.push({
+      index: i,
+      name: name,
+      widthMm: Math.round(_dim_pt2mm(w) * 100) / 100,
+      heightMm: Math.round(_dim_pt2mm(h) * 100) / 100,
+      isActive: i === activeIdx
+    });
+  }
+  return JSON.stringify(out);
+}
+
+function signarama_helper_transform_debugArtboards() {
+  var debug = {
+    hasDocument: false,
+    artboardCount: 0,
+    activeIndex: -1,
+    items: []
+  };
+  if(!app.documents.length) return JSON.stringify(debug);
+  var doc = app.activeDocument;
+  debug.hasDocument = true;
+  try {debug.artboardCount = doc.artboards.length;} catch(_eDbg0) { debug.artboardCount = -1; }
+  try {debug.activeIndex = doc.artboards.getActiveArtboardIndex();} catch(_eDbg1) { debug.activeIndex = -1; }
+
+  for(var i = 0; i < doc.artboards.length; i++) {
+    var row = {index: i, name: '', rectType: 'none', rectRaw: '', rectParsed: null, selectedFlag: null};
+    var ab = doc.artboards[i];
+    try {row.name = String(ab.name || '');} catch(_eDbg2) { row.name = ''; }
+    try {row.selectedFlag = !!ab.selected;} catch(_eDbg3) { row.selectedFlag = null; }
+    try {
+      var r = ab.artboardRect;
+      row.rectType = Object.prototype.toString.call(r);
+      try {row.rectRaw = String(r);} catch(_eDbg4) { row.rectRaw = '[unprintable]'; }
+      try {
+        if(r && typeof r.length !== 'undefined') {
+          row.rectParsed = [Number(r[0]), Number(r[1]), Number(r[2]), Number(r[3])];
+        } else if(r && typeof r.left !== 'undefined') {
+          row.rectParsed = [Number(r.left), Number(r.top), Number(r.right), Number(r.bottom)];
+        }
+      } catch(_eDbg5) { row.rectParsed = null; }
+    } catch(_eDbg6) { }
+    debug.items.push(row);
+  }
+  return JSON.stringify(debug);
+}
 this.signarama_helper_transform_makeSize = function(json) {
   return _srh_transform_makeSize_impl(json);
 };
@@ -1662,6 +1991,10 @@ this.atlas_transform_makeSize = function(json) {
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize; } catch(_eTg0) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_makeSize = this.atlas_transform_makeSize; } catch(_eTg2) { }
 try { signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize; } catch(_eTg1) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards; } catch(_eTg3) { }
+try { signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards; } catch(_eTg4) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg5) { }
+try { signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg6) { }
 
 
 
@@ -3377,3 +3710,4 @@ this.atlas_dimensions_clear = function() {
     return "Nothing to clear (no 'Dimensions' layer).";
   }
 };
+
