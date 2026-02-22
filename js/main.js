@@ -145,6 +145,8 @@
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
   let corebridgeWatchTimer = null;
+  let corebridgePageNumberWatchTimer = null;
+  let corebridgePageNumberWatcherErrorLogged = false;
   let corebridgeWasSelected = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
@@ -154,7 +156,11 @@
   let schedulePanelSettingsSave = null;
 
   function jsxEscapeDoubleQuoted(text) {
-    return String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return String(text)
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n');
   }
 
   function collectPanelSettings() {
@@ -244,7 +250,6 @@
       if(done) done();
     });
   }
-
   function buildDimensionPayload() {
     return {
       offsetMm: num(($('offsetMm') && $('offsetMm').value) || 0),
@@ -444,6 +449,19 @@
         });
       }, 800);
     }
+    function ensureCorebridgePageNumberWatcher() {
+      if(corebridgePageNumberWatchTimer) return;
+      corebridgePageNumberWatchTimer = setInterval(() => {
+        callJSX('((typeof signarama_helper_corebridge_updatePageNumbers === "function") ? signarama_helper_corebridge_updatePageNumbers : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_updatePageNumbers === "function") ? $.global.signarama_helper_corebridge_updatePageNumbers : function(){return "NO_FN";}))()', (res) => {
+          const txt = String(res || '');
+          if(/^Error:/i.test(txt) && !corebridgePageNumberWatcherErrorLogged) {
+            corebridgePageNumberWatcherErrorLogged = true;
+            log('Page number watcher error: ' + txt);
+          }
+          if(!/^Error:/i.test(txt)) corebridgePageNumberWatcherErrorLogged = false;
+        });
+      }, 1800);
+    }
 
     const corebridgeCreate = $('btnCorebridgeCreateLink');
     if(corebridgeCreate) {
@@ -452,44 +470,893 @@
         ensureCorebridgeSelectionWatcher();
       };
     }
+    ensureCorebridgePageNumberWatcher();
 
     const corebridgePullData = $('btnCorebridgePullData');
-    const corebridgeDump = $('corebridgeDataDump');
-    if(corebridgePullData) {
-      corebridgePullData.onclick = async () => {
-        const url = 'https://signschedulerapp.ts.r.appspot.com/CB_DesignBoard_Data';
-        if(corebridgeDump) corebridgeDump.value = 'Loading...\n' + url;
-        try {
-          const res = await fetch(url, {method: 'GET', cache: 'no-store'});
-          const text = await res.text();
-          let formatted = text;
-          try {
-            const parsed = JSON.parse(text);
-            formatted = JSON.stringify(parsed, null, 2);
-          } catch(_eJson) { }
-          if(corebridgeDump) {
-            corebridgeDump.value =
-              'URL: ' + url + '\n' +
-              'Status: ' + res.status + ' ' + res.statusText + '\n' +
-              'Fetched: ' + (new Date()).toLocaleString() + '\n\n' +
-              formatted;
+    const corebridgeOpenProof = $('btnCorebridgeOpenProof');
+    const corebridgeCreateProofFromData = $('btnCorebridgeCreateProofFromData');
+    const corebridgeCreateProofForSelected = $('btnCorebridgeCreateProofForSelected');
+    const corebridgeDevMode = $('corebridgeDevMode');
+    const corebridgePullControlsWrap = $('corebridgePullControlsWrap');
+    const corebridgeDevDumpWrap = $('corebridgeDevDumpWrap');
+    const corebridgeProofMappingsWrap = $('corebridgeProofMappingsWrap');
+    const corebridgeDerivedMappingsWrap = $('corebridgeDerivedMappingsWrap');
+    const corebridgeJobNumber = $('corebridgeJobNumber');
+    const corebridgeItemNumber = $('corebridgeItemNumber');
+    const corebridgeProofPath = $('corebridgeProofPath');
+    const corebridgeProofMappings = $('corebridgeProofMappings');
+    const corebridgeDerivedMappingsPreview = document.querySelector('textarea[data-corebridge-derived-mappings]');
+    const corebridgeDumpHost = $('corebridgeDataDumpHost');
+    const corebridgeFetchStatus = $('corebridgeFetchStatus');
+    const corebridgeFetchTimeoutMs = 20000;
+    const corebridgeProxyBaseUrl = 'http://localhost:8080';//'https://signschedulerapp.ts.r.appspot.com';
+    const corebridgePrimaryDataUrl = corebridgeProxyBaseUrl + '/CB_DesignBoard_Data';
+    let corebridgeLastFilteredData = [];
+    let corebridgeLastSecondaryFetchResults = null;
+    let corebridgeHasFetchedData = false;
+    let corebridgeFetchPromise = null;
+    const corebridgeDerivedMappingsPreviewText = [
+      'Derived.installAddress -> Address Text',
+      'Derived.todayDate -> Date Text',
+      'Derived.productQty -> Quantity',
+      'Derived.lineItemDescription -> Description',
+      'Derived.mediaText -> Media Text',
+      'Derived.laminateText -> Laminate Text',
+      'Derived.partsNumbered -> Parts',
+      'Derived.notesAll -> Notes',
+      'DerivedAssets.addressQrSvg -> Address QR'
+    ].join('\n');
+    function setCorebridgeDerivedMappingsPreview() {
+      if(!corebridgeDerivedMappingsPreview) return;
+      corebridgeDerivedMappingsPreview.value = corebridgeDerivedMappingsPreviewText;
+    }
+    function normalizeCorebridgeProofMappingsField() {
+      if(!corebridgeProofMappings) return;
+      const raw = String(corebridgeProofMappings.value == null ? '' : corebridgeProofMappings.value);
+      if(!raw) return;
+      let next = raw;
+      next = next.replace(/^\s*Derived\.installAddress\s*->\s*Address\s*$/gm, 'Derived.installAddress -> Address Text');
+      next = next.replace(/^\s*Derived\.addressQrUrl\s*->\s*Address QR Code\s*$/gm, 'DerivedAssets.addressQrSvg -> Address QR');
+      next = next.replace(/^\s*DerivedAssets\.addressQrSvg\s*->\s*Addres QR\s*$/gm, 'DerivedAssets.addressQrSvg -> Address QR');
+      if(next !== raw) {
+        corebridgeProofMappings.value = next;
+        if(typeof schedulePanelSettingsSave === 'function') schedulePanelSettingsSave();
+      }
+    }
+    function refreshCorebridgeDevModeUi() {
+      const show = !!(corebridgeDevMode && corebridgeDevMode.checked);
+      if(corebridgePullControlsWrap) corebridgePullControlsWrap.classList.toggle('hidden', !show);
+      if(corebridgeDevDumpWrap) corebridgeDevDumpWrap.classList.toggle('hidden', !show);
+      if(corebridgeProofMappingsWrap) corebridgeProofMappingsWrap.classList.toggle('hidden', !show);
+      if(corebridgeDerivedMappingsWrap) corebridgeDerivedMappingsWrap.classList.toggle('hidden', !show);
+    }
+    setCorebridgeDerivedMappingsPreview();
+    normalizeCorebridgeProofMappingsField();
+    refreshCorebridgeDevModeUi();
+    if(corebridgeDevMode) {
+      corebridgeDevMode.addEventListener('change', refreshCorebridgeDevModeUi);
+      corebridgeDevMode.addEventListener('input', refreshCorebridgeDevModeUi);
+    }
+    function normalizeCorebridgeInvoiceNumber(value) {
+      return String(value == null ? '' : value).replace(/\D/g, '');
+    }
+    function buildCorebridgeSecondaryFetchPlan(filteredData) {
+      const rows = Array.isArray(filteredData) ? filteredData : [];
+      const quoteLevelCalls = [];
+      const productNotesCalls = [];
+      const quoteLevelSeen = {};
+      const productNotesSeen = {};
+      const warnings = [];
+
+      rows.forEach((row, index) => {
+        const rowIndex = index + 1;
+        const orderId = row && row.OrderId != null ? String(row.OrderId).trim() : '';
+        const accountId = row && row.AccountId != null ? String(row.AccountId).trim() : '';
+        const accountName = row && row.CompanyName != null ? String(row.CompanyName).trim() : '';
+        if(orderId && accountId && accountName) {
+          const orderKey = [orderId, accountId, accountName].join('|');
+          if(!quoteLevelSeen[orderKey]) {
+            quoteLevelSeen[orderKey] = true;
+            quoteLevelCalls.push({
+              cbOrderId: orderId,
+              cbAccountId: accountId,
+              cbAccountName: accountName
+            });
           }
-          log('Corebridge pull data: ' + res.status + ' ' + res.statusText);
-          showToast('Corebridge data pulled.', {type: 'success', title: 'Corebridge'});
-        } catch(err) {
-          const msg = (err && err.message) ? err.message : String(err);
-          if(corebridgeDump) {
-            corebridgeDump.value =
-              'URL: ' + url + '\n' +
-              'Fetched: ' + (new Date()).toLocaleString() + '\n\n' +
-              'ERROR:\n' + msg;
-          }
-          log('Corebridge pull data failed: ' + msg);
-          showToast('Failed to pull Corebridge data.', {type: 'error', title: 'Corebridge'});
+        } else {
+          warnings.push('Row ' + rowIndex + ': missing OrderId/AccountId/CompanyName for getOrderData_QuoteLevel.');
         }
+
+        const productIdRaw = row && row.Id != null ? row.Id : (row && row.OrderProductId != null ? row.OrderProductId : (row && row.OrderProductID != null ? row.OrderProductID : ''));
+        const orderProductId = String(productIdRaw == null ? '' : productIdRaw).trim();
+        if(orderProductId) {
+          if(!productNotesSeen[orderProductId]) {
+            productNotesSeen[orderProductId] = true;
+            productNotesCalls.push({orderProductId: orderProductId});
+          }
+        } else {
+          warnings.push('Row ' + rowIndex + ': missing Id/OrderProductId for getProductNotesAll.');
+        }
+      });
+
+      return {
+        quoteLevelCalls: quoteLevelCalls,
+        productNotesCalls: productNotesCalls,
+        warnings: warnings
       };
     }
+    function buildCorebridgeSecondaryFetchLog(plan) {
+      const fetchPlan = plan || {quoteLevelCalls: [], productNotesCalls: [], warnings: []};
+      const quoteLevelCalls = Array.isArray(fetchPlan.quoteLevelCalls) ? fetchPlan.quoteLevelCalls : [];
+      const productNotesCalls = Array.isArray(fetchPlan.productNotesCalls) ? fetchPlan.productNotesCalls : [];
+      const warnings = Array.isArray(fetchPlan.warnings) ? fetchPlan.warnings : [];
+      const lines = [];
 
+      lines.push('--- Secondary Fetches Required ---');
+      lines.push('Source mapping: OrderId -> CB_OrderID, AccountId -> CB_AccountID, CompanyName -> CB_AccountName');
+      lines.push('');
+      lines.push('getOrderData_QuoteLevel(CB_OrderID, CB_AccountID, CB_AccountName):');
+      if(quoteLevelCalls.length) {
+        quoteLevelCalls.forEach((call, idx) => {
+          const accountNameSafe = String(call.cbAccountName || '').replace(/"/g, '\\"');
+          lines.push(
+            (idx + 1) + '. getOrderData_QuoteLevel(' +
+            call.cbOrderId + ', ' +
+            call.cbAccountId + ', "' +
+            accountNameSafe +
+            '")'
+          );
+        });
+      } else {
+        lines.push('None (missing required fields).');
+      }
+
+      lines.push('');
+      lines.push('getProductNotesAll(orderProductId):');
+      if(productNotesCalls.length) {
+        productNotesCalls.forEach((call, idx) => {
+          lines.push((idx + 1) + '. getProductNotesAll(' + call.orderProductId + ')');
+        });
+      } else {
+        lines.push('None (missing order product ID).');
+      }
+
+      if(warnings.length) {
+        lines.push('');
+        lines.push('Warnings:');
+        warnings.forEach((msg) => {lines.push('- ' + msg);});
+      }
+
+      return lines.join('\n');
+    }
+    function setCorebridgeFetchLoading(isLoading) {
+      if(corebridgeFetchStatus) corebridgeFetchStatus.classList.toggle('active', !!isLoading);
+      if(corebridgePullData) corebridgePullData.disabled = !!isLoading;
+      if(corebridgeCreateProofFromData) corebridgeCreateProofFromData.disabled = !!isLoading;
+      if(corebridgeCreateProofForSelected) corebridgeCreateProofForSelected.disabled = !!isLoading;
+    }
+    function renderCorebridgeDataDump(text) {
+      if(!corebridgeDumpHost) return;
+      corebridgeDumpHost.innerHTML = '';
+      const dumpEl = document.createElement('textarea');
+      dumpEl.id = 'corebridgeDataDump';
+      dumpEl.className = 'log';
+      dumpEl.style.height = '220px';
+      dumpEl.style.width = '100%';
+      dumpEl.style.boxSizing = 'border-box';
+      dumpEl.readOnly = true;
+      dumpEl.value = text;
+      corebridgeDumpHost.appendChild(dumpEl);
+    }
+    function appendCorebridgeDataDump(text) {
+      if(!corebridgeDumpHost) return;
+      const dumpEl = $('corebridgeDataDump');
+      if(!dumpEl) {
+        renderCorebridgeDataDump(String(text == null ? '' : text));
+        return;
+      }
+      const next = String(text == null ? '' : text);
+      dumpEl.value = dumpEl.value ? (dumpEl.value + '\n\n' + next) : next;
+      dumpEl.scrollTop = dumpEl.scrollHeight;
+    }
+    async function fetchCorebridgeQuoteLevelData(options) {
+      const opts = options || {};
+      const orderId = String(opts.cbOrderId == null ? '' : opts.cbOrderId).trim();
+      const accountId = String(opts.cbAccountId == null ? '' : opts.cbAccountId).trim();
+      const accountName = String(opts.cbAccountName == null ? '' : opts.cbAccountName).trim();
+      if(!orderId || !accountId || !accountName) throw new Error('Missing cbOrderId/cbAccountId/cbAccountName.');
+
+      const fixedUrl =
+        corebridgeProxyBaseUrl +
+        '/CB_OrderData_QuoteLevel?orderId=' +
+        encodeURIComponent(orderId) +
+        '&accountId=' +
+        encodeURIComponent(accountId) +
+        '&accountName=' +
+        encodeURIComponent(accountName);
+
+      const res = await fetchWithTimeout(fixedUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      const text = await res.text();
+      if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      let data = null;
+      try {data = JSON.parse(text);} catch(_eQJson) {data = text;}
+      return {url: fixedUrl, status: res.status, statusText: res.statusText, data: data};
+    }
+    async function fetchCorebridgeProductNotesAll(options) {
+      const opts = options || {};
+      const orderProductId = String(opts.orderProductId == null ? '' : opts.orderProductId).trim();
+      if(!orderProductId) throw new Error('Missing orderProductId.');
+      const url =
+        corebridgeProxyBaseUrl +
+        '/CB_ProductNotesAll?orderProductId=' +
+        encodeURIComponent(orderProductId);
+      const res = await fetchWithTimeout(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      const text = await res.text();
+      if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      let data = null;
+      try {data = JSON.parse(text);} catch(_eNJson) {data = text;}
+      return {orderProductId: orderProductId, notesByType: data};
+    }
+    async function executeCorebridgeSecondaryFetches(options) {
+      const opts = options || {};
+      const plan = opts.plan || {quoteLevelCalls: [], productNotesCalls: []};
+      const quoteLevelCalls = Array.isArray(plan.quoteLevelCalls) ? plan.quoteLevelCalls : [];
+      const productNotesCalls = Array.isArray(plan.productNotesCalls) ? plan.productNotesCalls : [];
+      const results = {
+        quoteLevel: [],
+        productNotes: []
+      };
+
+      for(let i = 0; i < quoteLevelCalls.length; i++) {
+        const call = quoteLevelCalls[i];
+        try {
+          const quoteData = await fetchCorebridgeQuoteLevelData(call);
+          results.quoteLevel.push({
+            request: call,
+            ok: true,
+            response: quoteData
+          });
+        } catch(err) {
+          results.quoteLevel.push({
+            request: call,
+            ok: false,
+            error: (err && err.message) ? err.message : String(err)
+          });
+        }
+      }
+
+      for(let j = 0; j < productNotesCalls.length; j++) {
+        const call = productNotesCalls[j];
+        try {
+          const notesData = await fetchCorebridgeProductNotesAll(call);
+          results.productNotes.push({
+            request: call,
+            ok: true,
+            response: notesData
+          });
+        } catch(err) {
+          results.productNotes.push({
+            request: call,
+            ok: false,
+            error: (err && err.message) ? err.message : String(err)
+          });
+        }
+      }
+
+      return results;
+    }
+    function buildCorebridgeSecondaryFetchResultsLog(results) {
+      const r = results || {quoteLevel: [], productNotes: []};
+      const quoteRows = Array.isArray(r.quoteLevel) ? r.quoteLevel : [];
+      const notesRows = Array.isArray(r.productNotes) ? r.productNotes : [];
+      const lines = [];
+      lines.push('--- Secondary Fetch Results ---');
+      lines.push('');
+      lines.push('Quote-level responses:');
+      if(!quoteRows.length) lines.push('None');
+      quoteRows.forEach((row, idx) => {
+        const req = row && row.request ? row.request : {};
+        lines.push((idx + 1) + '. getOrderData_QuoteLevel(' + req.cbOrderId + ', ' + req.cbAccountId + ', "' + String(req.cbAccountName || '') + '")');
+        if(row && row.ok) {
+          lines.push('   Status: OK');
+          lines.push('   Data: ' + JSON.stringify(row.response && row.response.data != null ? row.response.data : null, null, 2));
+        } else {
+          lines.push('   Status: ERROR');
+          lines.push('   Error: ' + (row && row.error ? row.error : 'Unknown error'));
+        }
+      });
+      lines.push('');
+      lines.push('Product notes responses:');
+      if(!notesRows.length) lines.push('None');
+      notesRows.forEach((row, idx) => {
+        const req = row && row.request ? row.request : {};
+        lines.push((idx + 1) + '. getProductNotesAll(' + req.orderProductId + ')');
+        if(row && row.ok) {
+          lines.push('   Status: OK');
+          lines.push('   Data: ' + JSON.stringify(row.response && row.response.notesByType != null ? row.response.notesByType : null, null, 2));
+        } else {
+          lines.push('   Status: ERROR');
+          lines.push('   Error: ' + (row && row.error ? row.error : 'Unknown error'));
+        }
+      });
+      return lines.join('\n');
+    }
+    function readValueAtPath(obj, path) {
+      if(!obj || !path) return undefined;
+      const parts = String(path).split('.');
+      let cur = obj;
+      for(let i = 0; i < parts.length; i++) {
+        const key = String(parts[i] || '').trim();
+        if(!key) continue;
+        if(cur == null || typeof cur !== 'object' || !(key in cur)) return undefined;
+        cur = cur[key];
+      }
+      return cur;
+    }
+    function parseKoStorageVariable(koString) {
+      return String(koString == null ? '' : koString).split('~').join(' ').split('^').join('"');
+    }
+    function formatDateDdMmYy(inputDate) {
+      const d = inputDate instanceof Date ? inputDate : new Date();
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(-2);
+      return dd + '/' + mm + '/' + yy;
+    }
+    function tryParseInstallAddress(rawValue) {
+      if(rawValue == null) return '';
+      if(typeof rawValue === 'object') {
+        const direct = rawValue.formattedInstallAddress;
+        return direct != null ? String(direct) : '';
+      }
+      const txt = String(rawValue).trim();
+      if(!txt) return '';
+      try {
+        const parsedDirect = JSON.parse(txt);
+        if(parsedDirect && parsedDirect.formattedInstallAddress != null) return String(parsedDirect.formattedInstallAddress);
+      } catch(_eDirect) { }
+      try {
+        const parsedKo = JSON.parse(parseKoStorageVariable(txt));
+        if(parsedKo && parsedKo.formattedInstallAddress != null) return String(parsedKo.formattedInstallAddress);
+      } catch(_eKo) { }
+      return '';
+    }
+    function extractInstallAddressDetailed(quoteData) {
+      const debug = [];
+      const m1Candidates = [
+        readValueAtPath(quoteData, 'OrderInformation.OrderInformation.M1'),
+        readValueAtPath(quoteData, 'OrderInformation.M1'),
+        readValueAtPath(quoteData, 'M1')
+      ];
+      for(let i = 0; i < m1Candidates.length; i++) {
+        if(m1Candidates[i] != null) debug.push('M1[' + i + ']=present');
+        const parsed = tryParseInstallAddress(m1Candidates[i]);
+        if(parsed) return {value: parsed, source: 'M1[' + i + ']', debug: debug};
+      }
+      const directCandidates = [
+        readValueAtPath(quoteData, 'OrderInformation.OrderInformation.formattedInstallAddress'),
+        readValueAtPath(quoteData, 'OrderInformation.formattedInstallAddress'),
+        readValueAtPath(quoteData, 'formattedInstallAddress')
+      ];
+      for(let j = 0; j < directCandidates.length; j++) {
+        if(directCandidates[j] != null && String(directCandidates[j]).trim()) {
+          return {value: String(directCandidates[j]).trim(), source: 'formattedInstallAddress[' + j + ']', debug: debug};
+        }
+      }
+      return {value: '', source: 'none', debug: debug};
+    }
+    function extractInstallAddress(quoteData) {
+      return extractInstallAddressDetailed(quoteData).value;
+    }
+    function normalizeNoteItems(noteRows) {
+      const out = [];
+      (Array.isArray(noteRows) ? noteRows : []).forEach((row) => {
+        const noteText = row && row.Note != null ? String(row.Note) : '';
+        const createdBy = row && row.CreatedByName != null ? String(row.CreatedByName) : '';
+        const isHidden = !!(row && row.IsHidden);
+        if(isHidden) return;
+        if(!noteText) return;
+        out.push(createdBy ? (createdBy + ': ' + noteText) : noteText);
+      });
+      return out;
+    }
+    function groupPartTypes(items, phrases) {
+      const out = {};
+      const rows = Array.isArray(items) ? items : [];
+      const keys = Array.isArray(phrases) ? phrases : [];
+      rows.forEach((item) => {
+        const raw = String(item == null ? '' : item).trim();
+        if(!raw) return;
+        const match = keys.find((p) => raw.toLowerCase().indexOf(String(p).toLowerCase()) === 0);
+        if(!match) return;
+        const after = raw.slice(String(match).length).trim();
+        if(!out[match]) out[match] = [];
+        if(after) out[match].push(after);
+      });
+      return out;
+    }
+    function htmlToPlainText(value) {
+      const html = String(value == null ? '' : value);
+      if(!html) return '';
+      const brToken = '__SRH_BR__';
+      try {
+        const el = document.createElement('div');
+        el.innerHTML = html.replace(/<br\s*\/?>/gi, brToken);
+
+        const blockTags = ['p', 'div', 'section', 'article', 'header', 'footer', 'blockquote', 'pre', 'ul', 'ol', 'table', 'tr'];
+        blockTags.forEach((tag) => {
+          const nodes = el.querySelectorAll(tag);
+          Array.prototype.forEach.call(nodes, (node) => {
+            node.insertAdjacentText('afterend', '\n');
+          });
+        });
+
+        const lis = el.querySelectorAll('li');
+        Array.prototype.forEach.call(lis, (li) => {
+          li.insertAdjacentText('afterbegin', '- ');
+          li.insertAdjacentText('afterend', '\n');
+        });
+
+        const txt = el.textContent || el.innerText || '';
+        return String(txt).replace(new RegExp(brToken, 'g'), '\n')
+          .replace(/\u00a0/g, ' ')
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .replace(/[ \t]+\n/g, '\n')
+          .trim();
+      } catch(_eHtmlTxt) {
+        return html
+          .replace(/<br\s*\/?>/gi, brToken)
+          .replace(/<\/(p|div|section|article|header|footer|blockquote|pre|li|ul|ol)>/gi, '\n')
+          .replace(/<li[^>]*>/gi, '\n- ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(new RegExp(brToken, 'g'), '\n')
+          .replace(/\u00a0/g, ' ')
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .replace(/[ \t]+\n/g, '\n')
+          .trim();
+      }
+    }
+    function buildSvgFromDataUrlImage(dataUrl, sizePx) {
+      const sz = Number(sizePx) > 0 ? Number(sizePx) : 200;
+      const href = String(dataUrl == null ? '' : dataUrl);
+      if(!href) return '';
+      return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + sz + '" height="' + sz + '" viewBox="0 0 ' + sz + ' ' + sz + '">' +
+        '<image href="' + href + '" x="0" y="0" width="' + sz + '" height="' + sz + '"/>' +
+        '</svg>'
+      );
+    }
+    function tryGenerateQrSvgViaDependency(text) {
+      try {
+        if(typeof QRCode === 'undefined') return '';
+        const host = document.createElement('div');
+        host.style.position = 'absolute';
+        host.style.left = '-10000px';
+        host.style.top = '-10000px';
+        host.style.width = '200px';
+        host.style.height = '200px';
+        document.body.appendChild(host);
+        const qrInstance = new QRCode(host, {
+          text: String(text == null ? '' : text),
+          width: 200,
+          height: 200,
+          colorDark: '#000',
+          colorLight: '#fff',
+          correctLevel: QRCode.CorrectLevel ? QRCode.CorrectLevel.L : undefined
+        });
+        const canvas = host.querySelector('canvas');
+        const img = host.querySelector('img');
+        let dataUrl = '';
+        if(canvas && typeof canvas.toDataURL === 'function') dataUrl = canvas.toDataURL('image/png');
+        else if(img && img.src) dataUrl = String(img.src);
+        host.remove();
+        if(!dataUrl) return '';
+        return buildSvgFromDataUrlImage(dataUrl, 200);
+      } catch(_eQrDep) {
+        return '';
+      }
+    }
+    function tryGenerateQrPngDataUrlViaDependency(text) {
+      try {
+        if(typeof QRCode === 'undefined') return '';
+        const host = document.createElement('div');
+        host.style.position = 'absolute';
+        host.style.left = '-10000px';
+        host.style.top = '-10000px';
+        host.style.width = '200px';
+        host.style.height = '200px';
+        document.body.appendChild(host);
+        const qrInstance = new QRCode(host, {
+          text: String(text == null ? '' : text),
+          width: 200,
+          height: 200,
+          colorDark: '#000',
+          colorLight: '#fff',
+          correctLevel: QRCode.CorrectLevel ? QRCode.CorrectLevel.L : undefined
+        });
+        const canvas = host.querySelector('canvas');
+        const out = (canvas && typeof canvas.toDataURL === 'function')
+          ? String(canvas.toDataURL('image/png'))
+          : '';
+        host.remove();
+        return out;
+      } catch(_eQrPngDep) {
+        return '';
+      }
+    }
+    async function fetchQrSvgForText(text) {
+      const value = String(text == null ? '' : text).trim();
+      if(!value) return '';
+      const localSvg = tryGenerateQrSvgViaDependency(value);
+      if(localSvg) return localSvg;
+      const url = 'https://api.qrserver.com/v1/create-qr-code/?size=512x512&format=svg&data=' + encodeURIComponent(value);
+      const res = await fetchWithTimeout(url, {method: 'GET', cache: 'no-store'});
+      const svgText = await res.text();
+      if(!res.ok) throw new Error('QR HTTP ' + res.status + ' ' + res.statusText);
+      return svgText;
+    }
+    async function buildCorebridgeProofPayload() {
+      const primaryRow = (Array.isArray(corebridgeLastFilteredData) && corebridgeLastFilteredData.length) ? corebridgeLastFilteredData[0] : {};
+      const orderProductId = String(primaryRow && primaryRow.Id != null ? primaryRow.Id : '').trim();
+      const lineItemOrder = parseInt((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : 1, 10) || 1;
+
+      const secondary = corebridgeLastSecondaryFetchResults || {};
+      const quoteRows = Array.isArray(secondary.quoteLevel) ? secondary.quoteLevel : [];
+      const quoteSuccessRow = quoteRows.find((row) => row && row.ok && row.response && row.response.data != null) || null;
+      const quoteData = quoteSuccessRow ? quoteSuccessRow.response.data : null;
+
+      const productNotesRows = Array.isArray(secondary.productNotes) ? secondary.productNotes : [];
+      let notesSuccessRow = null;
+      if(orderProductId) {
+        notesSuccessRow = productNotesRows.find((row) => {
+          const reqId = String(row && row.request && row.request.orderProductId != null ? row.request.orderProductId : '').trim();
+          return !!(row && row.ok && reqId && reqId === orderProductId);
+        }) || null;
+      }
+      if(!notesSuccessRow) {
+        notesSuccessRow = productNotesRows.find((row) => row && row.ok) || null;
+      }
+      const notesByTypeRaw = (notesSuccessRow && notesSuccessRow.response && Array.isArray(notesSuccessRow.response.notesByType))
+        ? notesSuccessRow.response.notesByType
+        : [];
+
+      const quoteItems = readValueAtPath(quoteData, 'OrderInformation.OrderInformation.H2');
+      const quoteItem = (Array.isArray(quoteItems) && quoteItems.length >= lineItemOrder) ? quoteItems[lineItemOrder - 1] : null;
+      const productQty = quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '';
+      const lineItemDescriptionHtml = quoteItem && quoteItem.I1 != null ? String(quoteItem.I1) : '';
+      const lineItemDescription = htmlToPlainText(lineItemDescriptionHtml);
+      const partPeekViews = Array.isArray(quoteItem && quoteItem.PartPeekViews) ? quoteItem.PartPeekViews : [];
+      const partNames = partPeekViews
+        .map((p) => (p && p.O2 != null ? String(p.O2).trim() : ''))
+        .filter(Boolean);
+      const partsNumbered = partNames.map((name, idx) => (idx + 1) + ': ' + name).join('\n');
+      const partsPlain = partNames.join('\n');
+      const groupedPartTypes = groupPartTypes(partNames, ['Vinyl -', 'Laminate -', 'ACM -', 'Acrylic -', 'Corflute -', 'Foamed PVC -', 'Aluminium -']);
+      const mediaText = Array.isArray(groupedPartTypes['Vinyl -']) ? groupedPartTypes['Vinyl -'].join('\n') : '';
+      const laminateText = Array.isArray(groupedPartTypes['Laminate -']) ? groupedPartTypes['Laminate -'].join('\n') : '';
+
+      const installAddressDetails = extractInstallAddressDetailed(quoteData);
+      const installAddress = installAddressDetails.value;
+      const addressQrUrl = installAddress
+        ? ('https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(installAddress))
+        : '';
+      let addressQrSvg = '';
+      let addressQrPngDataUrl = '';
+      if(addressQrUrl) {
+        try {
+          addressQrPngDataUrl = tryGenerateQrPngDataUrlViaDependency(addressQrUrl);
+          addressQrSvg = await fetchQrSvgForText(addressQrUrl);
+        } catch(_eQr) { }
+      }
+
+      const noteTypeNames = {1: 'sales', 2: 'design', 3: 'production', 4: 'customer', 5: 'vendor'};
+      const notesByCategory = {
+        sales: [],
+        design: [],
+        production: [],
+        customer: [],
+        vendor: []
+      };
+      notesByTypeRaw.forEach((row) => {
+        const typeId = Number(row && row.noteTypeId);
+        const key = noteTypeNames[typeId];
+        if(!key) return;
+        const noteRows = row && row.data && Array.isArray(row.data.ProductionNotes) ? row.data.ProductionNotes : [];
+        notesByCategory[key] = normalizeNoteItems(noteRows);
+      });
+      const allNotes = []
+        .concat(notesByCategory.sales)
+        .concat(notesByCategory.design)
+        .concat(notesByCategory.production)
+        .concat(notesByCategory.customer)
+        .concat(notesByCategory.vendor);
+      function buildSection(title, values) {
+        const rows = Array.isArray(values) ? values : [];
+        if(!rows.length) return '';
+        return '---' + title + '---\n' + rows.join('\n');
+      }
+      const noteSections = [
+        buildSection('Sales', notesByCategory.sales),
+        buildSection('Design', notesByCategory.design),
+        buildSection('Production', notesByCategory.production),
+        buildSection('Customer', notesByCategory.customer),
+        buildSection('Vendor', notesByCategory.vendor)
+      ].filter(Boolean);
+      const notesJoined = noteSections.join('\n\n');
+      const orderNotesFallback = String((primaryRow && primaryRow.OrderNotes != null) ? primaryRow.OrderNotes : '').trim();
+      const notesAllValue = notesJoined || orderNotesFallback;
+
+      return Object.assign({}, primaryRow, {
+        Secondary: {
+          quoteLevel: quoteData,
+          productNotesByType: notesByTypeRaw
+        },
+        Derived: {
+          todayDate: formatDateDdMmYy(new Date()),
+          lineItemDescription: lineItemDescription,
+          lineItemDescriptionHtml: lineItemDescriptionHtml,
+          productQty: productQty,
+          installAddress: installAddress,
+          addressQrUrl: addressQrUrl,
+          partsNumbered: partsNumbered,
+          partsPlain: partsPlain,
+          partNames: partNames,
+          mediaText: mediaText,
+          laminateText: laminateText,
+          notesSales: notesByCategory.sales.join('\n'),
+          notesDesign: notesByCategory.design.join('\n'),
+          notesProduction: notesByCategory.production.join('\n'),
+          notesCustomer: notesByCategory.customer.join('\n'),
+          notesVendor: notesByCategory.vendor.join('\n'),
+          notesAll: notesAllValue
+        },
+        DerivedAssets: {
+          addressQrSvg: addressQrSvg,
+          addressQrPngDataUrl: addressQrPngDataUrl
+        },
+        DerivedDebug: {
+          installAddressSource: installAddressDetails.source,
+          installAddressTrace: installAddressDetails.debug
+        }
+      });
+    }
+    async function fetchWithTimeout(url, fetchOptions) {
+      if(typeof AbortController !== 'undefined') {
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => {
+          try {controller.abort();} catch(_eAbort) { }
+        }, corebridgeFetchTimeoutMs);
+        try {
+          const requestOptions = Object.assign({}, fetchOptions || {}, {signal: controller.signal});
+          return await fetch(url, requestOptions);
+        } catch(err) {
+          if(err && err.name === 'AbortError') {
+            throw new Error('Request timed out after 20 seconds.');
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
+      }
+
+      let timeoutHandle = null;
+      const request = fetch(url, fetchOptions || {});
+      const timeout = new Promise((resolve, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('Request timed out after 20 seconds.')), corebridgeFetchTimeoutMs);
+      });
+      try {
+        return await Promise.race([request, timeout]);
+      } finally {
+        if(timeoutHandle) clearTimeout(timeoutHandle);
+      }
+    }
+    async function fetchCorebridgeFilteredData(options) {
+      if(corebridgeFetchPromise) return corebridgeFetchPromise;
+      const opts = options || {};
+      const url = corebridgePrimaryDataUrl + '?_ts=' + Date.now();
+      const jobNumberRaw = (corebridgeJobNumber && corebridgeJobNumber.value ? corebridgeJobNumber.value : '').trim();
+      const jobNumber = normalizeCorebridgeInvoiceNumber(jobNumberRaw);
+      const itemNumber = (corebridgeItemNumber && corebridgeItemNumber.value ? corebridgeItemNumber.value : '').trim();
+      if(opts.showLoading !== false) renderCorebridgeDataDump('Loading...\n' + url);
+      setCorebridgeFetchLoading(true);
+      corebridgeFetchPromise = (async () => {
+        let res = null;
+        let lastErr = null;
+        for(let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            res = await fetchWithTimeout(url, {
+              method: 'GET',
+              cache: 'no-store',
+              headers: {
+                pragma: 'no-cache',
+                'cache-control': 'no-cache'
+              }
+            });
+            if(res.ok) break;
+            if(attempt === 1 && res.status >= 500) {
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              continue;
+            }
+            break;
+          } catch(err) {
+            lastErr = err;
+            if(attempt === 1) {
+              await new Promise((resolve) => setTimeout(resolve, 250));
+              continue;
+            }
+            throw err;
+          }
+        }
+        if(!res && lastErr) throw lastErr;
+        if(!res) throw new Error('No response from primary data endpoint.');
+        const text = await res.text();
+        if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+
+        const parsed = JSON.parse(text);
+        const list = Array.isArray(parsed) ? parsed : [parsed];
+        const filteredData = list.filter((row) => {
+          const rowInvoice = normalizeCorebridgeInvoiceNumber(row && row.OrderInvoiceNumber);
+          if(jobNumber && rowInvoice !== jobNumber) return false;
+          if(itemNumber && String(row.LineItemOrder) !== itemNumber) return false;
+          return true;
+        });
+
+        corebridgeLastFilteredData = filteredData;
+        corebridgeHasFetchedData = true;
+        const secondaryFetchPlan = buildCorebridgeSecondaryFetchPlan(filteredData);
+        if(opts.renderDump !== false) {
+          const dumpText = JSON.stringify(filteredData, null, 2) + '\n\n' + buildCorebridgeSecondaryFetchLog(secondaryFetchPlan);
+          renderCorebridgeDataDump(dumpText);
+        }
+        let secondaryFetchResults = null;
+        if(opts.executeSecondaryFetches) {
+          secondaryFetchResults = await executeCorebridgeSecondaryFetches({plan: secondaryFetchPlan});
+          if(opts.renderDump !== false) appendCorebridgeDataDump(buildCorebridgeSecondaryFetchResultsLog(secondaryFetchResults));
+        }
+        corebridgeLastSecondaryFetchResults = secondaryFetchResults;
+        return {
+          res: res,
+          allData: list,
+          filteredData: filteredData,
+          jobNumber: jobNumber,
+          itemNumber: itemNumber,
+          secondaryFetchPlan: secondaryFetchPlan,
+          secondaryFetchResults: secondaryFetchResults
+        };
+      })();
+      try {
+        return await corebridgeFetchPromise;
+      } finally {
+        corebridgeFetchPromise = null;
+        setCorebridgeFetchLoading(false);
+      }
+    }
+    async function executeCorebridgePullData(options) {
+      const opts = options || {};
+      try {
+        const result = await fetchCorebridgeFilteredData({showLoading: true, renderDump: true, executeSecondaryFetches: true});
+        log('Corebridge pull data: ' + result.res.status + ' ' + result.res.statusText);
+        if(opts.toastOnSuccess !== false) showToast('Corebridge data pulled.', {type: 'success', title: 'Corebridge'});
+        return result;
+      } catch(err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        renderCorebridgeDataDump(
+          'URL: ' + corebridgePrimaryDataUrl + '\n' +
+          'Fetched: ' + (new Date()).toLocaleString() + '\n\n' +
+          'ERROR:\n' + msg
+        );
+        log('Corebridge pull data failed: ' + msg);
+        if(opts.toastOnError !== false) showToast('Failed to pull Corebridge data.', {type: 'error', title: 'Corebridge'});
+        throw err;
+      }
+    }
+    if(corebridgePullData) {
+      corebridgePullData.onclick = async () => {
+        try {
+          await executeCorebridgePullData({toastOnSuccess: true, toastOnError: true});
+        } catch(_ePullClick) { }
+      };
+    }
+    if(corebridgeOpenProof) {
+      corebridgeOpenProof.onclick = () => {
+        const proofPath = (corebridgeProofPath && corebridgeProofPath.value ? corebridgeProofPath.value : '').trim();
+        if(!proofPath) {
+          showToast('Enter a proof path first.', {type: 'warn', title: 'Corebridge'});
+          return;
+        }
+        const safeProofPath = jsxEscapeDoubleQuoted(proofPath);
+        runButtonJsxOperation('signarama_helper_corebridge_openProofPath("' + safeProofPath + '")', {logFn: log, toastTitle: 'Corebridge proof', toastMessage: 'Proof document opened.'});
+      };
+    }
+    if(corebridgeCreateProofFromData) {
+      async function runCorebridgeProofCreation(mode) {
+        if(!corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
+          try {
+            await executeCorebridgePullData({toastOnSuccess: false, toastOnError: true});
+          } catch(_eAutoPull) {
+            return;
+          }
+        }
+        if(!corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
+          showToast('No filtered rows to map.', {type: 'warn', title: 'Corebridge'});
+          return;
+        }
+        const proofPath = (corebridgeProofPath && corebridgeProofPath.value ? corebridgeProofPath.value : '').trim();
+        if(!proofPath) {
+          showToast('Enter a proof path first.', {type: 'warn', title: 'Corebridge'});
+          return;
+        }
+        const mappingText = (corebridgeProofMappings && corebridgeProofMappings.value ? corebridgeProofMappings.value : '').trim();
+        if(!mappingText) {
+          showToast('Add at least one mapping (source -> text frame name).', {type: 'warn', title: 'Corebridge'});
+          return;
+        }
+
+        const safeProofPath = jsxEscapeDoubleQuoted(proofPath);
+        const proofPayload = await buildCorebridgeProofPayload();
+        const resolvedAddress = String(readValueAtPath(proofPayload, 'Derived.installAddress') || '');
+        const hasQrSvg = !!String(readValueAtPath(proofPayload, 'DerivedAssets.addressQrSvg') || '').trim();
+        const hasQrPng = !!String(readValueAtPath(proofPayload, 'DerivedAssets.addressQrPngDataUrl') || '').trim();
+        const mediaText = String(readValueAtPath(proofPayload, 'Derived.mediaText') || '');
+        const laminateText = String(readValueAtPath(proofPayload, 'Derived.laminateText') || '');
+        const partsText = String(readValueAtPath(proofPayload, 'Derived.partsNumbered') || '');
+        const notesText = String(readValueAtPath(proofPayload, 'Derived.notesAll') || '');
+        const derivedDate = String(readValueAtPath(proofPayload, 'Derived.todayDate') || '');
+        const addrSource = String(readValueAtPath(proofPayload, 'DerivedDebug.installAddressSource') || 'none');
+        appendCorebridgeDataDump(
+          '[Derived Debug] installAddress="' + resolvedAddress + '" | source=' + addrSource +
+          ' | addressQrSvgGenerated=' + (hasQrSvg ? 'yes' : 'no') +
+          ' | addressQrPngGenerated=' + (hasQrPng ? 'yes' : 'no') +
+          ' | mediaText="' + mediaText + '"' +
+          ' | laminateText="' + laminateText + '"' +
+          ' | partsNumbered="' + partsText + '"' +
+          ' | notesAll="' + notesText + '"' +
+          ' | todayDate=' + derivedDate
+        );
+        log(
+          'Corebridge install address debug: value="' + resolvedAddress + '"' +
+          ' source=' + addrSource +
+          ' qrSvg=' + (hasQrSvg ? 'yes' : 'no') +
+          ' qrPng=' + (hasQrPng ? 'yes' : 'no') +
+          ' mediaText="' + mediaText + '"' +
+          ' laminateText="' + laminateText + '"' +
+          ' partsNumbered="' + partsText + '"' +
+          ' notesAll="' + notesText + '"'
+        );
+        const safeDataJson = jsxEscapeDoubleQuoted(JSON.stringify(proofPayload));
+        const safeMappingText = jsxEscapeDoubleQuoted(mappingText);
+        const proofFnName = (mode === 'selected')
+          ? 'signarama_helper_corebridge_createProofForSelected'
+          : 'signarama_helper_corebridge_createProofFromData';
+        const toastTitle = (mode === 'selected')
+          ? 'Corebridge proof for selected'
+          : 'Corebridge proof from data';
+        runButtonJsxOperation(
+          proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '")',
+          {logFn: log, toastTitle: toastTitle}
+        );
+      }
+      corebridgeCreateProofFromData.onclick = async () => {
+        await runCorebridgeProofCreation('item');
+      };
+      if(corebridgeCreateProofForSelected) {
+        corebridgeCreateProofForSelected.onclick = async () => {
+          await runCorebridgeProofCreation('selected');
+        };
+      }
+    }
     const outlineAll = $('btnOutlineAllText');
     if(outlineAll) outlineAll.onclick = () => runButtonJsxOperation('signarama_helper_outlineAllText()', {logFn: log, toastTitle: 'Outline all text'});
 
@@ -825,11 +1692,11 @@
         function hexToRgb(hex) {
           const s0 = String(hex || '').trim().replace('#', '');
           const s = s0.length === 3 ? s0.split('').map(ch => ch + ch).join('') : s0;
-          if (s.length !== 6) return null;
+          if(s.length !== 6) return null;
           const r = parseInt(s.slice(0, 2), 16);
           const g = parseInt(s.slice(2, 4), 16);
           const b = parseInt(s.slice(4, 6), 16);
-          if (![r, g, b].every(v => isFinite(v))) return null;
+          if(![r, g, b].every(v => isFinite(v))) return null;
           return {r, g, b};
         }
         function rgbToCmykValues(r, g, b) {
@@ -837,7 +1704,7 @@
           const gn = clamp(num(g), 0, 255) / 255;
           const bn = clamp(num(b), 0, 255) / 255;
           const k = 1 - Math.max(rn, gn, bn);
-          if (k >= 0.9999) return {c: 0, m: 0, y: 0, k: 100};
+          if(k >= 0.9999) return {c: 0, m: 0, y: 0, k: 100};
           const d = 1 - k;
           return {
             c: ((1 - rn - k) / d) * 100,
@@ -851,11 +1718,11 @@
           const m = Number(entry.m);
           const y = Number(entry.y);
           const k = Number(entry.k);
-          if ([c, m, y, k].every(v => isFinite(v))) {
+          if([c, m, y, k].every(v => isFinite(v))) {
             return {c, m, y, k};
           }
           const rgb = hexToRgb(entry.hex);
-          if (rgb) return rgbToCmykValues(rgb.r, rgb.g, rgb.b);
+          if(rgb) return rgbToCmykValues(rgb.r, rgb.g, rgb.b);
           return rgbToCmykValues(entry.r || 0, entry.g || 0, entry.b || 0);
         }
         function isNearRichBlack(cmyk, tolerance) {
@@ -1097,7 +1964,7 @@
           row.appendChild(swatch);
           row.appendChild(label);
           inputs.forEach(inp => row.appendChild(inp));
-          if (showBlackHazard) {
+          if(showBlackHazard) {
             const hazard = document.createElement('span');
             hazard.textContent = '\u26A0';
             hazard.title = 'Black colour is not close to target rich black (C60 M60 Y60 K100).';
@@ -1435,14 +2302,14 @@
       var cmd = 'try{' +
         'var f=new File("' + jsxPath + '");' +
         'if(!f.exists) {' +
-          '"ERR: Missing JSX file at " + f.fsName;' +
+        '"ERR: Missing JSX file at " + f.fsName;' +
         '} else {' +
-          '$.evalFile(f);' +
-          '"OK: fit=" + (typeof signarama_helper_fitArtboardToArtwork) + ' +
-          '", settingsSave=" + ((typeof signarama_helper_panelSettingsSave==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_panelSettingsSave==="function")) ? "function" : "undefined") + ' +
-          '", transform=" + ((typeof atlas_transform_makeSize==="function" || (typeof $!=="undefined" && $.global && typeof $.global.atlas_transform_makeSize==="function")) ? "function" : "undefined");' +
+        '$.evalFile(f);' +
+        '"OK: fit=" + (typeof signarama_helper_fitArtboardToArtwork) + ' +
+        '", settingsSave=" + ((typeof signarama_helper_panelSettingsSave==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_panelSettingsSave==="function")) ? "function" : "undefined") + ' +
+        '", transform=" + ((typeof atlas_transform_makeSize==="function" || (typeof $!=="undefined" && $.global && typeof $.global.atlas_transform_makeSize==="function")) ? "function" : "undefined");' +
         '}' +
-      '}catch(e){ "ERR: " + e; }';
+        '}catch(e){ "ERR: " + e; }';
       cs.evalScript(cmd, function(res) {
         var txt = String(res || '');
         log('JSX load result: ' + txt);
@@ -1458,4 +2325,3 @@
     cs.evalScript(wrapped, function(res) {if(cb) cb(res);});
   }
 })();
-

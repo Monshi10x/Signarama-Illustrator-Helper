@@ -2064,6 +2064,836 @@ function signarama_helper_corebridge_isLinkSelected() {
   }
   return '0';
 }
+
+function signarama_helper_corebridge_openProofPath(pathText) {
+  try {
+    var rawPath = String(pathText == null ? '' : pathText).replace(/^\s+|\s+$/g, '');
+    if(!rawPath) return 'Error: No proof path supplied.';
+    var fileRef = new File(rawPath);
+    if(!fileRef.exists) return 'Error: Proof file not found: ' + rawPath;
+    app.open(fileRef);
+    return 'Proof document opened.';
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+}
+
+function signarama_helper_corebridge_updatePageNumbers() {
+  function _trim(v) { return String(v == null ? '' : v).replace(/^\s+|\s+$/g, ''); }
+  function _artboardContainsPoint(rect, x, y) {
+    var l = Number(rect[0]), t = Number(rect[1]), r = Number(rect[2]), b = Number(rect[3]);
+    return x >= Math.min(l, r) && x <= Math.max(l, r) && y >= Math.min(b, t) && y <= Math.max(b, t);
+  }
+  function _distanceToArtboardCenter(rect, x, y) {
+    var l = Number(rect[0]), t = Number(rect[1]), r = Number(rect[2]), b = Number(rect[3]);
+    var cx = (l + r) / 2;
+    var cy = (t + b) / 2;
+    var dx = x - cx, dy = y - cy;
+    return (dx * dx) + (dy * dy);
+  }
+  try {
+    if(!app.documents.length) return 'No open document.';
+    var doc = app.activeDocument;
+    var total = doc.artboards.length;
+    if(!total) return 'No artboards.';
+
+    var frames = doc.textFrames;
+    var updated = 0;
+    for(var i = 0; i < frames.length; i++) {
+      var tf = frames[i];
+      var name = '';
+      try { name = String(tf.name || ''); } catch(_eNm) { name = ''; }
+      if(_trim(name).toLowerCase() !== 'page number') continue;
+
+      var gb = tf.geometricBounds; // [L,T,R,B]
+      var x = (Number(gb[0]) + Number(gb[2])) / 2;
+      var y = (Number(gb[1]) + Number(gb[3])) / 2;
+
+      var idx = -1;
+      var bestDist = Number.POSITIVE_INFINITY;
+      for(var a = 0; a < total; a++) {
+        var ab = doc.artboards[a].artboardRect;
+        if(_artboardContainsPoint(ab, x, y)) {
+          idx = a;
+          break;
+        }
+        var d = _distanceToArtboardCenter(ab, x, y);
+        if(d < bestDist) {
+          bestDist = d;
+          idx = a;
+        }
+      }
+      if(idx < 0) idx = 0;
+      try {
+        tf.contents = String(idx + 1) + '/' + String(total);
+        updated++;
+      } catch(_eSetPg) { }
+    }
+    return 'Updated page numbers: ' + updated + ' / ' + frames.length + ' text frames scanned.';
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+}
+
+function signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText) {
+  function _trim(v) {
+    return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+  }
+  function _todayDdMmYy() {
+    var d = new Date();
+    function _pad(v) { return (v < 10 ? '0' : '') + String(v); }
+    return _pad(d.getDate()) + '/' + _pad(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(-2);
+  }
+  function _toTextValue(v) {
+    if(v == null) return '';
+    if(typeof v === 'string') return v;
+    if(typeof v === 'number' || typeof v === 'boolean') return String(v);
+    try {return JSON.stringify(v);} catch(_eJsonTxt) { return String(v); }
+  }
+  function _readByPath(obj, keyPath) {
+    if(!obj || !keyPath) return undefined;
+    if(obj.hasOwnProperty && obj.hasOwnProperty(keyPath)) return obj[keyPath];
+    var parts = String(keyPath).split('.');
+    var cur = obj;
+    for(var i = 0; i < parts.length; i++) {
+      var part = _trim(parts[i]);
+      if(!part) continue;
+      if(cur == null || typeof cur !== 'object' || !(part in cur)) return undefined;
+      cur = cur[part];
+    }
+    return cur;
+  }
+  function _parseMappings(rawText) {
+    var out = [];
+    var lines = String(rawText == null ? '' : rawText).split(/\r?\n/);
+    for(var i = 0; i < lines.length; i++) {
+      var line = _trim(lines[i]);
+      if(!line) continue;
+      if(line.indexOf('#') === 0) continue;
+      var idx = line.indexOf('->');
+      if(idx < 0) continue;
+      var sourceKey = _trim(line.substring(0, idx));
+      var targetName = _trim(line.substring(idx + 2));
+      if(!sourceKey || !targetName) continue;
+      out.push({sourceKey: sourceKey, targetName: targetName});
+    }
+    return out;
+  }
+  function _looksLikeSvgText(v) {
+    var s = String(v == null ? '' : v);
+    return s.indexOf('<svg') >= 0 && s.indexOf('</svg>') >= 0;
+  }
+  function _placeSvgIntoTarget(doc, targetItem, svgText) {
+    var tmpFile = null;
+    var placed = null;
+    try {
+      var tmpFolder = Folder.temp;
+      if(!tmpFolder || !tmpFolder.exists) return false;
+      var unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+      tmpFile = new File(tmpFolder.fsName + '/srh-qr-' + unique + '.svg');
+      tmpFile.encoding = 'UTF-8';
+      if(!tmpFile.open('w')) return false;
+      tmpFile.write(String(svgText == null ? '' : svgText));
+      tmpFile.close();
+
+      placed = doc.placedItems.add();
+      placed.file = tmpFile;
+
+      var tb = targetItem.geometricBounds; // [L,T,R,B]
+      var tw = Math.abs(Number(tb[2]) - Number(tb[0]));
+      var th = Math.abs(Number(tb[1]) - Number(tb[3]));
+      var pb = placed.geometricBounds;
+      var pw = Math.abs(Number(pb[2]) - Number(pb[0]));
+      var ph = Math.abs(Number(pb[1]) - Number(pb[3]));
+      if(pw <= 0 || ph <= 0 || tw <= 0 || th <= 0) return true;
+
+      var sx = (tw / pw) * 100;
+      var sy = (th / ph) * 100;
+      placed.resize(sx, sy, true, true, true, true, sx, Transformation.TOPLEFT);
+      placed.position = [Number(tb[0]), Number(tb[1])];
+      return true;
+    } catch(_ePlaceSvg) {
+      return false;
+    } finally {
+      try {if(tmpFile && tmpFile.opened) tmpFile.close();} catch(_eCloseTmp) { }
+    }
+  }
+  function _placeSvgOnActiveArtboard(doc, svgText) {
+    var tmpFile = null;
+    var placed = null;
+    try {
+      var tmpFolder = Folder.temp;
+      if(!tmpFolder || !tmpFolder.exists) return false;
+      var unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+      tmpFile = new File(tmpFolder.fsName + '/srh-qr-debug-' + unique + '.svg');
+      tmpFile.encoding = 'UTF-8';
+      if(!tmpFile.open('w')) return false;
+      tmpFile.write(String(svgText == null ? '' : svgText));
+      tmpFile.close();
+
+      placed = doc.placedItems.add();
+      placed.file = tmpFile;
+
+      var activeIdx = 0;
+      try {activeIdx = doc.artboards.getActiveArtboardIndex();} catch(_eAbIdx) { activeIdx = 0; }
+      var ab = doc.artboards[activeIdx].artboardRect; // [L,T,R,B]
+      var left = Number(ab[0]) + _srh_mm2ptDoc(10);
+      var top = Number(ab[1]) - _srh_mm2ptDoc(10);
+
+      var targetSize = _srh_mm2ptDoc(35);
+      var pb = placed.geometricBounds;
+      var pw = Math.abs(Number(pb[2]) - Number(pb[0]));
+      var ph = Math.abs(Number(pb[1]) - Number(pb[3]));
+      if(pw > 0 && ph > 0) {
+        var sx = (targetSize / pw) * 100;
+        var sy = (targetSize / ph) * 100;
+        placed.resize(sx, sy, true, true, true, true, sx, Transformation.TOPLEFT);
+      }
+      placed.position = [left, top];
+      return true;
+    } catch(_eDebugPlace) {
+      return false;
+    } finally {
+      try {if(tmpFile && tmpFile.opened) tmpFile.close();} catch(_eCloseTmp2) { }
+    }
+  }
+  function _looksLikePngDataUrl(v) {
+    return /^data:image\/png;base64,/i.test(String(v == null ? '' : v));
+  }
+  function _decodeBase64(base64Text) {
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var str = String(base64Text == null ? '' : base64Text).replace(/[^A-Za-z0-9\+\/\=]/g, '');
+    var out = '';
+    var i = 0;
+    while(i < str.length) {
+      var enc1 = chars.indexOf(str.charAt(i++));
+      var enc2 = chars.indexOf(str.charAt(i++));
+      var enc3 = chars.indexOf(str.charAt(i++));
+      var enc4 = chars.indexOf(str.charAt(i++));
+      var chr1 = (enc1 << 2) | (enc2 >> 4);
+      var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+      var chr3 = ((enc3 & 3) << 6) | enc4;
+      out += String.fromCharCode(chr1);
+      if(enc3 !== 64) out += String.fromCharCode(chr2);
+      if(enc4 !== 64) out += String.fromCharCode(chr3);
+    }
+    return out;
+  }
+  function _placePngDataUrlOnActiveArtboard(doc, pngDataUrl) {
+    var tmpFile = null;
+    var placed = null;
+    try {
+      var raw = String(pngDataUrl == null ? '' : pngDataUrl);
+      var base64Idx = raw.indexOf('base64,');
+      if(base64Idx < 0) return false;
+      var b64 = raw.substring(base64Idx + 7);
+      if(!b64) return false;
+      var binary = _decodeBase64(b64);
+      if(!binary) return false;
+
+      var tmpFolder = Folder.temp;
+      if(!tmpFolder || !tmpFolder.exists) return false;
+      var unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+      tmpFile = new File(tmpFolder.fsName + '/srh-qr-debug-' + unique + '.png');
+      tmpFile.encoding = 'BINARY';
+      if(!tmpFile.open('w')) return false;
+      tmpFile.write(binary);
+      tmpFile.close();
+
+      placed = doc.placedItems.add();
+      placed.file = tmpFile;
+
+      var activeIdx = 0;
+      try {activeIdx = doc.artboards.getActiveArtboardIndex();} catch(_eAbIdx2) { activeIdx = 0; }
+      var ab = doc.artboards[activeIdx].artboardRect; // [L,T,R,B]
+      var left = Number(ab[0]) + _srh_mm2ptDoc(10);
+      var top = Number(ab[1]) - _srh_mm2ptDoc(10);
+
+      var targetSize = _srh_mm2ptDoc(35);
+      var pb = placed.geometricBounds;
+      var pw = Math.abs(Number(pb[2]) - Number(pb[0]));
+      var ph = Math.abs(Number(pb[1]) - Number(pb[3]));
+      if(pw > 0 && ph > 0) {
+        var sx = (targetSize / pw) * 100;
+        var sy = (targetSize / ph) * 100;
+        placed.resize(sx, sy, true, true, true, true, sx, Transformation.TOPLEFT);
+      }
+      placed.position = [left, top];
+      return true;
+    } catch(_ePlacePng) {
+      return false;
+    } finally {
+      try {if(tmpFile && tmpFile.opened) tmpFile.close();} catch(_eClosePng) { }
+    }
+  }
+  function _placePngDataUrlIntoTarget(doc, targetItem, pngDataUrl) {
+    var tmpFile = null;
+    var placed = null;
+    try {
+      var raw = String(pngDataUrl == null ? '' : pngDataUrl);
+      var base64Idx = raw.indexOf('base64,');
+      if(base64Idx < 0) return false;
+      var b64 = raw.substring(base64Idx + 7);
+      if(!b64) return false;
+      var binary = _decodeBase64(b64);
+      if(!binary) return false;
+
+      var tmpFolder = Folder.temp;
+      if(!tmpFolder || !tmpFolder.exists) return false;
+      var unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+      tmpFile = new File(tmpFolder.fsName + '/srh-qr-target-' + unique + '.png');
+      tmpFile.encoding = 'BINARY';
+      if(!tmpFile.open('w')) return false;
+      tmpFile.write(binary);
+      tmpFile.close();
+
+      placed = doc.placedItems.add();
+      placed.file = tmpFile;
+
+      var tb = targetItem.geometricBounds; // [L,T,R,B]
+      var tLeft = Number(tb[0]);
+      var tTop = Number(tb[1]);
+      var tRight = Number(tb[2]);
+      var tBottom = Number(tb[3]);
+      var tw = Math.abs(tRight - tLeft);
+      var th = Math.abs(tTop - tBottom);
+      if(tw <= 0 || th <= 0) return false;
+
+      var gap = _srh_mm2ptDoc(2); // 2mm inset from target rectangle bounds
+      var innerW = Math.max(1, tw - (gap * 2));
+      var innerH = Math.max(1, th - (gap * 2));
+
+      var pb = placed.geometricBounds;
+      var pw = Math.abs(Number(pb[2]) - Number(pb[0]));
+      var ph = Math.abs(Number(pb[1]) - Number(pb[3]));
+      if(pw <= 0 || ph <= 0) return false;
+
+      // Fit inside target inner box while preserving aspect ratio.
+      var fitScale = Math.min(innerW / pw, innerH / ph);
+      var sx = fitScale * 100;
+      var sy = fitScale * 100;
+      placed.resize(sx, sy, true, true, true, true, sx, Transformation.TOPLEFT);
+
+      var rb = placed.geometricBounds;
+      var rw = Math.abs(Number(rb[2]) - Number(rb[0]));
+      var rh = Math.abs(Number(rb[1]) - Number(rb[3]));
+      var posLeft = tLeft + gap + ((innerW - rw) / 2);
+      var posTop = tTop - gap - ((innerH - rh) / 2);
+      placed.position = [posLeft, posTop];
+
+      // Keep QR close to target in the same parent stack.
+      try {placed.move(targetItem, ElementPlacement.PLACEAFTER);} catch(_eMoveTarget) { }
+      return true;
+    } catch(_ePlaceTargetPng) {
+      return false;
+    } finally {
+      try {if(tmpFile && tmpFile.opened) tmpFile.close();} catch(_eClosePng2) { }
+    }
+  }
+  function _addGreenTickNextToTextFrame(doc, textFrame) {
+    try {
+      if(!textFrame) return false;
+      var b = textFrame.geometricBounds; // [L,T,R,B]
+      var left = Number(b[0]);
+      var top = Number(b[1]);
+      var right = Number(b[2]);
+      var bottom = Number(b[3]);
+      if(!isFinite(left) || !isFinite(top) || !isFinite(right) || !isFinite(bottom)) return false;
+
+      var gap = _srh_mm2ptDoc(2);
+      var tickW = _srh_mm2ptDoc(3.6);
+      var tickH = _srh_mm2ptDoc(3.6);
+      var x0 = right + gap;
+      var y0 = top - ((top - bottom) / 2); // vertical center
+
+      var p1 = [x0, y0 - (tickH * 0.05)];
+      var p2 = [x0 + (tickW * 0.36), y0 - (tickH * 0.35)];
+      var p3 = [x0 + tickW, y0 + (tickH * 0.35)];
+
+      var pathA = doc.activeLayer.pathItems.add();
+      pathA.setEntirePath([p1, p2]);
+      pathA.stroked = true;
+      pathA.filled = false;
+      pathA.strokeWidth = _srh_pxStrokeDoc(1.6);
+      var pathB = doc.activeLayer.pathItems.add();
+      pathB.setEntirePath([p2, p3]);
+      pathB.stroked = true;
+      pathB.filled = false;
+      pathB.strokeWidth = _srh_pxStrokeDoc(1.6);
+
+      var green = new RGBColor();
+      green.red = 34; green.green = 197; green.blue = 94;
+      pathA.strokeColor = green;
+      pathB.strokeColor = green;
+      return true;
+    } catch(_eTick) {
+      return false;
+    }
+  }
+  function _setTextInContainer(item, value) {
+    var updated = 0;
+    try {
+      if(!item) return 0;
+      if(item.typename === 'TextFrame') {
+        try {item.contents = value; updated++;} catch(_eSetDirect) { }
+        return updated;
+      }
+      try {
+        var tfs = item.textFrames;
+        if(tfs && typeof tfs.length !== 'undefined') {
+          for(var i = 0; i < tfs.length; i++) {
+            try {tfs[i].contents = value; updated++;} catch(_eSetTf) { }
+          }
+        }
+      } catch(_eNoTf) { }
+    } catch(_eSetContainer) { }
+    return updated;
+  }
+  function _getPageItemTargetsByName(itemMap, targetName) {
+    if(!itemMap) return null;
+    var direct = itemMap[targetName];
+    if(direct && direct.length) return direct;
+    var norm = _trim(targetName).toLowerCase();
+    if(!norm) return null;
+    for(var key in itemMap) {
+      if(!itemMap.hasOwnProperty(key)) continue;
+      if(_trim(key).toLowerCase() === norm) return itemMap[key];
+    }
+    return null;
+  }
+
+  try {
+    var rawPath = _trim(pathText);
+    if(!rawPath) return 'Error: No proof path supplied.';
+    var fileRef = new File(rawPath);
+    if(!fileRef.exists) return 'Error: Proof file not found: ' + rawPath;
+    var proofFolderPath = '';
+    try {
+      var folderRef = fileRef.parent;
+      if(folderRef && folderRef.fsName) proofFolderPath = String(folderRef.fsName);
+    } catch(_ePf) { proofFolderPath = ''; }
+
+    var parsedData = null;
+    try {parsedData = JSON.parse(String(dataJson == null ? '' : dataJson));}
+    catch(_eJson) { return 'Error: Invalid data JSON.'; }
+    var row = null;
+    if(parsedData && parsedData.constructor === Array) row = parsedData.length ? parsedData[0] : null;
+    else if(parsedData && typeof parsedData === 'object') row = parsedData;
+    if(!row || typeof row !== 'object') return 'Error: No row data available.';
+
+    var mappings = _parseMappings(mappingText);
+    if(!mappings.length) return 'Error: No valid mappings. Use "source -> target".';
+
+    // Always open a fresh document instance for proof generation.
+    // If the source proof file is already open, open a temp copy instead of reusing that document.
+    var openFile = fileRef;
+    try {
+      var tmpFolder = Folder.temp;
+      if(tmpFolder && tmpFolder.exists) {
+        var srcName = String(fileRef.name || 'proof.ai');
+        var dotIdx = srcName.lastIndexOf('.');
+        var base = dotIdx > 0 ? srcName.substring(0, dotIdx) : srcName;
+        var ext = dotIdx > 0 ? srcName.substring(dotIdx) : '.ai';
+        var unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+        var tmpPath = tmpFolder.fsName + '/srh-proof-' + base + '-' + unique + ext;
+        var tmpFile = new File(tmpPath);
+        if(fileRef.copy(tmpFile.fsName)) openFile = tmpFile;
+      }
+    } catch(_eTmpCopy) { }
+
+    var doc = app.open(openFile);
+    if(!doc) return 'Error: Failed to open proof file.';
+
+    var frameMap = {};
+    var frameMapNormalized = {};
+    var itemMap = {};
+    var allFrames = doc.textFrames;
+    for(var f = 0; f < allFrames.length; f++) {
+      var frame = allFrames[f];
+      var frameName = '';
+      try {frameName = String(frame.name || '');} catch(_eName) { frameName = ''; }
+      if(!frameName) continue;
+      if(!frameMap[frameName]) frameMap[frameName] = [];
+      frameMap[frameName].push(frame);
+      var normName = _trim(frameName).toLowerCase();
+      if(normName) {
+        if(!frameMapNormalized[normName]) frameMapNormalized[normName] = [];
+        frameMapNormalized[normName].push(frame);
+      }
+    }
+    function _getTextTargetsByName(targetName) {
+      var key = String(targetName == null ? '' : targetName);
+      if(frameMap[key] && frameMap[key].length) return frameMap[key];
+      var norm = _trim(key).toLowerCase();
+      if(norm && frameMapNormalized[norm] && frameMapNormalized[norm].length) return frameMapNormalized[norm];
+      return null;
+    }
+    var allItems = doc.pageItems;
+    for(var p = 0; p < allItems.length; p++) {
+      var item = allItems[p];
+      var itemName = '';
+      try {itemName = String(item.name || '');} catch(_eItemName) { itemName = ''; }
+      if(!itemName) continue;
+      if(!itemMap[itemName]) itemMap[itemName] = [];
+      itemMap[itemName].push(item);
+    }
+
+    // Always keep "File Path Text" up to date on every proof generation.
+    var filePathTargets = frameMap['File Path Text'];
+    if(filePathTargets && filePathTargets.length) {
+      for(var fp = 0; fp < filePathTargets.length; fp++) {
+        try {filePathTargets[fp].contents = proofFolderPath;} catch(_eFpSet) { }
+      }
+    }
+    var dateTextTargets = frameMap['Date Text'];
+    if(dateTextTargets && dateTextTargets.length) {
+      var dateValue = _todayDdMmYy();
+      for(var dt = 0; dt < dateTextTargets.length; dt++) {
+        try {dateTextTargets[dt].contents = dateValue;} catch(_eDtSet) { }
+      }
+    }
+
+    var applied = 0;
+    var missingSource = 0;
+    var missingTarget = 0;
+    var appliedImages = 0;
+    var forcedAddressApplied = 0;
+    var forcedQrPlaced = 0;
+    var forcedAddressTicks = 0;
+    var forcedDescriptionApplied = 0;
+    var forcedMediaApplied = 0;
+    var forcedLaminateApplied = 0;
+    var forcedPartsApplied = 0;
+    var forcedNotesApplied = 0;
+    var fallbackContainerTextApplied = 0;
+    for(var m = 0; m < mappings.length; m++) {
+      var mapRow = mappings[m];
+      var sourceValue = _readByPath(row, mapRow.sourceKey);
+      if(sourceValue === undefined) {
+        missingSource++;
+        continue;
+      }
+      var graphicTargets = itemMap[mapRow.targetName];
+      var targets = _getTextTargetsByName(mapRow.targetName);
+      if((!targets || !targets.length) && (!graphicTargets || !graphicTargets.length)) {
+        missingTarget++;
+        continue;
+      }
+
+      if(targets && targets.length) {
+        var textValue = _toTextValue(sourceValue);
+        for(var t = 0; t < targets.length; t++) {
+          try {
+            targets[t].contents = textValue;
+            applied++;
+          } catch(_eSetTxt) { }
+        }
+      }
+      // If the named target is a group/container (not direct TextFrame naming), set all descendant text frames.
+      if(graphicTargets && graphicTargets.length && (!targets || !targets.length)) {
+        var containerTextValue = _toTextValue(sourceValue);
+        for(var gt = 0; gt < graphicTargets.length; gt++) {
+          fallbackContainerTextApplied += _setTextInContainer(graphicTargets[gt], containerTextValue);
+        }
+      }
+
+      if(graphicTargets && graphicTargets.length && _looksLikeSvgText(sourceValue)) {
+        for(var g = 0; g < graphicTargets.length; g++) {
+          if(_placeSvgIntoTarget(doc, graphicTargets[g], sourceValue)) appliedImages++;
+        }
+      }
+    }
+
+    // Fallback (debug): always apply address text to all "Address Text" frames.
+    var derivedAddress = _readByPath(row, 'Derived.installAddress');
+    var addressFrames = _getTextTargetsByName('Address Text');
+    if(addressFrames && addressFrames.length && derivedAddress != null) {
+      var forcedAddressValue = _toTextValue(derivedAddress);
+      for(var af = 0; af < addressFrames.length; af++) {
+        try {
+          addressFrames[af].contents = forcedAddressValue;
+          forcedAddressApplied++;
+          if(_addGreenTickNextToTextFrame(doc, addressFrames[af])) forcedAddressTicks++;
+        } catch(_eAddrSet) { }
+      }
+    }
+    // Fallback (debug): always apply description text from derived value.
+    var derivedDescription = _readByPath(row, 'Derived.lineItemDescription');
+    var descriptionFrames = _getTextTargetsByName('Description Text');
+    if((!descriptionFrames || !descriptionFrames.length)) descriptionFrames = _getTextTargetsByName('Description');
+    var descriptionContainers = _getPageItemTargetsByName(itemMap, 'Description Text');
+    if((!descriptionContainers || !descriptionContainers.length)) descriptionContainers = _getPageItemTargetsByName(itemMap, 'Description');
+    if(descriptionFrames && descriptionFrames.length && derivedDescription != null) {
+      var descValue = _toTextValue(derivedDescription);
+      for(var df = 0; df < descriptionFrames.length; df++) {
+        try {
+          descriptionFrames[df].contents = descValue;
+          forcedDescriptionApplied++;
+        } catch(_eDescSet) { }
+      }
+    }
+    if((!descriptionFrames || !descriptionFrames.length) && descriptionContainers && descriptionContainers.length && derivedDescription != null) {
+      var descValue2 = _toTextValue(derivedDescription);
+      for(var dc = 0; dc < descriptionContainers.length; dc++) {
+        forcedDescriptionApplied += _setTextInContainer(descriptionContainers[dc], descValue2);
+      }
+    }
+    // Fallback (debug): always apply media/laminate text from derived values.
+    var derivedMedia = _readByPath(row, 'Derived.mediaText');
+    var mediaFrames = _getTextTargetsByName('Media Text');
+    if(mediaFrames && mediaFrames.length && derivedMedia != null) {
+      var mediaValue = _toTextValue(derivedMedia);
+      for(var mf = 0; mf < mediaFrames.length; mf++) {
+        try {
+          mediaFrames[mf].contents = mediaValue;
+          forcedMediaApplied++;
+        } catch(_eMediaSet) { }
+      }
+    }
+    var derivedLaminate = _readByPath(row, 'Derived.laminateText');
+    var laminateFrames = _getTextTargetsByName('Laminate Text');
+    if(laminateFrames && laminateFrames.length && derivedLaminate != null) {
+      var laminateValue = _toTextValue(derivedLaminate);
+      for(var lf = 0; lf < laminateFrames.length; lf++) {
+        try {
+          laminateFrames[lf].contents = laminateValue;
+          forcedLaminateApplied++;
+        } catch(_eLamSet) { }
+      }
+    }
+    var derivedParts = _readByPath(row, 'Derived.partsNumbered');
+    var partsFrames = _getTextTargetsByName('Parts');
+    if((!partsFrames || !partsFrames.length)) partsFrames = _getTextTargetsByName('Parts Text');
+    var partsContainers = _getPageItemTargetsByName(itemMap, 'Parts Text');
+    if(partsFrames && partsFrames.length && derivedParts != null) {
+      var partsValue = _toTextValue(derivedParts);
+      for(var pf = 0; pf < partsFrames.length; pf++) {
+        try {
+          partsFrames[pf].contents = partsValue;
+          forcedPartsApplied++;
+        } catch(_ePartsSet) { }
+      }
+    }
+    if((!partsFrames || !partsFrames.length) && partsContainers && partsContainers.length && derivedParts != null) {
+      var partsValue2 = _toTextValue(derivedParts);
+      for(var pc = 0; pc < partsContainers.length; pc++) {
+        forcedPartsApplied += _setTextInContainer(partsContainers[pc], partsValue2);
+      }
+    }
+    var derivedNotes = _readByPath(row, 'Derived.notesAll');
+    var notesFrames = _getTextTargetsByName('Notes');
+    if((!notesFrames || !notesFrames.length)) notesFrames = _getTextTargetsByName('Notes Text');
+    var notesContainers = _getPageItemTargetsByName(itemMap, 'Notes Text');
+    if(notesFrames && notesFrames.length && derivedNotes != null) {
+      var notesValue = _toTextValue(derivedNotes);
+      for(var nf = 0; nf < notesFrames.length; nf++) {
+        try {
+          notesFrames[nf].contents = notesValue;
+          forcedNotesApplied++;
+        } catch(_eNotesSet) { }
+      }
+    }
+    if((!notesFrames || !notesFrames.length) && notesContainers && notesContainers.length && derivedNotes != null) {
+      var notesValue2 = _toTextValue(derivedNotes);
+      for(var nc = 0; nc < notesContainers.length; nc++) {
+        forcedNotesApplied += _setTextInContainer(notesContainers[nc], notesValue2);
+      }
+    }
+
+    // Fallback (debug): place QR inside "Address QR" target with 2mm inset.
+    var qrPngDataUrl = _readByPath(row, 'DerivedAssets.addressQrPngDataUrl');
+    var qrSvg = _readByPath(row, 'DerivedAssets.addressQrSvg');
+    var addressQrTargets = itemMap['Address QR'];
+    if(addressQrTargets && addressQrTargets.length) {
+      for(var aq = 0; aq < addressQrTargets.length; aq++) {
+        if(_looksLikePngDataUrl(qrPngDataUrl)) {
+          if(_placePngDataUrlIntoTarget(doc, addressQrTargets[aq], qrPngDataUrl)) forcedQrPlaced++;
+        } else if(_looksLikeSvgText(qrSvg)) {
+          if(_placeSvgIntoTarget(doc, addressQrTargets[aq], qrSvg)) forcedQrPlaced++;
+        }
+      }
+    } else {
+      if(_looksLikePngDataUrl(qrPngDataUrl)) {
+        if(_placePngDataUrlOnActiveArtboard(doc, qrPngDataUrl)) forcedQrPlaced++;
+      } else if(_looksLikeSvgText(qrSvg)) {
+        if(_placeSvgOnActiveArtboard(doc, qrSvg)) forcedQrPlaced++;
+      }
+    }
+
+    var pageNumberRes = signarama_helper_corebridge_updatePageNumbers();
+    return 'Proof created. Applied ' + applied + ' text update' + (applied === 1 ? '' : 's') +
+      ' and ' + appliedImages + ' image placement' + (appliedImages === 1 ? '' : 's') +
+      '. Forced Address Text updates: ' + forcedAddressApplied +
+      '. Forced Address Ticks: ' + forcedAddressTicks +
+      '. Forced Description Text updates: ' + forcedDescriptionApplied +
+      '. Forced Media Text updates: ' + forcedMediaApplied +
+      '. Forced Laminate Text updates: ' + forcedLaminateApplied +
+      '. Forced Parts updates: ' + forcedPartsApplied +
+      '. Forced Notes updates: ' + forcedNotesApplied +
+      '. Fallback container text updates: ' + fallbackContainerTextApplied +
+      '. Forced QR placements: ' + forcedQrPlaced +
+      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes;
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+}
+
+function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText) {
+  function _collectNamedItems(doc, nameText) {
+    var out = [];
+    if(!doc || !nameText) return out;
+    var items = null;
+    try {items = doc.pageItems;} catch(_eCol0) { items = null; }
+    if(!items) return out;
+    for(var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var nm = '';
+      try {nm = String(it.name || '');} catch(_eCol1) { nm = ''; }
+      if(nm === nameText) out.push(it);
+    }
+    return out;
+  }
+  function _containsRef(list, item) {
+    if(!list || !list.length || !item) return false;
+    for(var i = 0; i < list.length; i++) {
+      if(list[i] === item) return true;
+    }
+    return false;
+  }
+  function _getTargetBounds(item) {
+    if(!item) return null;
+    var b = null;
+    try {b = _srh_getClippingPathBounds(item);} catch(_eTb0) { b = null; }
+    if(!b || b.length !== 4) {
+      try {b = item.visibleBounds;} catch(_eTb1) { b = null; }
+    }
+    if(!b || b.length !== 4) {
+      try {b = item.geometricBounds;} catch(_eTb2) { b = null; }
+    }
+    return (b && b.length === 4) ? b : null;
+  }
+  function _fitItemIntoTarget(item, target) {
+    if(!item || !target) return false;
+    var tb = _getTargetBounds(target);
+    if(!tb || tb.length !== 4) return false;
+    var ib = null;
+    try {ib = item.visibleBounds;} catch(_eFb0) { ib = null; }
+    if(!ib || ib.length !== 4) {
+      try {ib = item.geometricBounds;} catch(_eFb1) { ib = null; }
+    }
+    if(!ib || ib.length !== 4) return false;
+
+    var tLeft = Number(tb[0]), tTop = Number(tb[1]), tRight = Number(tb[2]), tBottom = Number(tb[3]);
+    var iLeft = Number(ib[0]), iTop = Number(ib[1]), iRight = Number(ib[2]), iBottom = Number(ib[3]);
+    var tw = Math.abs(tRight - tLeft), th = Math.abs(tTop - tBottom);
+    var iw = Math.abs(iRight - iLeft), ih = Math.abs(iTop - iBottom);
+    if(!(tw > 0 && th > 0 && iw > 0 && ih > 0)) return false;
+
+    var fitScale = Math.min(tw / iw, th / ih);
+    var pct = fitScale * 100;
+    try {item.resize(pct, pct, true, true, true, true, 100, Transformation.CENTER);} catch(_eFb2) { }
+
+    try {ib = item.visibleBounds;} catch(_eFb3) { ib = null; }
+    if(!ib || ib.length !== 4) {
+      try {ib = item.geometricBounds;} catch(_eFb4) { ib = null; }
+    }
+    if(!ib || ib.length !== 4) return false;
+
+    iLeft = Number(ib[0]); iTop = Number(ib[1]); iRight = Number(ib[2]); iBottom = Number(ib[3]);
+    iw = Math.abs(iRight - iLeft); ih = Math.abs(iTop - iBottom);
+    var targetCx = (tLeft + tRight) / 2;
+    var targetCy = (tTop + tBottom) / 2;
+    var newLeft = targetCx - (iw / 2);
+    var newTop = targetCy + (ih / 2);
+    try {item.position = [newLeft, newTop];} catch(_eFb5) { return false; }
+    try {item.move(target, ElementPlacement.PLACEAFTER);} catch(_eFb6) { }
+    return true;
+  }
+
+  try {
+    if(!app.documents.length) return 'Error: No open source document.';
+    var sourceDoc = app.activeDocument;
+    if(!sourceDoc.selection || sourceDoc.selection.length === 0) return 'Error: No selection. Select artwork first.';
+
+    var beforeCopies = _collectNamedItems(sourceDoc, 'SRH_A4_Fit_Copy');
+    var a4Res = signarama_helper_duplicateOutlineScaleA4('{"rasterize":false,"rasterizeQuality":"high"}');
+    if(/^Error:/i.test(String(a4Res || '')) || /^No\b/i.test(String(a4Res || ''))) return String(a4Res || 'Error: Failed to scale selected artwork.');
+
+    var afterCopies = _collectNamedItems(sourceDoc, 'SRH_A4_Fit_Copy');
+    var scaledCopy = null;
+    for(var c = 0; c < afterCopies.length; c++) {
+      if(!_containsRef(beforeCopies, afterCopies[c])) { scaledCopy = afterCopies[c]; break; }
+    }
+    if(!scaledCopy && sourceDoc.selection && sourceDoc.selection.length) {
+      try {scaledCopy = sourceDoc.selection[0];} catch(_eSelCopy) { scaledCopy = null; }
+    }
+    if(!scaledCopy) return 'Error: Could not find scaled proof copy to place.';
+
+    try {sourceDoc.selection = null;} catch(_eSelClr0) { }
+    try {scaledCopy.selected = true;} catch(_eSelSet0) { }
+    try {app.copy();} catch(_eCopy0) {
+      try {app.executeMenuCommand('copy');} catch(_eCopy1) { return 'Error: Failed to copy scaled artwork.'; }
+    }
+
+    var proofRes = signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText);
+    if(/^Error:/i.test(String(proofRes || ''))) {
+      try {scaledCopy.remove();} catch(_eRmCopy0) { }
+      return proofRes;
+    }
+    if(!app.documents.length) {
+      try {scaledCopy.remove();} catch(_eRmCopy1) { }
+      return 'Error: Proof document was not opened.';
+    }
+    var proofDoc = app.activeDocument;
+    try {proofDoc.selection = null;} catch(_eSelClr1) { }
+    try {app.paste();} catch(_ePaste0) {
+      try {scaledCopy.remove();} catch(_eRmCopy2) { }
+      return proofRes + ' Artwork placement failed: paste failed.';
+    }
+
+    var pastedSel = null;
+    try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
+    if(!pastedSel || !pastedSel.length) {
+      try {scaledCopy.remove();} catch(_eRmCopy3) { }
+      return proofRes + ' Artwork placement failed: no pasted artwork.';
+    }
+
+    var pastedGroup = null;
+    if(pastedSel.length === 1) pastedGroup = pastedSel[0];
+    else {
+      try {
+        pastedGroup = proofDoc.activeLayer.groupItems.add();
+        for(var ps = 0; ps < pastedSel.length; ps++) {
+          try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+        }
+      } catch(_eGroup) { pastedGroup = pastedSel[0]; }
+    }
+
+    var target = null;
+    var pageItems = null;
+    try {pageItems = proofDoc.pageItems;} catch(_ePi0) { pageItems = null; }
+    if(pageItems) {
+      for(var pi = 0; pi < pageItems.length; pi++) {
+        var nm = '';
+        try {nm = _trim(String(pageItems[pi].name || ''));} catch(_ePi1) { nm = ''; }
+        if(!nm) continue;
+        if(nm.toLowerCase() === 'artwork placement area') { target = pageItems[pi]; break; }
+      }
+    }
+    if(!target) {
+      try {scaledCopy.remove();} catch(_eRmCopy4) { }
+      return proofRes + ' Artwork placement skipped: target "Artwork Placement Area" not found.';
+    }
+
+    var fitOk = _fitItemIntoTarget(pastedGroup, target);
+    try {scaledCopy.remove();} catch(_eRmCopy5) { }
+    if(!fitOk) return proofRes + ' Artwork placement failed: could not fit into target.';
+    return proofRes + ' Artwork placed into "Artwork Placement Area".';
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+}
+
 this.signarama_helper_transform_makeSize = function(json) {
   return _srh_transform_makeSize_impl(json);
 };
@@ -2081,6 +2911,14 @@ try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebri
 try { signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg8) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg9) { }
 try { signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg10) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_openProofPath = this.signarama_helper_corebridge_openProofPath; } catch(_eTg13) { }
+try { signarama_helper_corebridge_openProofPath = this.signarama_helper_corebridge_openProofPath; } catch(_eTg14) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createProofFromData = this.signarama_helper_corebridge_createProofFromData; } catch(_eTg15) { }
+try { signarama_helper_corebridge_createProofFromData = this.signarama_helper_corebridge_createProofFromData; } catch(_eTg16) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createProofForSelected = this.signarama_helper_corebridge_createProofForSelected; } catch(_eTg16a) { }
+try { signarama_helper_corebridge_createProofForSelected = this.signarama_helper_corebridge_createProofForSelected; } catch(_eTg16b) { }
+try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers; } catch(_eTg17) { }
+try { signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers; } catch(_eTg18) { }
 
 
 

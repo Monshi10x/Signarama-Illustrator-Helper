@@ -170,6 +170,61 @@
     .artboards-empty { font-size:12px; color:#9e9e9e; padding:6px; }
 
     .hidden { display:none; }
+    .corebridge-fetch-status {
+      display:none;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+      color:#d0d0d0;
+      margin-top:-2px;
+      margin-bottom:2px;
+    }
+    .corebridge-fetch-status.active { display:flex; }
+    .corebridge-spinner {
+      width:14px;
+      height:14px;
+      border:2px solid #555;
+      border-top-color:#ffffff;
+      border-radius:50%;
+      animation: corebridge-spin 0.8s linear infinite;
+      box-sizing:border-box;
+    }
+    @keyframes corebridge-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    #corebridgeDataDumpHost { width:100%; }
+    #corebridgeDataDumpHost .log {
+      width:100%;
+      box-sizing:border-box;
+      resize:vertical;
+    }
+    #tab-corebridge:not(.hidden) {
+      display:flex;
+      flex-direction:column;
+      height:100%;
+      min-height:0;
+      box-sizing:border-box;
+    }
+    .corebridge-primary {
+      display:grid;
+      gap:10px;
+      align-content:start;
+    }
+    .corebridge-dev-area {
+      margin-top:10px;
+      align-self:flex-end;
+      width:min(100%, 620px);
+      display:grid;
+      gap:8px;
+    }
+    .corebridge-dev-footer {
+      margin-top:auto;
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      padding-top:8px;
+    }
 
     .artboard-scale-banner {
       margin-top:10px;
@@ -774,15 +829,66 @@
 
     <!-- TAB: COREBRIDGE -->
     <section id="tab-corebridge" class="wrap hidden" role="tabpanel">
-      <button class="btn" id="btnCorebridgeCreateLink" type="button">
-        <span class="btnText">Create Link</span>
-        <span class="info" data-tip="Creates a Corebridge link badge in the center of the current view. Select it to open Corebridge in browser.">i</span>
-      </button>
-      <button class="btn" id="btnCorebridgePullData" type="button">
-        <span class="btnText">Pull Data</span>
-        <span class="info" data-tip="Fetches async JSON from the Corebridge design endpoint and dumps it below.">i</span>
-      </button>
-      <textarea id="corebridgeDataDump" class="log" style="height:220px;" readonly></textarea>
+      <div class="corebridge-primary">
+        <button class="btn" id="btnCorebridgeCreateLink" type="button">
+          <span class="btnText">Create Link</span>
+          <span class="info" data-tip="Creates a Corebridge link badge in the center of the current view. Select it to open Corebridge in browser.">i</span>
+        </button>
+        <div class="grid2" style="margin-top:10px;">
+          <label class="fld">
+            <span>Job number</span>
+            <input id="corebridgeJobNumber" type="text" inputmode="numeric" placeholder="Invoice number without INV- (e.g. 19686)">
+          </label>
+          <label class="fld">
+            <span>Item number</span>
+            <input id="corebridgeItemNumber" type="text" inputmode="numeric" placeholder="e.g. 70082">
+          </label>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label class="fld" style="flex:1;">
+            <span>Proof Path</span>
+            <input id="corebridgeProofPath" type="text" value="C:\Users\monsh\Documents\PROOF TEMPLATE - Landscape  v2.ai">
+          </label>
+          <button class="btn2" id="btnCorebridgeOpenProof" type="button">open</button>
+        </div>
+        <button class="btn" id="btnCorebridgeCreateProofFromData" type="button">
+          <span class="btnText">Create Proof for Item</span>
+          <span class="info" data-tip="Opens the proof file and applies mappings to named text frames in the opened document. If data is not loaded yet, it pulls data first.">i</span>
+        </button>
+        <button class="btn" id="btnCorebridgeCreateProofForSelected" type="button">
+          <span class="btnText">Create Proof for Selected</span>
+          <span class="info" data-tip="Runs Create Proof for Item, then scales selected artwork for A4 proof and places it inside 'Artwork Placement Area'.">i</span>
+        </button>
+      </div>
+      <div id="corebridgeFetchStatus" class="corebridge-fetch-status" aria-live="polite">
+        <span class="corebridge-spinner" aria-hidden="true"></span>
+        <span>Fetching Corebridge data...</span>
+      </div>
+      <div class="corebridge-dev-area">
+        <div id="corebridgePullControlsWrap" class="hidden">
+          <button class="btn" id="btnCorebridgePullData" type="button">
+            <span class="btnText">Pull Data</span>
+            <span class="info" data-tip="Fetches async JSON, filters by job/item number, and renders matching results below.">i</span>
+          </button>
+        </div>
+        <div id="corebridgeDevDumpWrap" class="hidden">
+          <div id="corebridgeDataDumpHost"></div>
+        </div>
+        <label id="corebridgeProofMappingsWrap" class="fld hidden">
+          <span>Proof Mappings (source -> text frame name)</span>
+          <textarea id="corebridgeProofMappings" class="log" style="height:140px;width:100%;box-sizing:border-box;">SalesPersonName -> Salesperson</textarea>
+        </label>
+        <label id="corebridgeDerivedMappingsWrap" class="fld hidden">
+          <span>Derived Mappings (preview only, not saved)</span>
+          <textarea data-corebridge-derived-mappings class="log" style="height:140px;width:100%;box-sizing:border-box;" readonly></textarea>
+        </label>
+      </div>
+      <div class="corebridge-dev-footer">
+        <label class="chk">
+          <input id="corebridgeDevMode" type="checkbox">
+          <span>Dev Mode</span>
+        </label>
+      </div>
     </section>
 
     <!-- TAB: LIGHTBOX -->
@@ -948,6 +1054,7 @@
   </div>
 
   <script src="js/CSInterface.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
