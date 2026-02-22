@@ -144,10 +144,8 @@
   };
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
-  let corebridgeWatchTimer = null;
   let corebridgePageNumberWatchTimer = null;
   let corebridgePageNumberWatcherErrorLogged = false;
-  let corebridgeWasSelected = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -274,6 +272,11 @@
   }
 
   const cs = new CSInterface();
+  const srhGlobalState = (typeof window !== 'undefined')
+    ? (window.srhGlobalState = window.srhGlobalState || {})
+    : {};
+  if(!srhGlobalState.corebridgePartSearchEntriesByName) srhGlobalState.corebridgePartSearchEntriesByName = {};
+  if(!srhGlobalState.corebridgePartSearchEntriesRaw) srhGlobalState.corebridgePartSearchEntriesRaw = [];
 
   document.addEventListener('DOMContentLoaded', () => {
     wireTabs();
@@ -437,18 +440,6 @@
     const path = $('btnAddPathText');
     if(path) path.onclick = () => runButtonJsxOperation('signarama_helper_addFilePathTextToArtboards()', {logFn: log, toastTitle: 'Add path labels'});
 
-    function ensureCorebridgeSelectionWatcher() {
-      if(corebridgeWatchTimer) return;
-      corebridgeWatchTimer = setInterval(() => {
-        callJSX('((typeof signarama_helper_corebridge_isLinkSelected === "function") ? signarama_helper_corebridge_isLinkSelected : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_isLinkSelected === "function") ? $.global.signarama_helper_corebridge_isLinkSelected : function(){return "0";}))()', (res) => {
-          const selected = String(res || '').trim() === '1';
-          if(selected && !corebridgeWasSelected) {
-            try {cs.openURLInDefaultBrowser('https://sar10686.corebridge.net/Login.aspx?ReturnUrl=%2fsales%2fdashboard');} catch(_eCbOpen) { }
-          }
-          corebridgeWasSelected = selected;
-        });
-      }, 800);
-    }
     function ensureCorebridgePageNumberWatcher() {
       if(corebridgePageNumberWatchTimer) return;
       corebridgePageNumberWatchTimer = setInterval(() => {
@@ -463,13 +454,6 @@
       }, 1800);
     }
 
-    const corebridgeCreate = $('btnCorebridgeCreateLink');
-    if(corebridgeCreate) {
-      corebridgeCreate.onclick = () => {
-        runButtonJsxOperation('signarama_helper_corebridge_createLink()', {logFn: log, toastTitle: 'Corebridge link'});
-        ensureCorebridgeSelectionWatcher();
-      };
-    }
     ensureCorebridgePageNumberWatcher();
 
     const corebridgePullData = $('btnCorebridgePullData');
@@ -488,12 +472,99 @@
     const corebridgeDerivedMappingsPreview = document.querySelector('textarea[data-corebridge-derived-mappings]');
     const corebridgeDumpHost = $('corebridgeDataDumpHost');
     const corebridgeFetchStatus = $('corebridgeFetchStatus');
+    function invalidateCorebridgeFetchCache() {
+      corebridgeHasFetchedData = false;
+      corebridgeLastFilteredData = [];
+      corebridgeLastSecondaryFetchResults = null;
+    }
+    if(corebridgeJobNumber) {
+      corebridgeJobNumber.addEventListener('input', invalidateCorebridgeFetchCache);
+      corebridgeJobNumber.addEventListener('change', invalidateCorebridgeFetchCache);
+    }
+    if(corebridgeItemNumber) {
+      corebridgeItemNumber.addEventListener('input', invalidateCorebridgeFetchCache);
+      corebridgeItemNumber.addEventListener('change', invalidateCorebridgeFetchCache);
+    }
     const corebridgeFetchTimeoutMs = 20000;
     const corebridgeProxyBaseUrl = 'http://localhost:8080';//'https://signschedulerapp.ts.r.appspot.com';
     const corebridgePrimaryDataUrl = corebridgeProxyBaseUrl + '/CB_DesignBoard_Data';
+    const corebridgePartSearchEntriesUrl = corebridgeProxyBaseUrl + '/CB_OrderEntryProducts_PartSearchEntries';
+    async function preloadCorebridgePartSearchEntries() {
+      function tryParseJsonLoose(value) {
+        if(value == null) return null;
+        if(typeof value === 'object') return value;
+        const txt = String(value).trim();
+        if(!txt) return null;
+        try { return JSON.parse(txt); } catch(_ePsLoose) { return null; }
+      }
+      function extractPartRows(payload) {
+        const queue = [payload];
+        const seen = [];
+        while(queue.length) {
+          const cur = queue.shift();
+          if(!cur) continue;
+          if(typeof cur === 'string') {
+            const parsedCur = tryParseJsonLoose(cur);
+            if(parsedCur && seen.indexOf(parsedCur) < 0) queue.push(parsedCur);
+            continue;
+          }
+          if(Array.isArray(cur)) {
+            if(cur.length && typeof cur[0] === 'object') {
+              const hasPartShape = cur.some((row) => row && (row.PartName != null || row.Name != null || row.name != null || row.DisplayName != null || row.displayName != null));
+              if(hasPartShape) return cur;
+            }
+            for(let i = 0; i < cur.length; i++) queue.push(cur[i]);
+            continue;
+          }
+          if(typeof cur === 'object') {
+            if(seen.indexOf(cur) >= 0) continue;
+            seen.push(cur);
+            const keys = Object.keys(cur);
+            for(let k = 0; k < keys.length; k++) queue.push(cur[keys[k]]);
+          }
+        }
+        return [];
+      }
+      try {
+        const res = await fetch(corebridgePartSearchEntriesUrl + '?_ts=' + Date.now(), {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {pragma: 'no-cache', 'cache-control': 'no-cache'}
+        });
+        const text = await res.text();
+        if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+        const parsed = tryParseJsonLoose(text);
+        const rows = extractPartRows(parsed);
+        const byName = {};
+        rows.forEach((row) => {
+          const rawName = String((row && (row.PartName || row.Name || row.name || row.DisplayName || row.displayName)) || '').trim();
+          const thicknessRaw = (row && (row.Thickness != null ? row.Thickness : (row.thickness != null ? row.thickness : '')));
+          const thickness = String(thicknessRaw == null ? '' : thicknessRaw).trim();
+          if(!rawName) return;
+          const norm = rawName.toLowerCase().replace(/\s+/g, ' ').trim();
+          if(!byName[norm]) byName[norm] = {name: rawName, thickness: thickness};
+        });
+        srhGlobalState.corebridgePartSearchEntriesByName = byName;
+        srhGlobalState.corebridgePartSearchEntriesRaw = rows;
+        if(typeof window !== 'undefined') {
+          window.corebridgePartSearchEntriesByName = byName;
+          window.corebridgePartSearchEntriesRaw = rows;
+        }
+        const sample = rows.slice(0, 5).map((row) => ({
+          name: String((row && (row.PartName || row.Name || row.name || row.DisplayName || row.displayName)) || ''),
+          thickness: String((row && (row.Thickness != null ? row.Thickness : (row.thickness != null ? row.thickness : ''))) || '')
+        }));
+        log('Corebridge part search preload: ' + rows.length + ' rows (' + Object.keys(byName).length + ' indexed).');
+        log('Corebridge part search payload sample: ' + JSON.stringify(sample));
+      } catch(err) {
+        log('Corebridge part search preload failed: ' + (err && err.message ? err.message : err));
+      }
+    }
+    preloadCorebridgePartSearchEntries();
     let corebridgeLastFilteredData = [];
     let corebridgeLastSecondaryFetchResults = null;
     let corebridgeHasFetchedData = false;
+    let corebridgeLastFetchCriteria = {jobNumber: "", itemNumber: ""};
     let corebridgeFetchPromise = null;
     const corebridgeDerivedMappingsPreviewText = [
       'Derived.installAddress -> Address Text',
@@ -502,6 +573,7 @@
       'Derived.lineItemDescription -> Description',
       'Derived.mediaText -> Media Text',
       'Derived.laminateText -> Laminate Text',
+      'Derived.substrateText -> Substrate Text',
       'Derived.partsNumbered -> Parts',
       'Derived.notesAll -> Notes',
       'DerivedAssets.addressQrSvg -> Address QR'
@@ -539,6 +611,16 @@
     }
     function normalizeCorebridgeInvoiceNumber(value) {
       return String(value == null ? '' : value).replace(/\D/g, '');
+    }
+    function getCorebridgeCriteriaFromFields() {
+      const jobNumberRaw = (corebridgeJobNumber && corebridgeJobNumber.value ? corebridgeJobNumber.value : '').trim();
+      const jobNumber = normalizeCorebridgeInvoiceNumber(jobNumberRaw);
+      const itemNumber = (corebridgeItemNumber && corebridgeItemNumber.value ? corebridgeItemNumber.value : '').trim();
+      return {jobNumber: jobNumber, itemNumber: itemNumber};
+    }
+    function corebridgeCriteriaChanged(criteria) {
+      const next = criteria || getCorebridgeCriteriaFromFields();
+      return next.jobNumber !== corebridgeLastFetchCriteria.jobNumber || next.itemNumber !== corebridgeLastFetchCriteria.itemNumber;
     }
     function buildCorebridgeSecondaryFetchPlan(filteredData) {
       const rows = Array.isArray(filteredData) ? filteredData : [];
@@ -1043,9 +1125,63 @@
         .filter(Boolean);
       const partsNumbered = partNames.map((name, idx) => (idx + 1) + ': ' + name).join('\n');
       const partsPlain = partNames.join('\n');
-      const groupedPartTypes = groupPartTypes(partNames, ['Vinyl -', 'Laminate -', 'ACM -', 'Acrylic -', 'Corflute -', 'Foamed PVC -', 'Aluminium -']);
+      const groupedPartTypes = groupPartTypes(partNames, ['Vinyl -', 'Laminate -', 'ACM -', 'Acrylic -', 'Corflute -', 'Foamed PVC -', 'Aluminium -', 'Mondoclad -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -']);
       const mediaText = Array.isArray(groupedPartTypes['Vinyl -']) ? groupedPartTypes['Vinyl -'].join('\n') : '';
       const laminateText = Array.isArray(groupedPartTypes['Laminate -']) ? groupedPartTypes['Laminate -'].join('\n') : '';
+      const substratePrefixes = ['ACM -', 'Acrylic -', 'Aluminium -', 'Mondoclad -', 'Foamed PVC -', 'Corflute -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -'];
+      function deriveSubstrateShortText(prefix, rawValue) {
+        const shortName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
+        const raw = String(rawValue == null ? '' : rawValue).trim();
+        if(!shortName) return '';
+
+        let thickness = '';
+        let thicknessFromFetch = false;
+        const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
+          ? srhGlobalState.corebridgePartSearchEntriesByName
+          : {};
+        const rawNorm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+        if(rawNorm && byName[rawNorm] && byName[rawNorm].thickness) {
+          thickness = String(byName[rawNorm].thickness || '').trim();
+          thicknessFromFetch = !!thickness;
+        }
+        if(!thickness && rawNorm) {
+          const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
+          if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) {
+            thickness = String(byName[matchedKey].thickness || '').trim();
+            thicknessFromFetch = !!thickness;
+          }
+        }
+        if(!thickness) {
+          const compact = raw.replace(/\s+/g, '');
+          const xParts = compact.split('x');
+          if(xParts.length > 1) thickness = String(xParts[xParts.length - 1] || '').trim();
+          if(!thickness) {
+            const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
+            if(m && m[1]) thickness = m[1];
+          }
+        }
+
+        if(!thickness) return shortName;
+        if(thicknessFromFetch) {
+          const fetchedThickness = /mm$/i.test(thickness) ? thickness : (thickness + 'mm');
+          return fetchedThickness + ' ' + shortName;
+        }
+        let thicknessClean = String(thickness).replace(/\s+/g, '').trim();
+        if(!thicknessClean) return shortName;
+        thicknessClean = thicknessClean.replace(/mm$/i, '');
+        thicknessClean = thicknessClean.replace(/[^0-9.]/g, '');
+        if(!thicknessClean) return shortName;
+        return thicknessClean + 'mm ' + shortName;
+      }
+      const substrateRows = [];
+      substratePrefixes.forEach((prefix) => {
+        const vals = Array.isArray(groupedPartTypes[prefix]) ? groupedPartTypes[prefix] : [];
+        vals.forEach((v) => {
+          const shortText = deriveSubstrateShortText(prefix, v);
+          if(shortText) substrateRows.push(shortText);
+        });
+      });
+      const substrateText = substrateRows.join('\n');
 
       const installAddressDetails = extractInstallAddressDetailed(quoteData);
       const installAddress = installAddressDetails.value;
@@ -1115,6 +1251,7 @@
           partNames: partNames,
           mediaText: mediaText,
           laminateText: laminateText,
+          substrateText: substrateText,
           notesSales: notesByCategory.sales.join('\n'),
           notesDesign: notesByCategory.design.join('\n'),
           notesProduction: notesByCategory.production.join('\n'),
@@ -1166,9 +1303,9 @@
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
       const opts = options || {};
       const url = corebridgePrimaryDataUrl + '?_ts=' + Date.now();
-      const jobNumberRaw = (corebridgeJobNumber && corebridgeJobNumber.value ? corebridgeJobNumber.value : '').trim();
-      const jobNumber = normalizeCorebridgeInvoiceNumber(jobNumberRaw);
-      const itemNumber = (corebridgeItemNumber && corebridgeItemNumber.value ? corebridgeItemNumber.value : '').trim();
+      const criteria = getCorebridgeCriteriaFromFields();
+      const jobNumber = criteria.jobNumber;
+      const itemNumber = criteria.itemNumber;
       if(opts.showLoading !== false) renderCorebridgeDataDump('Loading...\n' + url);
       setCorebridgeFetchLoading(true);
       corebridgeFetchPromise = (async () => {
@@ -1215,6 +1352,7 @@
 
         corebridgeLastFilteredData = filteredData;
         corebridgeHasFetchedData = true;
+        corebridgeLastFetchCriteria = {jobNumber: jobNumber, itemNumber: itemNumber};
         const secondaryFetchPlan = buildCorebridgeSecondaryFetchPlan(filteredData);
         if(opts.renderDump !== false) {
           const dumpText = JSON.stringify(filteredData, null, 2) + '\n\n' + buildCorebridgeSecondaryFetchLog(secondaryFetchPlan);
@@ -1282,7 +1420,8 @@
     }
     if(corebridgeCreateProofFromData) {
       async function runCorebridgeProofCreation(mode) {
-        if(!corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
+        const criteriaNow = getCorebridgeCriteriaFromFields();
+        if(corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
           try {
             await executeCorebridgePullData({toastOnSuccess: false, toastOnError: true});
           } catch(_eAutoPull) {
