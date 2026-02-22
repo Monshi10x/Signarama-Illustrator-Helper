@@ -467,12 +467,26 @@
     const corebridgeDerivedMappingsPreview = document.querySelector('textarea[data-corebridge-derived-mappings]');
     const corebridgeDumpHost = $('corebridgeDataDumpHost');
     const corebridgeFetchStatus = $('corebridgeFetchStatus');
+    function invalidateCorebridgeFetchCache() {
+      corebridgeHasFetchedData = false;
+      corebridgeLastFilteredData = [];
+      corebridgeLastSecondaryFetchResults = null;
+    }
+    if(corebridgeJobNumber) {
+      corebridgeJobNumber.addEventListener('input', invalidateCorebridgeFetchCache);
+      corebridgeJobNumber.addEventListener('change', invalidateCorebridgeFetchCache);
+    }
+    if(corebridgeItemNumber) {
+      corebridgeItemNumber.addEventListener('input', invalidateCorebridgeFetchCache);
+      corebridgeItemNumber.addEventListener('change', invalidateCorebridgeFetchCache);
+    }
     const corebridgeFetchTimeoutMs = 20000;
     const corebridgeProxyBaseUrl = 'http://localhost:8080';//'https://signschedulerapp.ts.r.appspot.com';
     const corebridgePrimaryDataUrl = corebridgeProxyBaseUrl + '/CB_DesignBoard_Data';
     let corebridgeLastFilteredData = [];
     let corebridgeLastSecondaryFetchResults = null;
     let corebridgeHasFetchedData = false;
+    let corebridgeLastFetchCriteria = {jobNumber: "", itemNumber: ""};
     let corebridgeFetchPromise = null;
     const corebridgeDerivedMappingsPreviewText = [
       'Derived.installAddress -> Address Text',
@@ -519,6 +533,16 @@
     }
     function normalizeCorebridgeInvoiceNumber(value) {
       return String(value == null ? '' : value).replace(/\D/g, '');
+    }
+    function getCorebridgeCriteriaFromFields() {
+      const jobNumberRaw = (corebridgeJobNumber && corebridgeJobNumber.value ? corebridgeJobNumber.value : '').trim();
+      const jobNumber = normalizeCorebridgeInvoiceNumber(jobNumberRaw);
+      const itemNumber = (corebridgeItemNumber && corebridgeItemNumber.value ? corebridgeItemNumber.value : '').trim();
+      return {jobNumber: jobNumber, itemNumber: itemNumber};
+    }
+    function corebridgeCriteriaChanged(criteria) {
+      const next = criteria || getCorebridgeCriteriaFromFields();
+      return next.jobNumber !== corebridgeLastFetchCriteria.jobNumber || next.itemNumber !== corebridgeLastFetchCriteria.itemNumber;
     }
     function buildCorebridgeSecondaryFetchPlan(filteredData) {
       const rows = Array.isArray(filteredData) ? filteredData : [];
@@ -1154,9 +1178,9 @@
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
       const opts = options || {};
       const url = corebridgePrimaryDataUrl + '?_ts=' + Date.now();
-      const jobNumberRaw = (corebridgeJobNumber && corebridgeJobNumber.value ? corebridgeJobNumber.value : '').trim();
-      const jobNumber = normalizeCorebridgeInvoiceNumber(jobNumberRaw);
-      const itemNumber = (corebridgeItemNumber && corebridgeItemNumber.value ? corebridgeItemNumber.value : '').trim();
+      const criteria = getCorebridgeCriteriaFromFields();
+      const jobNumber = criteria.jobNumber;
+      const itemNumber = criteria.itemNumber;
       if(opts.showLoading !== false) renderCorebridgeDataDump('Loading...\n' + url);
       setCorebridgeFetchLoading(true);
       corebridgeFetchPromise = (async () => {
@@ -1203,6 +1227,7 @@
 
         corebridgeLastFilteredData = filteredData;
         corebridgeHasFetchedData = true;
+        corebridgeLastFetchCriteria = {jobNumber: jobNumber, itemNumber: itemNumber};
         const secondaryFetchPlan = buildCorebridgeSecondaryFetchPlan(filteredData);
         if(opts.renderDump !== false) {
           const dumpText = JSON.stringify(filteredData, null, 2) + '\n\n' + buildCorebridgeSecondaryFetchLog(secondaryFetchPlan);
@@ -1270,7 +1295,8 @@
     }
     if(corebridgeCreateProofFromData) {
       async function runCorebridgeProofCreation(mode) {
-        if(!corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
+        const criteriaNow = getCorebridgeCriteriaFromFields();
+        if(corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
           try {
             await executeCorebridgePullData({toastOnSuccess: false, toastOnError: true});
           } catch(_eAutoPull) {
