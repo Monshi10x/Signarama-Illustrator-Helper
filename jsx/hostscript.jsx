@@ -2739,6 +2739,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
 }
 
 function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson) {
+  function _trim(v) {
+    return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+  }
   function _normalizeNameForLookup(value) {
     var s = String(value == null ? '' : value);
     s = s.replace(/\u00a0/g, ' ');
