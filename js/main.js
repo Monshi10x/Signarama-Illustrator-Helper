@@ -1135,16 +1135,21 @@
         if(!shortName) return '';
 
         let thickness = '';
+        let thicknessFromFetch = false;
         const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
           ? srhGlobalState.corebridgePartSearchEntriesByName
           : {};
         const rawNorm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
         if(rawNorm && byName[rawNorm] && byName[rawNorm].thickness) {
           thickness = String(byName[rawNorm].thickness || '').trim();
+          thicknessFromFetch = !!thickness;
         }
         if(!thickness && rawNorm) {
           const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
-          if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) thickness = String(byName[matchedKey].thickness || '').trim();
+          if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) {
+            thickness = String(byName[matchedKey].thickness || '').trim();
+            thicknessFromFetch = !!thickness;
+          }
         }
         if(!thickness) {
           const compact = raw.replace(/\s+/g, '');
@@ -1157,6 +1162,7 @@
         }
 
         if(!thickness) return shortName;
+        if(thicknessFromFetch) return thickness + ' ' + shortName;
         let thicknessClean = String(thickness).replace(/\s+/g, '').trim();
         if(!thicknessClean) return shortName;
         thicknessClean = thicknessClean.replace(/mm$/i, '');
