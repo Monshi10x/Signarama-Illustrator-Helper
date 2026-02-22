@@ -2738,7 +2738,14 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
   }
 }
 
-function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText) {
+function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson) {
+  function _normalizeNameForLookup(value) {
+    var s = String(value == null ? '' : value);
+    s = s.replace(/\u00a0/g, ' ');
+    s = _trim(s).toLowerCase();
+    s = s.replace(/\s+/g, ' ');
+    return s;
+  }
   function _collectNamedItems(doc, nameText) {
     var out = [];
     if(!doc || !nameText) return out;
@@ -2762,6 +2769,14 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
   }
   function _getTargetBounds(item) {
     if(!item) return null;
+    if(item.typename === 'PathItem' || item.typename === 'CompoundPathItem') {
+      var pb = null;
+      try {pb = item.geometricBounds;} catch(_eTbP0) { pb = null; }
+      if(!pb || pb.length !== 4) {
+        try {pb = item.visibleBounds;} catch(_eTbP1) { pb = null; }
+      }
+      if(pb && pb.length === 4) return pb;
+    }
     var b = null;
     try {b = _srh_getClippingPathBounds(item);} catch(_eTb0) { b = null; }
     if(!b || b.length !== 4) {
@@ -2776,37 +2791,88 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     if(!item || !target) return false;
     var tb = _getTargetBounds(target);
     if(!tb || tb.length !== 4) return false;
-    var ib = null;
-    try {ib = item.visibleBounds;} catch(_eFb0) { ib = null; }
-    if(!ib || ib.length !== 4) {
-      try {ib = item.geometricBounds;} catch(_eFb1) { ib = null; }
+    function _normalizeRect(b) {
+      if(!b || b.length !== 4) return null;
+      var l = Number(b[0]), t = Number(b[1]), r = Number(b[2]), bt = Number(b[3]);
+      if(!isFinite(l) || !isFinite(t) || !isFinite(r) || !isFinite(bt)) return null;
+      return {
+        left: Math.min(l, r),
+        right: Math.max(l, r),
+        top: Math.max(t, bt),
+        bottom: Math.min(t, bt)
+      };
     }
-    if(!ib || ib.length !== 4) return false;
+    function _getItemBounds() {
+      var b = null;
+      try {b = item.visibleBounds;} catch(_eFb0) { b = null; }
+      if(!b || b.length !== 4) {
+        try {b = item.geometricBounds;} catch(_eFb1) { b = null; }
+      }
+      return (b && b.length === 4) ? b : null;
+    }
+    var tRect = _normalizeRect(tb);
+    var iRect = _normalizeRect(_getItemBounds());
+    if(!tRect || !iRect) return false;
 
-    var tLeft = Number(tb[0]), tTop = Number(tb[1]), tRight = Number(tb[2]), tBottom = Number(tb[3]);
-    var iLeft = Number(ib[0]), iTop = Number(ib[1]), iRight = Number(ib[2]), iBottom = Number(ib[3]);
-    var tw = Math.abs(tRight - tLeft), th = Math.abs(tTop - tBottom);
-    var iw = Math.abs(iRight - iLeft), ih = Math.abs(iTop - iBottom);
+    var inset = _srh_mm2ptDoc(2);
+    var innerLeft = tRect.left + inset;
+    var innerTop = tRect.top - inset;
+    var innerRight = tRect.right - inset;
+    var innerBottom = tRect.bottom + inset;
+    var tw = Math.max(0, innerRight - innerLeft);
+    var th = Math.max(0, innerTop - innerBottom);
+    var iw = Math.max(0, iRect.right - iRect.left);
+    var ih = Math.max(0, iRect.top - iRect.bottom);
     if(!(tw > 0 && th > 0 && iw > 0 && ih > 0)) return false;
 
     var fitScale = Math.min(tw / iw, th / ih);
     var pct = fitScale * 100;
     try {item.resize(pct, pct, true, true, true, true, 100, Transformation.CENTER);} catch(_eFb2) { }
 
-    try {ib = item.visibleBounds;} catch(_eFb3) { ib = null; }
-    if(!ib || ib.length !== 4) {
-      try {ib = item.geometricBounds;} catch(_eFb4) { ib = null; }
-    }
-    if(!ib || ib.length !== 4) return false;
+    iRect = _normalizeRect(_getItemBounds());
+    if(!iRect) return false;
+    iw = Math.max(0, iRect.right - iRect.left);
+    ih = Math.max(0, iRect.top - iRect.bottom);
 
-    iLeft = Number(ib[0]); iTop = Number(ib[1]); iRight = Number(ib[2]); iBottom = Number(ib[3]);
-    iw = Math.abs(iRight - iLeft); ih = Math.abs(iTop - iBottom);
-    var targetCx = (tLeft + tRight) / 2;
-    var targetCy = (tTop + tBottom) / 2;
-    var newLeft = targetCx - (iw / 2);
-    var newTop = targetCy + (ih / 2);
-    try {item.position = [newLeft, newTop];} catch(_eFb5) { return false; }
-    try {item.move(target, ElementPlacement.PLACEAFTER);} catch(_eFb6) { }
+    // Safety clamp: enforce final width/height not larger than target inner bounds.
+    for(var clampTry = 0; clampTry < 3; clampTry++) {
+      if(iw <= tw && ih <= th) break;
+      var down = Math.min(tw / iw, th / ih);
+      if(!(down > 0 && down < 1)) break;
+      try {item.resize(down * 100, down * 100, true, true, true, true, 100, Transformation.CENTER);} catch(_eFbClamp) { break; }
+      iRect = _normalizeRect(_getItemBounds());
+      if(!iRect) break;
+      iw = Math.max(0, iRect.right - iRect.left);
+      ih = Math.max(0, iRect.top - iRect.bottom);
+    }
+
+    var targetCx = (innerLeft + innerRight) / 2;
+    var targetCy = (innerTop + innerBottom) / 2;
+    var itemCx = (iRect.left + iRect.right) / 2;
+    var itemCy = (iRect.top + iRect.bottom) / 2;
+    var dx = targetCx - itemCx;
+    var dy = targetCy - itemCy;
+    try {item.translate(dx, dy);} catch(_eFb5) { return false; }
+
+    // Final hard cap using post-translate bounds.
+    iRect = _normalizeRect(_getItemBounds());
+    if(iRect) {
+      iw = Math.max(0, iRect.right - iRect.left);
+      ih = Math.max(0, iRect.top - iRect.bottom);
+      if(iw > tw || ih > th) {
+        var finalDown = Math.min(tw / Math.max(iw, 1e-6), th / Math.max(ih, 1e-6));
+        if(finalDown > 0 && finalDown < 1) {
+          try {item.resize(finalDown * 100, finalDown * 100, true, true, true, true, 100, Transformation.CENTER);} catch(_eFb6) { }
+          iRect = _normalizeRect(_getItemBounds());
+          if(iRect) {
+            itemCx = (iRect.left + iRect.right) / 2;
+            itemCy = (iRect.top + iRect.bottom) / 2;
+            try {item.translate(targetCx - itemCx, targetCy - itemCy);} catch(_eFb7) { }
+          }
+        }
+      }
+    }
+    try {item.move(target, ElementPlacement.PLACEAFTER);} catch(_eFbMove) { }
     return true;
   }
 
@@ -2815,8 +2881,18 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     var sourceDoc = app.activeDocument;
     if(!sourceDoc.selection || sourceDoc.selection.length === 0) return 'Error: No selection. Select artwork first.';
 
+    var a4Options = {rasterize: false, rasterizeQuality: 'high'};
+    try {
+      var parsedA4 = a4OptionsJson ? JSON.parse(String(a4OptionsJson)) : null;
+      if(parsedA4 && typeof parsedA4 === 'object') {
+        a4Options.rasterize = !!parsedA4.rasterize;
+        a4Options.rasterizeQuality = _trim(String(parsedA4.rasterizeQuality || 'high')).toLowerCase() || 'high';
+      }
+    } catch(_eA4Opts) { }
+    var a4OptionsSafe = JSON.stringify(a4Options);
+
     var beforeCopies = _collectNamedItems(sourceDoc, 'SRH_A4_Fit_Copy');
-    var a4Res = signarama_helper_duplicateOutlineScaleA4('{"rasterize":false,"rasterizeQuality":"high"}');
+    var a4Res = signarama_helper_duplicateOutlineScaleA4(a4OptionsSafe);
     if(/^Error:/i.test(String(a4Res || '')) || /^No\b/i.test(String(a4Res || ''))) return String(a4Res || 'Error: Failed to scale selected artwork.');
 
     var afterCopies = _collectNamedItems(sourceDoc, 'SRH_A4_Fit_Copy');
@@ -2870,19 +2946,41 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
 
     var target = null;
+    var targetPreferred = null;
+    var targetFallback = null;
+    var nearNames = [];
     var pageItems = null;
     try {pageItems = proofDoc.pageItems;} catch(_ePi0) { pageItems = null; }
     if(pageItems) {
+      var targetNeedle = _normalizeNameForLookup('Artwork Placement Area');
       for(var pi = 0; pi < pageItems.length; pi++) {
         var nm = '';
-        try {nm = _trim(String(pageItems[pi].name || ''));} catch(_ePi1) { nm = ''; }
+        var itemPi = pageItems[pi];
+        try {nm = _trim(String(itemPi.name || ''));} catch(_ePi1) { nm = ''; }
         if(!nm) continue;
-        if(nm.toLowerCase() === 'artwork placement area') { target = pageItems[pi]; break; }
+        var nmNorm = _normalizeNameForLookup(nm);
+        var matchesExact = (nmNorm === targetNeedle);
+        var matchesLoose = (!matchesExact && (nmNorm.indexOf('artwork placement area') >= 0 || nmNorm.indexOf('artwork placement') >= 0));
+        if(!matchesExact && !matchesLoose) {
+          if(nmNorm.indexOf('artwork') >= 0 || nmNorm.indexOf('placement') >= 0) {
+            if(nearNames.length < 10) nearNames.push(nm);
+          }
+          continue;
+        }
+        if(!targetFallback) targetFallback = itemPi;
+        var typeName = '';
+        try {typeName = String(itemPi.typename || '');} catch(_ePi2) { typeName = ''; }
+        if(typeName === 'PathItem' || typeName === 'CompoundPathItem') {
+          targetPreferred = itemPi;
+          break;
+        }
       }
     }
+    target = targetPreferred || targetFallback;
     if(!target) {
       try {scaledCopy.remove();} catch(_eRmCopy4) { }
-      return proofRes + ' Artwork placement skipped: target "Artwork Placement Area" not found.';
+      var nearText = nearNames.length ? (' Near matches: ' + nearNames.join(' | ')) : '';
+      return proofRes + ' Artwork placement skipped: target "Artwork Placement Area" not found.' + nearText;
     }
 
     var fitOk = _fitItemIntoTarget(pastedGroup, target);

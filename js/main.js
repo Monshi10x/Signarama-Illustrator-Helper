@@ -1343,10 +1343,22 @@
         const toastTitle = (mode === 'selected')
           ? 'Corebridge proof for selected'
           : 'Corebridge proof from data';
-        runButtonJsxOperation(
-          proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '")',
-          {logFn: log, toastTitle: toastTitle}
-        );
+        if(mode === 'selected') {
+          const a4Options = {
+            rasterize: !!(a4Rasterize && a4Rasterize.checked),
+            rasterizeQuality: (a4RasterizeQuality && a4RasterizeQuality.value) ? a4RasterizeQuality.value : 'high'
+          };
+          const safeA4Options = jsxEscapeDoubleQuoted(JSON.stringify(a4Options));
+          runButtonJsxOperation(
+            proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeA4Options + '")',
+            {logFn: log, toastTitle: toastTitle}
+          );
+        } else {
+          runButtonJsxOperation(
+            proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '")',
+            {logFn: log, toastTitle: toastTitle}
+          );
+        }
       }
       corebridgeCreateProofFromData.onclick = async () => {
         await runCorebridgeProofCreation('item');
