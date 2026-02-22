@@ -1983,88 +1983,6 @@ function signarama_helper_transform_debugArtboards() {
   return JSON.stringify(debug);
 }
 
-function signarama_helper_corebridge_createLink() {
-  if(!app.documents.length) return 'No open document.';
-  var doc = app.activeDocument;
-  var view = null;
-  try {view = doc.activeView;} catch(_eCbV0) { view = null; }
-  if(!view) return 'No active view.';
-  var center = null;
-  try {center = view.centerPoint;} catch(_eCbV1) { center = null; }
-  if(!center || center.length < 2) return 'Could not determine viewport center.';
-
-  var cx = Number(center[0]);
-  var cy = Number(center[1]);
-  var w = _srh_mm2ptDoc(70);
-  var h = _srh_mm2ptDoc(20);
-  var r = _srh_mm2ptDoc(4);
-  var left = cx - (w / 2);
-  var top = cy + (h / 2);
-
-  var grp = doc.activeLayer.groupItems.add();
-  grp.name = 'SRH_COREBRIDGE_LINK';
-
-  var rect = grp.pathItems.roundedRectangle(top, left, w, h, r, r);
-  rect.name = 'SRH_COREBRIDGE_LINK_BG';
-  try {rect.stroked = true;} catch(_eCbR0) { }
-  try {rect.strokeWidth = _srh_pxStrokeDoc(1);} catch(_eCbR1) { }
-  try {rect.filled = true;} catch(_eCbR2) { }
-  try {
-    var fill = new RGBColor();
-    fill.red = 6; fill.green = 82; fill.blue = 152;
-    rect.fillColor = fill;
-  } catch(_eCbR3) { }
-  try {
-    var stroke = new RGBColor();
-    stroke.red = 255; stroke.green = 255; stroke.blue = 255;
-    rect.strokeColor = stroke;
-  } catch(_eCbR4) { }
-
-  var tf = grp.textFrames.pointText([cx, cy - _srh_mm2ptDoc(1)]);
-  tf.name = 'SRH_COREBRIDGE_LINK_TEXT';
-  tf.contents = 'corebridge';
-  try {tf.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eCbT0) { }
-  try {tf.textRange.characterAttributes.size = _srh_ptDoc(14);} catch(_eCbT1) { }
-  try {
-    var txt = new RGBColor();
-    txt.red = 255; txt.green = 255; txt.blue = 255;
-    tf.textRange.characterAttributes.fillColor = txt;
-  } catch(_eCbT2) { }
-
-  // Prevent immediate click-detection trigger after creation.
-  try {grp.selected = false;} catch(_eCbSel0) { }
-  try {rect.selected = false;} catch(_eCbSel1) { }
-  try {tf.selected = false;} catch(_eCbSel2) { }
-  try {doc.selection = null;} catch(_eCbSel3) { }
-  try {app.executeMenuCommand('deselectall');} catch(_eCbSel4) { }
-
-  return 'Corebridge link created.';
-}
-
-function signarama_helper_corebridge_isLinkSelected() {
-  if(!app.documents.length) return '0';
-  var doc = app.activeDocument;
-  var sel = null;
-  try {sel = doc.selection;} catch(_eCbS0) { sel = null; }
-  if(!sel || !sel.length) return '0';
-
-  function _hasCorebridgeAncestor(item) {
-    var p = item;
-    while(p) {
-      try {
-        if(String(p.name || '') === 'SRH_COREBRIDGE_LINK') return true;
-      } catch(_eCbS1) { }
-      try {p = p.parent;} catch(_eCbS2) { p = null; }
-    }
-    return false;
-  }
-
-  for(var i = 0; i < sel.length; i++) {
-    if(_hasCorebridgeAncestor(sel[i])) return '1';
-  }
-  return '0';
-}
-
 function signarama_helper_corebridge_openProofPath(pathText) {
   try {
     var rawPath = String(pathText == null ? '' : pathText).replace(/^\s+|\s+$/g, '');
@@ -2125,8 +2043,12 @@ function signarama_helper_corebridge_updatePageNumbers() {
       }
       if(idx < 0) idx = 0;
       try {
-        tf.contents = String(idx + 1) + '/' + String(total);
-        updated++;
+        var nextValue = String(idx + 1) + '/' + String(total);
+        var currentValue = String(tf.contents == null ? '' : tf.contents);
+        if(currentValue !== nextValue) {
+          tf.contents = nextValue;
+          updated++;
+        }
       } catch(_eSetPg) { }
     }
     return 'Updated page numbers: ' + updated + ' / ' + frames.length + ' text frames scanned.';
@@ -2139,6 +2061,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
   function _trim(v) {
     return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
   }
+  // Legacy safety guard: some cached CEP/JSX runtimes may still evaluate
+  // older return-string variants that referenced linkPlacementRes.
+  var linkPlacementRes = '';
   function _todayDdMmYy() {
     var d = new Date();
     function _pad(v) { return (v < 10 ? '0' : '') + String(v); }
@@ -2403,12 +2328,12 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       var gap = _srh_mm2ptDoc(2);
       var tickW = _srh_mm2ptDoc(3.6);
       var tickH = _srh_mm2ptDoc(3.6);
-      var x0 = right + gap;
+      var x0 = left - gap - tickW;
       var y0 = top - ((top - bottom) / 2); // vertical center
 
-      var p1 = [x0, y0 - (tickH * 0.05)];
-      var p2 = [x0 + (tickW * 0.36), y0 - (tickH * 0.35)];
-      var p3 = [x0 + tickW, y0 + (tickH * 0.35)];
+      var p1 = [x0 + tickW, y0 - (tickH * 0.05)];
+      var p2 = [x0 + (tickW * 0.64), y0 - (tickH * 0.35)];
+      var p3 = [x0, y0 + (tickH * 0.35)];
 
       var pathA = doc.activeLayer.pathItems.add();
       pathA.setEntirePath([p1, p2]);
@@ -2504,6 +2429,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var doc = app.open(openFile);
     if(!doc) return 'Error: Failed to open proof file.';
 
+
     var frameMap = {};
     var frameMapNormalized = {};
     var itemMap = {};
@@ -2563,6 +2489,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var forcedDescriptionApplied = 0;
     var forcedMediaApplied = 0;
     var forcedLaminateApplied = 0;
+    var forcedSubstrateApplied = 0;
     var forcedPartsApplied = 0;
     var forcedNotesApplied = 0;
     var fallbackContainerTextApplied = 0;
@@ -2661,6 +2588,17 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eLamSet) { }
       }
     }
+    var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
+    var substrateFrames = _getTextTargetsByName('Substrate Text');
+    if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
+      var substrateValue = _toTextValue(derivedSubstrate);
+      for(var sf = 0; sf < substrateFrames.length; sf++) {
+        try {
+          substrateFrames[sf].contents = substrateValue;
+          forcedSubstrateApplied++;
+        } catch(_eSubSet) { }
+      }
+    }
     var derivedParts = _readByPath(row, 'Derived.partsNumbered');
     var partsFrames = _getTextTargetsByName('Parts');
     if((!partsFrames || !partsFrames.length)) partsFrames = _getTextTargetsByName('Parts Text');
@@ -2728,6 +2666,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Description Text updates: ' + forcedDescriptionApplied +
       '. Forced Media Text updates: ' + forcedMediaApplied +
       '. Forced Laminate Text updates: ' + forcedLaminateApplied +
+      '. Forced Substrate Text updates: ' + forcedSubstrateApplied +
       '. Forced Parts updates: ' + forcedPartsApplied +
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
@@ -2739,12 +2678,48 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
 }
 
 function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson) {
+  function _trim(v) {
+    return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+  }
   function _normalizeNameForLookup(value) {
     var s = String(value == null ? '' : value);
     s = s.replace(/\u00a0/g, ' ');
     s = _trim(s).toLowerCase();
     s = s.replace(/\s+/g, ' ');
     return s;
+  }
+  function _dbg(msg) {
+    try {$.writeln('[SRH][CorebridgeProofSelected] ' + msg);} catch(_eDbgCp0) { }
+  }
+  function _rectToText(rect) {
+    if(!rect) return 'null';
+    var left = Number(rect.left), top = Number(rect.top), right = Number(rect.right), bottom = Number(rect.bottom);
+    var w = Math.max(0, right - left);
+    var h = Math.max(0, top - bottom);
+    var cx = (left + right) / 2;
+    var cy = (top + bottom) / 2;
+    return 'L=' + left.toFixed(2) + ', T=' + top.toFixed(2) + ', R=' + right.toFixed(2) + ', B=' + bottom.toFixed(2) +
+      ', W=' + w.toFixed(2) + ', H=' + h.toFixed(2) + ', C=(' + cx.toFixed(2) + ', ' + cy.toFixed(2) + ')';
+  }
+  function _normalizeRect(b) {
+    if(!b || b.length !== 4) return null;
+    var l = Number(b[0]), t = Number(b[1]), r = Number(b[2]), bt = Number(b[3]);
+    if(!isFinite(l) || !isFinite(t) || !isFinite(r) || !isFinite(bt)) return null;
+    return {
+      left: Math.min(l, r),
+      right: Math.max(l, r),
+      top: Math.max(t, bt),
+      bottom: Math.min(t, bt)
+    };
+  }
+  function _getPlacedItemBounds(item) {
+    if(!item) return null;
+    var b = null;
+    try {b = item.visibleBounds;} catch(_ePb0) { b = null; }
+    if(!b || b.length !== 4) {
+      try {b = item.geometricBounds;} catch(_ePb1) { b = null; }
+    }
+    return (b && b.length === 4) ? b : null;
   }
   function _collectNamedItems(doc, nameText) {
     var out = [];
@@ -2922,27 +2897,53 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
     var proofDoc = app.activeDocument;
     try {proofDoc.selection = null;} catch(_eSelClr1) { }
-    try {app.paste();} catch(_ePaste0) {
-      try {scaledCopy.remove();} catch(_eRmCopy2) { }
-      return proofRes + ' Artwork placement failed: paste failed.';
-    }
-
-    var pastedSel = null;
-    try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
-    if(!pastedSel || !pastedSel.length) {
-      try {scaledCopy.remove();} catch(_eRmCopy3) { }
-      return proofRes + ' Artwork placement failed: no pasted artwork.';
-    }
 
     var pastedGroup = null;
-    if(pastedSel.length === 1) pastedGroup = pastedSel[0];
-    else {
+    var placementMethod = '';
+    try {
+      app.paste();
+      placementMethod = 'paste';
+    } catch(_ePaste0) {
       try {
-        pastedGroup = proofDoc.activeLayer.groupItems.add();
-        for(var ps = 0; ps < pastedSel.length; ps++) {
-          try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+        app.executeMenuCommand('pasteInPlace');
+        placementMethod = 'pasteInPlace';
+      } catch(_ePaste1) {
+        try {
+          var duplicateTarget = null;
+          try {duplicateTarget = proofDoc.activeLayer;} catch(_eDupLayer0) { duplicateTarget = null; }
+          if(!duplicateTarget) {
+            try {duplicateTarget = proofDoc.layers[0];} catch(_eDupLayer1) { duplicateTarget = null; }
+          }
+          if(!duplicateTarget) {
+            try {duplicateTarget = proofDoc;} catch(_eDupLayer2) { duplicateTarget = null; }
+          }
+          if(duplicateTarget) {
+            pastedGroup = scaledCopy.duplicate(duplicateTarget, ElementPlacement.PLACEATEND);
+            placementMethod = 'duplicate';
+          }
+        } catch(_eDup0) { pastedGroup = null; }
+      }
+    }
+
+    if(!pastedGroup) {
+      var pastedSel = null;
+      try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
+      if(pastedSel && pastedSel.length) {
+        if(pastedSel.length === 1) pastedGroup = pastedSel[0];
+        else {
+          try {
+            pastedGroup = proofDoc.activeLayer.groupItems.add();
+            for(var ps = 0; ps < pastedSel.length; ps++) {
+              try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+            }
+          } catch(_eGroup) { pastedGroup = pastedSel[0]; }
         }
-      } catch(_eGroup) { pastedGroup = pastedSel[0]; }
+      }
+    }
+
+    if(!pastedGroup) {
+      try {scaledCopy.remove();} catch(_eRmCopy2) { }
+      return proofRes + ' Artwork placement failed: unable to transfer artwork to proof document.';
     }
 
     var target = null;
@@ -2977,6 +2978,10 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
       }
     }
     target = targetPreferred || targetFallback;
+    var targetBoundsForLog = _normalizeRect(_getTargetBounds(target));
+    _dbg('Target "Artwork Placement Area": ' + _rectToText(targetBoundsForLog));
+    var placedBoundsBefore = _normalizeRect(_getPlacedItemBounds(pastedGroup));
+    _dbg('Placed artwork before fit: ' + _rectToText(placedBoundsBefore));
     if(!target) {
       try {scaledCopy.remove();} catch(_eRmCopy4) { }
       var nearText = nearNames.length ? (' Near matches: ' + nearNames.join(' | ')) : '';
@@ -2984,9 +2989,12 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
 
     var fitOk = _fitItemIntoTarget(pastedGroup, target);
+    var placedBoundsAfter = _normalizeRect(_getPlacedItemBounds(pastedGroup));
+    _dbg('Placed artwork after fit: ' + _rectToText(placedBoundsAfter));
     try {scaledCopy.remove();} catch(_eRmCopy5) { }
     if(!fitOk) return proofRes + ' Artwork placement failed: could not fit into target.';
-    return proofRes + ' Artwork placed into "Artwork Placement Area".';
+    var methodText = placementMethod ? (' via ' + placementMethod) : '';
+    return proofRes + ' Artwork placed into "Artwork Placement Area"' + methodText + '.';
   } catch(e) {
     return 'Error: ' + e.message;
   }
@@ -3005,10 +3013,6 @@ try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transfo
 try { signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards; } catch(_eTg4) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg5) { }
 try { signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg6) { }
-try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg7) { }
-try { signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg8) { }
-try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg9) { }
-try { signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg10) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_openProofPath = this.signarama_helper_corebridge_openProofPath; } catch(_eTg13) { }
 try { signarama_helper_corebridge_openProofPath = this.signarama_helper_corebridge_openProofPath; } catch(_eTg14) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createProofFromData = this.signarama_helper_corebridge_createProofFromData; } catch(_eTg15) { }
@@ -4732,4 +4736,3 @@ this.atlas_dimensions_clear = function() {
     return "Nothing to clear (no 'Dimensions' layer).";
   }
 };
-
