@@ -2061,6 +2061,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
   function _trim(v) {
     return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
   }
+  // Legacy safety guard: some cached CEP/JSX runtimes may still evaluate
+  // older return-string variants that referenced linkPlacementRes.
+  var linkPlacementRes = '';
   function _todayDdMmYy() {
     var d = new Date();
     function _pad(v) { return (v < 10 ? '0' : '') + String(v); }
