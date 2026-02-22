@@ -1983,233 +1983,6 @@ function signarama_helper_transform_debugArtboards() {
   return JSON.stringify(debug);
 }
 
-function _srh_corebridge_findNamedPageItem(doc, targetName) {
-  if(!doc || !targetName) return null;
-  var target = null;
-  var needle = String(targetName).replace(/ /g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
-  var pageItems = null;
-  try {pageItems = doc.pageItems;} catch(_eCbFind0) { pageItems = null; }
-  if(!pageItems) return null;
-  for(var i = 0; i < pageItems.length; i++) {
-    var it = pageItems[i];
-    var nm = '';
-    try {nm = String(it.name || '');} catch(_eCbFind1) { nm = ''; }
-    if(!nm) continue;
-    var norm = nm.replace(/ /g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
-    if(norm === needle) {
-      target = it;
-      break;
-    }
-  }
-  return target;
-}
-
-function _srh_corebridge_getItemBounds(item) {
-  if(!item) return null;
-  var b = null;
-  try {b = item.visibleBounds;} catch(_eCbGb0) { b = null; }
-  if(!b || b.length !== 4) {
-    try {b = item.geometricBounds;} catch(_eCbGb1) { b = null; }
-  }
-  return (b && b.length === 4) ? b : null;
-}
-
-function _srh_corebridge_getTargetBounds(item) {
-  if(!item) return null;
-  if(item.typename === 'PathItem' || item.typename === 'CompoundPathItem') {
-    var pb = null;
-    try {pb = item.geometricBounds;} catch(_eCbTb0) { pb = null; }
-    if(!pb || pb.length !== 4) {
-      try {pb = item.visibleBounds;} catch(_eCbTb1) { pb = null; }
-    }
-    if(pb && pb.length === 4) return pb;
-  }
-  var b = null;
-  try {b = _srh_getClippingPathBounds(item);} catch(_eCbTb2) { b = null; }
-  if(!b || b.length !== 4) {
-    try {b = item.visibleBounds;} catch(_eCbTb3) { b = null; }
-  }
-  if(!b || b.length !== 4) {
-    try {b = item.geometricBounds;} catch(_eCbTb4) { b = null; }
-  }
-  return (b && b.length === 4) ? b : null;
-}
-
-function _srh_corebridge_fitItemInsideTarget(item, target, insetMm) {
-  if(!item || !target) return false;
-  var tb = _srh_corebridge_getTargetBounds(target);
-  var ib = _srh_corebridge_getItemBounds(item);
-  if(!tb || !ib) return false;
-  var tl = Math.min(Number(tb[0]), Number(tb[2]));
-  var tr = Math.max(Number(tb[0]), Number(tb[2]));
-  var tt = Math.max(Number(tb[1]), Number(tb[3]));
-  var tbm = Math.min(Number(tb[1]), Number(tb[3]));
-  var il = Math.min(Number(ib[0]), Number(ib[2]));
-  var ir = Math.max(Number(ib[0]), Number(ib[2]));
-  var it = Math.max(Number(ib[1]), Number(ib[3]));
-  var ibm = Math.min(Number(ib[1]), Number(ib[3]));
-
-  var inset = _srh_mm2ptDoc(typeof insetMm === 'number' ? insetMm : 1.5);
-  var innerLeft = tl + inset;
-  var innerTop = tt - inset;
-  var innerRight = tr - inset;
-  var innerBottom = tbm + inset;
-  var tw = Math.max(0, innerRight - innerLeft);
-  var th = Math.max(0, innerTop - innerBottom);
-  var iw = Math.max(0, ir - il);
-  var ih = Math.max(0, it - ibm);
-  if(!(tw > 0 && th > 0 && iw > 0 && ih > 0)) return false;
-
-  var scale = Math.min(tw / iw, th / ih);
-  if(scale > 0 && isFinite(scale)) {
-    try {item.resize(scale * 100, scale * 100, true, true, true, true, 100, Transformation.CENTER);} catch(_eCbFit0) { }
-  }
-
-  ib = _srh_corebridge_getItemBounds(item);
-  if(!ib) return false;
-  il = Math.min(Number(ib[0]), Number(ib[2]));
-  ir = Math.max(Number(ib[0]), Number(ib[2]));
-  it = Math.max(Number(ib[1]), Number(ib[3]));
-  ibm = Math.min(Number(ib[1]), Number(ib[3]));
-
-  var tcx = (innerLeft + innerRight) / 2;
-  var tcy = (innerTop + innerBottom) / 2;
-  var icx = (il + ir) / 2;
-  var icy = (it + ibm) / 2;
-  try {item.translate(tcx - icx, tcy - icy);} catch(_eCbFit1) { return false; }
-  try {item.move(target, ElementPlacement.PLACEAFTER);} catch(_eCbFit2) { }
-  return true;
-}
-
-function _srh_corebridge_removeLinkItems(doc) {
-  if(!doc) return;
-  var items = null;
-  try {items = doc.pageItems;} catch(_eCbRm0) { items = null; }
-  if(!items) return;
-  for(var i = items.length - 1; i >= 0; i--) {
-    var it = items[i];
-    var nm = '';
-    try {nm = String(it.name || '');} catch(_eCbRm1) { nm = ''; }
-    if(nm !== 'SRH_COREBRIDGE_LINK') continue;
-    try {it.remove();} catch(_eCbRm2) { }
-  }
-}
-
-function _srh_corebridge_buildLinkGroup(doc, centerX, centerY) {
-  if(!doc) return null;
-  var layer = null;
-  try {layer = doc.activeLayer;} catch(_eCbLayer0) { layer = null; }
-  if(!layer) {
-    try {layer = doc.layers[0];} catch(_eCbLayer1) { layer = null; }
-  }
-  if(!layer) return null;
-
-  var w = _srh_mm2ptDoc(70);
-  var h = _srh_mm2ptDoc(20);
-  var r = _srh_mm2ptDoc(4);
-  var left = centerX - (w / 2);
-  var top = centerY + (h / 2);
-
-  var grp = layer.groupItems.add();
-  grp.name = 'SRH_COREBRIDGE_LINK';
-
-  var rect = grp.pathItems.roundedRectangle(top, left, w, h, r, r);
-  rect.name = 'SRH_COREBRIDGE_LINK_BG';
-  try {rect.stroked = true;} catch(_eCbR0) { }
-  try {rect.strokeWidth = _srh_pxStrokeDoc(1);} catch(_eCbR1) { }
-  try {rect.filled = true;} catch(_eCbR2) { }
-  try {
-    var fill = new RGBColor();
-    fill.red = 6; fill.green = 82; fill.blue = 152;
-    rect.fillColor = fill;
-  } catch(_eCbR3) { }
-  try {
-    var stroke = new RGBColor();
-    stroke.red = 255; stroke.green = 255; stroke.blue = 255;
-    rect.strokeColor = stroke;
-  } catch(_eCbR4) { }
-
-  var tf = grp.textFrames.pointText([centerX, centerY - _srh_mm2ptDoc(1)]);
-  tf.name = 'SRH_COREBRIDGE_LINK_TEXT';
-  tf.contents = 'corebridge';
-  try {tf.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eCbT0) { }
-  try {tf.textRange.characterAttributes.size = _srh_ptDoc(14);} catch(_eCbT1) { }
-  try {
-    var txt = new RGBColor();
-    txt.red = 255; txt.green = 255; txt.blue = 255;
-    tf.textRange.characterAttributes.fillColor = txt;
-  } catch(_eCbT2) { }
-  return grp;
-}
-
-function _srh_corebridge_createLinkInButtonContainer(doc) {
-  if(!doc) return 'No open document.';
-  _srh_corebridge_removeLinkItems(doc);
-  var target = _srh_corebridge_findNamedPageItem(doc, 'Button Container');
-  if(!target) return 'Button Container not found.';
-  var tb = _srh_corebridge_getTargetBounds(target);
-  if(!tb || tb.length !== 4) return 'Button Container has invalid bounds.';
-  var cx = (Number(tb[0]) + Number(tb[2])) / 2;
-  var cy = (Number(tb[1]) + Number(tb[3])) / 2;
-  var grp = _srh_corebridge_buildLinkGroup(doc, cx, cy);
-  if(!grp) return 'Could not create Corebridge link.';
-  if(!_srh_corebridge_fitItemInsideTarget(grp, target, 1.5)) return 'Could not fit Corebridge link in Button Container.';
-
-  try {grp.selected = false;} catch(_eCbSel0) { }
-  try {doc.selection = null;} catch(_eCbSel1) { }
-  try {app.executeMenuCommand('deselectall');} catch(_eCbSel2) { }
-  return 'Corebridge link created in Button Container.';
-}
-
-function signarama_helper_corebridge_createLink() {
-  if(!app.documents.length) return 'No open document.';
-  var doc = app.activeDocument;
-  var targetRes = _srh_corebridge_createLinkInButtonContainer(doc);
-  if(targetRes === 'Corebridge link created in Button Container.') return targetRes;
-
-  var view = null;
-  try {view = doc.activeView;} catch(_eCbV0) { view = null; }
-  if(!view) return 'No active view.';
-  var center = null;
-  try {center = view.centerPoint;} catch(_eCbV1) { center = null; }
-  if(!center || center.length < 2) return 'Could not determine viewport center.';
-
-  _srh_corebridge_removeLinkItems(doc);
-  var grp = _srh_corebridge_buildLinkGroup(doc, Number(center[0]), Number(center[1]));
-  if(!grp) return 'Could not create Corebridge link.';
-
-  try {grp.selected = false;} catch(_eCbSel3) { }
-  try {doc.selection = null;} catch(_eCbSel4) { }
-  try {app.executeMenuCommand('deselectall');} catch(_eCbSel5) { }
-
-  return 'Corebridge link created.';
-}
-
-
-function signarama_helper_corebridge_isLinkSelected() {
-  if(!app.documents.length) return '0';
-  var doc = app.activeDocument;
-  var sel = null;
-  try {sel = doc.selection;} catch(_eCbS0) { sel = null; }
-  if(!sel || !sel.length) return '0';
-
-  function _hasCorebridgeAncestor(item) {
-    var p = item;
-    while(p) {
-      try {
-        if(String(p.name || '') === 'SRH_COREBRIDGE_LINK') return true;
-      } catch(_eCbS1) { }
-      try {p = p.parent;} catch(_eCbS2) { p = null; }
-    }
-    return false;
-  }
-
-  for(var i = 0; i < sel.length; i++) {
-    if(_hasCorebridgeAncestor(sel[i])) return '1';
-  }
-  return '0';
-}
-
 function signarama_helper_corebridge_openProofPath(pathText) {
   try {
     var rawPath = String(pathText == null ? '' : pathText).replace(/^\s+|\s+$/g, '');
@@ -2270,8 +2043,12 @@ function signarama_helper_corebridge_updatePageNumbers() {
       }
       if(idx < 0) idx = 0;
       try {
-        tf.contents = String(idx + 1) + '/' + String(total);
-        updated++;
+        var nextValue = String(idx + 1) + '/' + String(total);
+        var currentValue = String(tf.contents == null ? '' : tf.contents);
+        if(currentValue !== nextValue) {
+          tf.contents = nextValue;
+          updated++;
+        }
       } catch(_eSetPg) { }
     }
     return 'Updated page numbers: ' + updated + ' / ' + frames.length + ' text frames scanned.';
@@ -2548,12 +2325,12 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       var gap = _srh_mm2ptDoc(2);
       var tickW = _srh_mm2ptDoc(3.6);
       var tickH = _srh_mm2ptDoc(3.6);
-      var x0 = right + gap;
+      var x0 = left - gap - tickW;
       var y0 = top - ((top - bottom) / 2); // vertical center
 
-      var p1 = [x0, y0 - (tickH * 0.05)];
-      var p2 = [x0 + (tickW * 0.36), y0 - (tickH * 0.35)];
-      var p3 = [x0 + tickW, y0 + (tickH * 0.35)];
+      var p1 = [x0 + tickW, y0 - (tickH * 0.05)];
+      var p2 = [x0 + (tickW * 0.64), y0 - (tickH * 0.35)];
+      var p3 = [x0, y0 + (tickH * 0.35)];
 
       var pathA = doc.activeLayer.pathItems.add();
       pathA.setEntirePath([p1, p2]);
@@ -2649,7 +2426,6 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var doc = app.open(openFile);
     if(!doc) return 'Error: Failed to open proof file.';
 
-    var linkPlacementRes = _srh_corebridge_createLinkInButtonContainer(doc);
 
     var frameMap = {};
     var frameMapNormalized = {};
@@ -2710,6 +2486,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var forcedDescriptionApplied = 0;
     var forcedMediaApplied = 0;
     var forcedLaminateApplied = 0;
+    var forcedSubstrateApplied = 0;
     var forcedPartsApplied = 0;
     var forcedNotesApplied = 0;
     var fallbackContainerTextApplied = 0;
@@ -2808,6 +2585,17 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eLamSet) { }
       }
     }
+    var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
+    var substrateFrames = _getTextTargetsByName('Substrate Text');
+    if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
+      var substrateValue = _toTextValue(derivedSubstrate);
+      for(var sf = 0; sf < substrateFrames.length; sf++) {
+        try {
+          substrateFrames[sf].contents = substrateValue;
+          forcedSubstrateApplied++;
+        } catch(_eSubSet) { }
+      }
+    }
     var derivedParts = _readByPath(row, 'Derived.partsNumbered');
     var partsFrames = _getTextTargetsByName('Parts');
     if((!partsFrames || !partsFrames.length)) partsFrames = _getTextTargetsByName('Parts Text');
@@ -2875,6 +2663,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Description Text updates: ' + forcedDescriptionApplied +
       '. Forced Media Text updates: ' + forcedMediaApplied +
       '. Forced Laminate Text updates: ' + forcedLaminateApplied +
+      '. Forced Substrate Text updates: ' + forcedSubstrateApplied +
       '. Forced Parts updates: ' + forcedPartsApplied +
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
@@ -3222,10 +3011,6 @@ try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transfo
 try { signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards; } catch(_eTg4) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg5) { }
 try { signarama_helper_transform_debugArtboards = this.signarama_helper_transform_debugArtboards; } catch(_eTg6) { }
-try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg7) { }
-try { signarama_helper_corebridge_createLink = this.signarama_helper_corebridge_createLink; } catch(_eTg8) { }
-try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg9) { }
-try { signarama_helper_corebridge_isLinkSelected = this.signarama_helper_corebridge_isLinkSelected; } catch(_eTg10) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_openProofPath = this.signarama_helper_corebridge_openProofPath; } catch(_eTg13) { }
 try { signarama_helper_corebridge_openProofPath = this.signarama_helper_corebridge_openProofPath; } catch(_eTg14) { }
 try { if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_createProofFromData = this.signarama_helper_corebridge_createProofFromData; } catch(_eTg15) { }
