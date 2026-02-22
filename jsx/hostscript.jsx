@@ -2739,12 +2739,28 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
 }
 
 function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson) {
+  function _trim(v) {
+    return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+  }
   function _normalizeNameForLookup(value) {
     var s = String(value == null ? '' : value);
     s = s.replace(/\u00a0/g, ' ');
     s = _trim(s).toLowerCase();
     s = s.replace(/\s+/g, ' ');
     return s;
+  }
+  function _dbg(msg) {
+    try {$.writeln('[SRH][CorebridgeProofSelected] ' + msg);} catch(_eDbgCp0) { }
+  }
+  function _rectToText(rect) {
+    if(!rect) return 'null';
+    var left = Number(rect.left), top = Number(rect.top), right = Number(rect.right), bottom = Number(rect.bottom);
+    var w = Math.max(0, right - left);
+    var h = Math.max(0, top - bottom);
+    var cx = (left + right) / 2;
+    var cy = (top + bottom) / 2;
+    return 'L=' + left.toFixed(2) + ', T=' + top.toFixed(2) + ', R=' + right.toFixed(2) + ', B=' + bottom.toFixed(2) +
+      ', W=' + w.toFixed(2) + ', H=' + h.toFixed(2) + ', C=(' + cx.toFixed(2) + ', ' + cy.toFixed(2) + ')';
   }
   function _collectNamedItems(doc, nameText) {
     var out = [];
@@ -2922,27 +2938,53 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
     var proofDoc = app.activeDocument;
     try {proofDoc.selection = null;} catch(_eSelClr1) { }
-    try {app.paste();} catch(_ePaste0) {
-      try {scaledCopy.remove();} catch(_eRmCopy2) { }
-      return proofRes + ' Artwork placement failed: paste failed.';
-    }
-
-    var pastedSel = null;
-    try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
-    if(!pastedSel || !pastedSel.length) {
-      try {scaledCopy.remove();} catch(_eRmCopy3) { }
-      return proofRes + ' Artwork placement failed: no pasted artwork.';
-    }
 
     var pastedGroup = null;
-    if(pastedSel.length === 1) pastedGroup = pastedSel[0];
-    else {
+    var placementMethod = '';
+    try {
+      app.paste();
+      placementMethod = 'paste';
+    } catch(_ePaste0) {
       try {
-        pastedGroup = proofDoc.activeLayer.groupItems.add();
-        for(var ps = 0; ps < pastedSel.length; ps++) {
-          try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+        app.executeMenuCommand('pasteInPlace');
+        placementMethod = 'pasteInPlace';
+      } catch(_ePaste1) {
+        try {
+          var duplicateTarget = null;
+          try {duplicateTarget = proofDoc.activeLayer;} catch(_eDupLayer0) { duplicateTarget = null; }
+          if(!duplicateTarget) {
+            try {duplicateTarget = proofDoc.layers[0];} catch(_eDupLayer1) { duplicateTarget = null; }
+          }
+          if(!duplicateTarget) {
+            try {duplicateTarget = proofDoc;} catch(_eDupLayer2) { duplicateTarget = null; }
+          }
+          if(duplicateTarget) {
+            pastedGroup = scaledCopy.duplicate(duplicateTarget, ElementPlacement.PLACEATEND);
+            placementMethod = 'duplicate';
+          }
+        } catch(_eDup0) { pastedGroup = null; }
+      }
+    }
+
+    if(!pastedGroup) {
+      var pastedSel = null;
+      try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
+      if(pastedSel && pastedSel.length) {
+        if(pastedSel.length === 1) pastedGroup = pastedSel[0];
+        else {
+          try {
+            pastedGroup = proofDoc.activeLayer.groupItems.add();
+            for(var ps = 0; ps < pastedSel.length; ps++) {
+              try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+            }
+          } catch(_eGroup) { pastedGroup = pastedSel[0]; }
         }
-      } catch(_eGroup) { pastedGroup = pastedSel[0]; }
+      }
+    }
+
+    if(!pastedGroup) {
+      try {scaledCopy.remove();} catch(_eRmCopy2) { }
+      return proofRes + ' Artwork placement failed: unable to transfer artwork to proof document.';
     }
 
     var target = null;
@@ -2977,6 +3019,10 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
       }
     }
     target = targetPreferred || targetFallback;
+    var targetBoundsForLog = _normalizeRect(_getTargetBounds(target));
+    _dbg('Target "Artwork Placement Area": ' + _rectToText(targetBoundsForLog));
+    var placedBoundsBefore = _normalizeRect(_getItemBounds(pastedGroup));
+    _dbg('Placed artwork before fit: ' + _rectToText(placedBoundsBefore));
     if(!target) {
       try {scaledCopy.remove();} catch(_eRmCopy4) { }
       var nearText = nearNames.length ? (' Near matches: ' + nearNames.join(' | ')) : '';
@@ -2984,9 +3030,12 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
 
     var fitOk = _fitItemIntoTarget(pastedGroup, target);
+    var placedBoundsAfter = _normalizeRect(_getItemBounds(pastedGroup));
+    _dbg('Placed artwork after fit: ' + _rectToText(placedBoundsAfter));
     try {scaledCopy.remove();} catch(_eRmCopy5) { }
     if(!fitOk) return proofRes + ' Artwork placement failed: could not fit into target.';
-    return proofRes + ' Artwork placed into "Artwork Placement Area".';
+    var methodText = placementMethod ? (' via ' + placementMethod) : '';
+    return proofRes + ' Artwork placed into "Artwork Placement Area"' + methodText + '.';
   } catch(e) {
     return 'Error: ' + e.message;
   }
@@ -4732,4 +4781,3 @@ this.atlas_dimensions_clear = function() {
     return "Nothing to clear (no 'Dimensions' layer).";
   }
 };
-
