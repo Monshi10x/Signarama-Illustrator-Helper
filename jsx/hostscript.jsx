@@ -2762,6 +2762,26 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     return 'L=' + left.toFixed(2) + ', T=' + top.toFixed(2) + ', R=' + right.toFixed(2) + ', B=' + bottom.toFixed(2) +
       ', W=' + w.toFixed(2) + ', H=' + h.toFixed(2) + ', C=(' + cx.toFixed(2) + ', ' + cy.toFixed(2) + ')';
   }
+  function _normalizeRect(b) {
+    if(!b || b.length !== 4) return null;
+    var l = Number(b[0]), t = Number(b[1]), r = Number(b[2]), bt = Number(b[3]);
+    if(!isFinite(l) || !isFinite(t) || !isFinite(r) || !isFinite(bt)) return null;
+    return {
+      left: Math.min(l, r),
+      right: Math.max(l, r),
+      top: Math.max(t, bt),
+      bottom: Math.min(t, bt)
+    };
+  }
+  function _getPlacedItemBounds(item) {
+    if(!item) return null;
+    var b = null;
+    try {b = item.visibleBounds;} catch(_ePb0) { b = null; }
+    if(!b || b.length !== 4) {
+      try {b = item.geometricBounds;} catch(_ePb1) { b = null; }
+    }
+    return (b && b.length === 4) ? b : null;
+  }
   function _collectNamedItems(doc, nameText) {
     var out = [];
     if(!doc || !nameText) return out;
@@ -3021,7 +3041,7 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     target = targetPreferred || targetFallback;
     var targetBoundsForLog = _normalizeRect(_getTargetBounds(target));
     _dbg('Target "Artwork Placement Area": ' + _rectToText(targetBoundsForLog));
-    var placedBoundsBefore = _normalizeRect(_getItemBounds(pastedGroup));
+    var placedBoundsBefore = _normalizeRect(_getPlacedItemBounds(pastedGroup));
     _dbg('Placed artwork before fit: ' + _rectToText(placedBoundsBefore));
     if(!target) {
       try {scaledCopy.remove();} catch(_eRmCopy4) { }
@@ -3030,7 +3050,7 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
 
     var fitOk = _fitItemIntoTarget(pastedGroup, target);
-    var placedBoundsAfter = _normalizeRect(_getItemBounds(pastedGroup));
+    var placedBoundsAfter = _normalizeRect(_getPlacedItemBounds(pastedGroup));
     _dbg('Placed artwork after fit: ' + _rectToText(placedBoundsAfter));
     try {scaledCopy.remove();} catch(_eRmCopy5) { }
     if(!fitOk) return proofRes + ' Artwork placement failed: could not fit into target.';
