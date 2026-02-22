@@ -272,6 +272,11 @@
   }
 
   const cs = new CSInterface();
+  const srhGlobalState = (typeof window !== 'undefined')
+    ? (window.srhGlobalState = window.srhGlobalState || {})
+    : {};
+  if(!srhGlobalState.corebridgePartSearchEntriesByName) srhGlobalState.corebridgePartSearchEntriesByName = {};
+  if(!srhGlobalState.corebridgePartSearchEntriesRaw) srhGlobalState.corebridgePartSearchEntriesRaw = [];
 
   document.addEventListener('DOMContentLoaded', () => {
     wireTabs();
@@ -483,6 +488,42 @@
     const corebridgeFetchTimeoutMs = 20000;
     const corebridgeProxyBaseUrl = 'http://localhost:8080';//'https://signschedulerapp.ts.r.appspot.com';
     const corebridgePrimaryDataUrl = corebridgeProxyBaseUrl + '/CB_DesignBoard_Data';
+    const corebridgePartSearchEntriesUrl = corebridgeProxyBaseUrl + '/CB_OrderEntryProducts_PartSearchEntries';
+    async function preloadCorebridgePartSearchEntries() {
+      try {
+        const res = await fetch(corebridgePartSearchEntriesUrl + '?_ts=' + Date.now(), {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {pragma: 'no-cache', 'cache-control': 'no-cache'}
+        });
+        const text = await res.text();
+        if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch(_ePsJson) { parsed = null; }
+        const rows = Array.isArray(parsed)
+          ? parsed
+          : (parsed && Array.isArray(parsed.data) ? parsed.data : (parsed && Array.isArray(parsed.items) ? parsed.items : []));
+        const byName = {};
+        rows.forEach((row) => {
+          const rawName = String((row && (row.PartName || row.Name || row.name || row.DisplayName || row.displayName)) || '').trim();
+          const thicknessRaw = (row && (row.Thickness != null ? row.Thickness : (row.thickness != null ? row.thickness : '')));
+          const thickness = String(thicknessRaw == null ? '' : thicknessRaw).trim();
+          if(!rawName) return;
+          const norm = rawName.toLowerCase().replace(/\s+/g, ' ').trim();
+          if(!byName[norm]) byName[norm] = {name: rawName, thickness: thickness};
+        });
+        srhGlobalState.corebridgePartSearchEntriesByName = byName;
+        srhGlobalState.corebridgePartSearchEntriesRaw = rows;
+        if(typeof window !== 'undefined') {
+          window.corebridgePartSearchEntriesByName = byName;
+          window.corebridgePartSearchEntriesRaw = rows;
+        }
+        log('Corebridge part search preload: ' + rows.length + ' rows (' + Object.keys(byName).length + ' indexed).');
+      } catch(err) {
+        log('Corebridge part search preload failed: ' + (err && err.message ? err.message : err));
+      }
+    }
+    preloadCorebridgePartSearchEntries();
     let corebridgeLastFilteredData = [];
     let corebridgeLastSecondaryFetchResults = null;
     let corebridgeHasFetchedData = false;
@@ -1055,18 +1096,24 @@
         const shortName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
         const raw = String(rawValue == null ? '' : rawValue).trim();
         if(!shortName) return '';
-        if(!raw) return shortName;
-        const compact = raw.replace(/\s+/g, '');
-        const xParts = compact.split('x');
+
         let thickness = '';
-        if(xParts.length > 1) thickness = String(xParts[xParts.length - 1] || '');
-        if(!thickness) {
-          const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
-          if(m && m[1]) thickness = m[1];
+        const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
+          ? srhGlobalState.corebridgePartSearchEntriesByName
+          : {};
+        const rawNorm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+        if(rawNorm && byName[rawNorm] && byName[rawNorm].thickness) {
+          thickness = String(byName[rawNorm].thickness || '').trim();
         }
-        thickness = String(thickness || '').replace(/[^0-9.]/g, '').trim();
+        if(!thickness && rawNorm) {
+          const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
+          if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) thickness = String(byName[matchedKey].thickness || '').trim();
+        }
+
         if(!thickness) return shortName;
-        return shortName + ' ' + thickness + 'mm';
+        const thicknessClean = thickness.replace(/\s+/g, ' ').trim();
+        if(!thicknessClean) return shortName;
+        return shortName + ' ' + thicknessClean;
       }
       const substrateRows = [];
       substratePrefixes.forEach((prefix) => {

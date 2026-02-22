@@ -2331,9 +2331,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       var x0 = left - gap - tickW;
       var y0 = top - ((top - bottom) / 2); // vertical center
 
-      var p1 = [x0 + tickW, y0 + (tickH * 0.05)];
-      var p2 = [x0 + (tickW * 0.64), y0 + (tickH * 0.35)];
-      var p3 = [x0, y0 - (tickH * 0.35)];
+      var p1 = [x0, y0 + (tickH * 0.05)];
+      var p2 = [x0 + (tickW * 0.36), y0 + (tickH * 0.35)];
+      var p3 = [x0 + tickW, y0 - (tickH * 0.35)];
 
       var pathA = doc.activeLayer.pathItems.add();
       pathA.setEntirePath([p1, p2]);
