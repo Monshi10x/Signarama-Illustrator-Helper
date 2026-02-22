@@ -1162,7 +1162,10 @@
         }
 
         if(!thickness) return shortName;
-        if(thicknessFromFetch) return thickness + ' ' + shortName;
+        if(thicknessFromFetch) {
+          const fetchedThickness = /mm$/i.test(thickness) ? thickness : (thickness + 'mm');
+          return fetchedThickness + ' ' + shortName;
+        }
         let thicknessClean = String(thickness).replace(/\s+/g, '').trim();
         if(!thicknessClean) return shortName;
         thicknessClean = thicknessClean.replace(/mm$/i, '');
