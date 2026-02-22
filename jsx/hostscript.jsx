@@ -1983,25 +1983,134 @@ function signarama_helper_transform_debugArtboards() {
   return JSON.stringify(debug);
 }
 
-function signarama_helper_corebridge_createLink() {
-  if(!app.documents.length) return 'No open document.';
-  var doc = app.activeDocument;
-  var view = null;
-  try {view = doc.activeView;} catch(_eCbV0) { view = null; }
-  if(!view) return 'No active view.';
-  var center = null;
-  try {center = view.centerPoint;} catch(_eCbV1) { center = null; }
-  if(!center || center.length < 2) return 'Could not determine viewport center.';
+function _srh_corebridge_findNamedPageItem(doc, targetName) {
+  if(!doc || !targetName) return null;
+  var target = null;
+  var needle = String(targetName).replace(/ /g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
+  var pageItems = null;
+  try {pageItems = doc.pageItems;} catch(_eCbFind0) { pageItems = null; }
+  if(!pageItems) return null;
+  for(var i = 0; i < pageItems.length; i++) {
+    var it = pageItems[i];
+    var nm = '';
+    try {nm = String(it.name || '');} catch(_eCbFind1) { nm = ''; }
+    if(!nm) continue;
+    var norm = nm.replace(/ /g, ' ').replace(/^\s+|\s+$/g, '').toLowerCase();
+    if(norm === needle) {
+      target = it;
+      break;
+    }
+  }
+  return target;
+}
 
-  var cx = Number(center[0]);
-  var cy = Number(center[1]);
+function _srh_corebridge_getItemBounds(item) {
+  if(!item) return null;
+  var b = null;
+  try {b = item.visibleBounds;} catch(_eCbGb0) { b = null; }
+  if(!b || b.length !== 4) {
+    try {b = item.geometricBounds;} catch(_eCbGb1) { b = null; }
+  }
+  return (b && b.length === 4) ? b : null;
+}
+
+function _srh_corebridge_getTargetBounds(item) {
+  if(!item) return null;
+  if(item.typename === 'PathItem' || item.typename === 'CompoundPathItem') {
+    var pb = null;
+    try {pb = item.geometricBounds;} catch(_eCbTb0) { pb = null; }
+    if(!pb || pb.length !== 4) {
+      try {pb = item.visibleBounds;} catch(_eCbTb1) { pb = null; }
+    }
+    if(pb && pb.length === 4) return pb;
+  }
+  var b = null;
+  try {b = _srh_getClippingPathBounds(item);} catch(_eCbTb2) { b = null; }
+  if(!b || b.length !== 4) {
+    try {b = item.visibleBounds;} catch(_eCbTb3) { b = null; }
+  }
+  if(!b || b.length !== 4) {
+    try {b = item.geometricBounds;} catch(_eCbTb4) { b = null; }
+  }
+  return (b && b.length === 4) ? b : null;
+}
+
+function _srh_corebridge_fitItemInsideTarget(item, target, insetMm) {
+  if(!item || !target) return false;
+  var tb = _srh_corebridge_getTargetBounds(target);
+  var ib = _srh_corebridge_getItemBounds(item);
+  if(!tb || !ib) return false;
+  var tl = Math.min(Number(tb[0]), Number(tb[2]));
+  var tr = Math.max(Number(tb[0]), Number(tb[2]));
+  var tt = Math.max(Number(tb[1]), Number(tb[3]));
+  var tbm = Math.min(Number(tb[1]), Number(tb[3]));
+  var il = Math.min(Number(ib[0]), Number(ib[2]));
+  var ir = Math.max(Number(ib[0]), Number(ib[2]));
+  var it = Math.max(Number(ib[1]), Number(ib[3]));
+  var ibm = Math.min(Number(ib[1]), Number(ib[3]));
+
+  var inset = _srh_mm2ptDoc(typeof insetMm === 'number' ? insetMm : 1.5);
+  var innerLeft = tl + inset;
+  var innerTop = tt - inset;
+  var innerRight = tr - inset;
+  var innerBottom = tbm + inset;
+  var tw = Math.max(0, innerRight - innerLeft);
+  var th = Math.max(0, innerTop - innerBottom);
+  var iw = Math.max(0, ir - il);
+  var ih = Math.max(0, it - ibm);
+  if(!(tw > 0 && th > 0 && iw > 0 && ih > 0)) return false;
+
+  var scale = Math.min(tw / iw, th / ih);
+  if(scale > 0 && isFinite(scale)) {
+    try {item.resize(scale * 100, scale * 100, true, true, true, true, 100, Transformation.CENTER);} catch(_eCbFit0) { }
+  }
+
+  ib = _srh_corebridge_getItemBounds(item);
+  if(!ib) return false;
+  il = Math.min(Number(ib[0]), Number(ib[2]));
+  ir = Math.max(Number(ib[0]), Number(ib[2]));
+  it = Math.max(Number(ib[1]), Number(ib[3]));
+  ibm = Math.min(Number(ib[1]), Number(ib[3]));
+
+  var tcx = (innerLeft + innerRight) / 2;
+  var tcy = (innerTop + innerBottom) / 2;
+  var icx = (il + ir) / 2;
+  var icy = (it + ibm) / 2;
+  try {item.translate(tcx - icx, tcy - icy);} catch(_eCbFit1) { return false; }
+  try {item.move(target, ElementPlacement.PLACEAFTER);} catch(_eCbFit2) { }
+  return true;
+}
+
+function _srh_corebridge_removeLinkItems(doc) {
+  if(!doc) return;
+  var items = null;
+  try {items = doc.pageItems;} catch(_eCbRm0) { items = null; }
+  if(!items) return;
+  for(var i = items.length - 1; i >= 0; i--) {
+    var it = items[i];
+    var nm = '';
+    try {nm = String(it.name || '');} catch(_eCbRm1) { nm = ''; }
+    if(nm !== 'SRH_COREBRIDGE_LINK') continue;
+    try {it.remove();} catch(_eCbRm2) { }
+  }
+}
+
+function _srh_corebridge_buildLinkGroup(doc, centerX, centerY) {
+  if(!doc) return null;
+  var layer = null;
+  try {layer = doc.activeLayer;} catch(_eCbLayer0) { layer = null; }
+  if(!layer) {
+    try {layer = doc.layers[0];} catch(_eCbLayer1) { layer = null; }
+  }
+  if(!layer) return null;
+
   var w = _srh_mm2ptDoc(70);
   var h = _srh_mm2ptDoc(20);
   var r = _srh_mm2ptDoc(4);
-  var left = cx - (w / 2);
-  var top = cy + (h / 2);
+  var left = centerX - (w / 2);
+  var top = centerY + (h / 2);
 
-  var grp = doc.activeLayer.groupItems.add();
+  var grp = layer.groupItems.add();
   grp.name = 'SRH_COREBRIDGE_LINK';
 
   var rect = grp.pathItems.roundedRectangle(top, left, w, h, r, r);
@@ -2020,7 +2129,7 @@ function signarama_helper_corebridge_createLink() {
     rect.strokeColor = stroke;
   } catch(_eCbR4) { }
 
-  var tf = grp.textFrames.pointText([cx, cy - _srh_mm2ptDoc(1)]);
+  var tf = grp.textFrames.pointText([centerX, centerY - _srh_mm2ptDoc(1)]);
   tf.name = 'SRH_COREBRIDGE_LINK_TEXT';
   tf.contents = 'corebridge';
   try {tf.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eCbT0) { }
@@ -2030,16 +2139,52 @@ function signarama_helper_corebridge_createLink() {
     txt.red = 255; txt.green = 255; txt.blue = 255;
     tf.textRange.characterAttributes.fillColor = txt;
   } catch(_eCbT2) { }
+  return grp;
+}
 
-  // Prevent immediate click-detection trigger after creation.
+function _srh_corebridge_createLinkInButtonContainer(doc) {
+  if(!doc) return 'No open document.';
+  _srh_corebridge_removeLinkItems(doc);
+  var target = _srh_corebridge_findNamedPageItem(doc, 'Button Container');
+  if(!target) return 'Button Container not found.';
+  var tb = _srh_corebridge_getTargetBounds(target);
+  if(!tb || tb.length !== 4) return 'Button Container has invalid bounds.';
+  var cx = (Number(tb[0]) + Number(tb[2])) / 2;
+  var cy = (Number(tb[1]) + Number(tb[3])) / 2;
+  var grp = _srh_corebridge_buildLinkGroup(doc, cx, cy);
+  if(!grp) return 'Could not create Corebridge link.';
+  if(!_srh_corebridge_fitItemInsideTarget(grp, target, 1.5)) return 'Could not fit Corebridge link in Button Container.';
+
   try {grp.selected = false;} catch(_eCbSel0) { }
-  try {rect.selected = false;} catch(_eCbSel1) { }
-  try {tf.selected = false;} catch(_eCbSel2) { }
-  try {doc.selection = null;} catch(_eCbSel3) { }
-  try {app.executeMenuCommand('deselectall');} catch(_eCbSel4) { }
+  try {doc.selection = null;} catch(_eCbSel1) { }
+  try {app.executeMenuCommand('deselectall');} catch(_eCbSel2) { }
+  return 'Corebridge link created in Button Container.';
+}
+
+function signarama_helper_corebridge_createLink() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var targetRes = _srh_corebridge_createLinkInButtonContainer(doc);
+  if(targetRes === 'Corebridge link created in Button Container.') return targetRes;
+
+  var view = null;
+  try {view = doc.activeView;} catch(_eCbV0) { view = null; }
+  if(!view) return 'No active view.';
+  var center = null;
+  try {center = view.centerPoint;} catch(_eCbV1) { center = null; }
+  if(!center || center.length < 2) return 'Could not determine viewport center.';
+
+  _srh_corebridge_removeLinkItems(doc);
+  var grp = _srh_corebridge_buildLinkGroup(doc, Number(center[0]), Number(center[1]));
+  if(!grp) return 'Could not create Corebridge link.';
+
+  try {grp.selected = false;} catch(_eCbSel3) { }
+  try {doc.selection = null;} catch(_eCbSel4) { }
+  try {app.executeMenuCommand('deselectall');} catch(_eCbSel5) { }
 
   return 'Corebridge link created.';
 }
+
 
 function signarama_helper_corebridge_isLinkSelected() {
   if(!app.documents.length) return '0';
@@ -2504,6 +2649,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var doc = app.open(openFile);
     if(!doc) return 'Error: Failed to open proof file.';
 
+    var linkPlacementRes = _srh_corebridge_createLinkInButtonContainer(doc);
+
     var frameMap = {};
     var frameMapNormalized = {};
     var itemMap = {};
@@ -2732,7 +2879,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
-      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes;
+      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. ' + String(linkPlacementRes || '');
   } catch(e) {
     return 'Error: ' + e.message;
   }

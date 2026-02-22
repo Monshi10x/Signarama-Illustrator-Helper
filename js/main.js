@@ -463,13 +463,7 @@
       }, 1800);
     }
 
-    const corebridgeCreate = $('btnCorebridgeCreateLink');
-    if(corebridgeCreate) {
-      corebridgeCreate.onclick = () => {
-        runButtonJsxOperation('signarama_helper_corebridge_createLink()', {logFn: log, toastTitle: 'Corebridge link'});
-        ensureCorebridgeSelectionWatcher();
-      };
-    }
+    ensureCorebridgeSelectionWatcher();
     ensureCorebridgePageNumberWatcher();
 
     const corebridgePullData = $('btnCorebridgePullData');
