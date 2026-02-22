@@ -2922,27 +2922,53 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
     var proofDoc = app.activeDocument;
     try {proofDoc.selection = null;} catch(_eSelClr1) { }
-    try {app.paste();} catch(_ePaste0) {
-      try {scaledCopy.remove();} catch(_eRmCopy2) { }
-      return proofRes + ' Artwork placement failed: paste failed.';
-    }
-
-    var pastedSel = null;
-    try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
-    if(!pastedSel || !pastedSel.length) {
-      try {scaledCopy.remove();} catch(_eRmCopy3) { }
-      return proofRes + ' Artwork placement failed: no pasted artwork.';
-    }
 
     var pastedGroup = null;
-    if(pastedSel.length === 1) pastedGroup = pastedSel[0];
-    else {
+    var placementMethod = '';
+    try {
+      app.paste();
+      placementMethod = 'paste';
+    } catch(_ePaste0) {
       try {
-        pastedGroup = proofDoc.activeLayer.groupItems.add();
-        for(var ps = 0; ps < pastedSel.length; ps++) {
-          try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+        app.executeMenuCommand('pasteInPlace');
+        placementMethod = 'pasteInPlace';
+      } catch(_ePaste1) {
+        try {
+          var duplicateTarget = null;
+          try {duplicateTarget = proofDoc.activeLayer;} catch(_eDupLayer0) { duplicateTarget = null; }
+          if(!duplicateTarget) {
+            try {duplicateTarget = proofDoc.layers[0];} catch(_eDupLayer1) { duplicateTarget = null; }
+          }
+          if(!duplicateTarget) {
+            try {duplicateTarget = proofDoc;} catch(_eDupLayer2) { duplicateTarget = null; }
+          }
+          if(duplicateTarget) {
+            pastedGroup = scaledCopy.duplicate(duplicateTarget, ElementPlacement.PLACEATEND);
+            placementMethod = 'duplicate';
+          }
+        } catch(_eDup0) { pastedGroup = null; }
+      }
+    }
+
+    if(!pastedGroup) {
+      var pastedSel = null;
+      try {pastedSel = proofDoc.selection;} catch(_ePasteSel0) { pastedSel = null; }
+      if(pastedSel && pastedSel.length) {
+        if(pastedSel.length === 1) pastedGroup = pastedSel[0];
+        else {
+          try {
+            pastedGroup = proofDoc.activeLayer.groupItems.add();
+            for(var ps = 0; ps < pastedSel.length; ps++) {
+              try {pastedSel[ps].move(pastedGroup, ElementPlacement.PLACEATEND);} catch(_eMvPg0) { }
+            }
+          } catch(_eGroup) { pastedGroup = pastedSel[0]; }
         }
-      } catch(_eGroup) { pastedGroup = pastedSel[0]; }
+      }
+    }
+
+    if(!pastedGroup) {
+      try {scaledCopy.remove();} catch(_eRmCopy2) { }
+      return proofRes + ' Artwork placement failed: unable to transfer artwork to proof document.';
     }
 
     var target = null;
@@ -2986,7 +3012,8 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     var fitOk = _fitItemIntoTarget(pastedGroup, target);
     try {scaledCopy.remove();} catch(_eRmCopy5) { }
     if(!fitOk) return proofRes + ' Artwork placement failed: could not fit into target.';
-    return proofRes + ' Artwork placed into "Artwork Placement Area".';
+    var methodText = placementMethod ? (' via ' + placementMethod) : '';
+    return proofRes + ' Artwork placed into "Artwork Placement Area"' + methodText + '.';
   } catch(e) {
     return 'Error: ' + e.message;
   }
@@ -4732,4 +4759,3 @@ this.atlas_dimensions_clear = function() {
     return "Nothing to clear (no 'Dimensions' layer).";
   }
 };
-
