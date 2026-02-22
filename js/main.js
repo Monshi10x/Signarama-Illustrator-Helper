@@ -144,10 +144,8 @@
   };
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
-  let corebridgeWatchTimer = null;
   let corebridgePageNumberWatchTimer = null;
   let corebridgePageNumberWatcherErrorLogged = false;
-  let corebridgeWasSelected = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -437,18 +435,6 @@
     const path = $('btnAddPathText');
     if(path) path.onclick = () => runButtonJsxOperation('signarama_helper_addFilePathTextToArtboards()', {logFn: log, toastTitle: 'Add path labels'});
 
-    function ensureCorebridgeSelectionWatcher() {
-      if(corebridgeWatchTimer) return;
-      corebridgeWatchTimer = setInterval(() => {
-        callJSX('((typeof signarama_helper_corebridge_isLinkSelected === "function") ? signarama_helper_corebridge_isLinkSelected : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_isLinkSelected === "function") ? $.global.signarama_helper_corebridge_isLinkSelected : function(){return "0";}))()', (res) => {
-          const selected = String(res || '').trim() === '1';
-          if(selected && !corebridgeWasSelected) {
-            try {cs.openURLInDefaultBrowser('https://sar10686.corebridge.net/Login.aspx?ReturnUrl=%2fsales%2fdashboard');} catch(_eCbOpen) { }
-          }
-          corebridgeWasSelected = selected;
-        });
-      }, 800);
-    }
     function ensureCorebridgePageNumberWatcher() {
       if(corebridgePageNumberWatchTimer) return;
       corebridgePageNumberWatchTimer = setInterval(() => {
@@ -463,7 +449,6 @@
       }, 1800);
     }
 
-    ensureCorebridgeSelectionWatcher();
     ensureCorebridgePageNumberWatcher();
 
     const corebridgePullData = $('btnCorebridgePullData');
@@ -496,6 +481,7 @@
       'Derived.lineItemDescription -> Description',
       'Derived.mediaText -> Media Text',
       'Derived.laminateText -> Laminate Text',
+      'Derived.substrateText -> Substrate Text',
       'Derived.partsNumbered -> Parts',
       'Derived.notesAll -> Notes',
       'DerivedAssets.addressQrSvg -> Address QR'
@@ -1037,9 +1023,16 @@
         .filter(Boolean);
       const partsNumbered = partNames.map((name, idx) => (idx + 1) + ': ' + name).join('\n');
       const partsPlain = partNames.join('\n');
-      const groupedPartTypes = groupPartTypes(partNames, ['Vinyl -', 'Laminate -', 'ACM -', 'Acrylic -', 'Corflute -', 'Foamed PVC -', 'Aluminium -']);
+      const groupedPartTypes = groupPartTypes(partNames, ['Vinyl -', 'Laminate -', 'ACM -', 'Acrylic -', 'Corflute -', 'Foamed PVC -', 'Aluminium -', 'Mondoclad -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -']);
       const mediaText = Array.isArray(groupedPartTypes['Vinyl -']) ? groupedPartTypes['Vinyl -'].join('\n') : '';
       const laminateText = Array.isArray(groupedPartTypes['Laminate -']) ? groupedPartTypes['Laminate -'].join('\n') : '';
+      const substratePrefixes = ['ACM -', 'Acrylic -', 'Aluminium -', 'Mondoclad -', 'Foamed PVC -', 'Corflute -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -'];
+      const substrateRows = [];
+      substratePrefixes.forEach((prefix) => {
+        const vals = Array.isArray(groupedPartTypes[prefix]) ? groupedPartTypes[prefix] : [];
+        vals.forEach((v) => { if(v) substrateRows.push(v); });
+      });
+      const substrateText = substrateRows.join('\n');
 
       const installAddressDetails = extractInstallAddressDetailed(quoteData);
       const installAddress = installAddressDetails.value;
@@ -1109,6 +1102,7 @@
           partNames: partNames,
           mediaText: mediaText,
           laminateText: laminateText,
+          substrateText: substrateText,
           notesSales: notesByCategory.sales.join('\n'),
           notesDesign: notesByCategory.design.join('\n'),
           notesProduction: notesByCategory.production.join('\n'),
