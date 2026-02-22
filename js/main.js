@@ -1146,11 +1146,23 @@
           const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
           if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) thickness = String(byName[matchedKey].thickness || '').trim();
         }
+        if(!thickness) {
+          const compact = raw.replace(/\s+/g, '');
+          const xParts = compact.split('x');
+          if(xParts.length > 1) thickness = String(xParts[xParts.length - 1] || '').trim();
+          if(!thickness) {
+            const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
+            if(m && m[1]) thickness = m[1];
+          }
+        }
 
         if(!thickness) return shortName;
-        const thicknessClean = thickness.replace(/\s+/g, ' ').trim();
+        let thicknessClean = String(thickness).replace(/\s+/g, '').trim();
         if(!thicknessClean) return shortName;
-        return shortName + ' ' + thicknessClean;
+        thicknessClean = thicknessClean.replace(/mm$/i, '');
+        thicknessClean = thicknessClean.replace(/[^0-9.]/g, '');
+        if(!thicknessClean) return shortName;
+        return thicknessClean + 'mm ' + shortName;
       }
       const substrateRows = [];
       substratePrefixes.forEach((prefix) => {
