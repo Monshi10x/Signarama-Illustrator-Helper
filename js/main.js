@@ -1148,9 +1148,10 @@
         }
 
         if(!thickness) return shortName;
-        const thicknessClean = thickness.replace(/\s+/g, ' ').trim();
+        let thicknessClean = thickness.replace(/\s+/g, ' ').trim();
         if(!thicknessClean) return shortName;
-        return shortName + ' ' + thicknessClean;
+        if(!/mm$/i.test(thicknessClean)) thicknessClean += 'mm';
+        return thicknessClean + ' ' + shortName;
       }
       const substrateRows = [];
       substratePrefixes.forEach((prefix) => {
