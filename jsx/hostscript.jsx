@@ -2331,9 +2331,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       var x0 = left - gap - tickW;
       var y0 = top - ((top - bottom) / 2); // vertical center
 
-      var p1 = [x0, y0 - (tickH * 0.05)];
-      var p2 = [x0 + (tickW * 0.36), y0 - (tickH * 0.35)];
-      var p3 = [x0 + tickW, y0 + (tickH * 0.35)];
+      var p1 = [x0, y0 + (tickH * 0.05)];
+      var p2 = [x0 + (tickW * 0.36), y0 + (tickH * 0.35)];
+      var p3 = [x0 + tickW, y0 - (tickH * 0.35)];
 
       var pathA = doc.activeLayer.pathItems.add();
       pathA.setEntirePath([p1, p2]);
@@ -2671,7 +2671,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
-      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes;
+      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. ' + String(linkPlacementRes || '');
   } catch(e) {
     return 'Error: ' + e.message;
   }
