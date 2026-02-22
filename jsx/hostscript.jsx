@@ -2746,6 +2746,19 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     s = s.replace(/\s+/g, ' ');
     return s;
   }
+  function _dbg(msg) {
+    try {$.writeln('[SRH][CorebridgeProofSelected] ' + msg);} catch(_eDbgCp0) { }
+  }
+  function _rectToText(rect) {
+    if(!rect) return 'null';
+    var left = Number(rect.left), top = Number(rect.top), right = Number(rect.right), bottom = Number(rect.bottom);
+    var w = Math.max(0, right - left);
+    var h = Math.max(0, top - bottom);
+    var cx = (left + right) / 2;
+    var cy = (top + bottom) / 2;
+    return 'L=' + left.toFixed(2) + ', T=' + top.toFixed(2) + ', R=' + right.toFixed(2) + ', B=' + bottom.toFixed(2) +
+      ', W=' + w.toFixed(2) + ', H=' + h.toFixed(2) + ', C=(' + cx.toFixed(2) + ', ' + cy.toFixed(2) + ')';
+  }
   function _collectNamedItems(doc, nameText) {
     var out = [];
     if(!doc || !nameText) return out;
@@ -3003,6 +3016,10 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
       }
     }
     target = targetPreferred || targetFallback;
+    var targetBoundsForLog = _normalizeRect(_getTargetBounds(target));
+    _dbg('Target "Artwork Placement Area": ' + _rectToText(targetBoundsForLog));
+    var placedBoundsBefore = _normalizeRect(_getItemBounds(pastedGroup));
+    _dbg('Placed artwork before fit: ' + _rectToText(placedBoundsBefore));
     if(!target) {
       try {scaledCopy.remove();} catch(_eRmCopy4) { }
       var nearText = nearNames.length ? (' Near matches: ' + nearNames.join(' | ')) : '';
@@ -3010,6 +3027,8 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
     }
 
     var fitOk = _fitItemIntoTarget(pastedGroup, target);
+    var placedBoundsAfter = _normalizeRect(_getItemBounds(pastedGroup));
+    _dbg('Placed artwork after fit: ' + _rectToText(placedBoundsAfter));
     try {scaledCopy.remove();} catch(_eRmCopy5) { }
     if(!fitOk) return proofRes + ' Artwork placement failed: could not fit into target.';
     var methodText = placementMethod ? (' via ' + placementMethod) : '';
