@@ -2668,7 +2668,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
-      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes;
+      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. ' + String(linkPlacementRes || '');
   } catch(e) {
     return 'Error: ' + e.message;
   }
