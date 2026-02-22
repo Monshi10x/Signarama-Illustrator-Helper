@@ -490,6 +490,41 @@
     const corebridgePrimaryDataUrl = corebridgeProxyBaseUrl + '/CB_DesignBoard_Data';
     const corebridgePartSearchEntriesUrl = corebridgeProxyBaseUrl + '/CB_OrderEntryProducts_PartSearchEntries';
     async function preloadCorebridgePartSearchEntries() {
+      function tryParseJsonLoose(value) {
+        if(value == null) return null;
+        if(typeof value === 'object') return value;
+        const txt = String(value).trim();
+        if(!txt) return null;
+        try { return JSON.parse(txt); } catch(_ePsLoose) { return null; }
+      }
+      function extractPartRows(payload) {
+        const queue = [payload];
+        const seen = [];
+        while(queue.length) {
+          const cur = queue.shift();
+          if(!cur) continue;
+          if(typeof cur === 'string') {
+            const parsedCur = tryParseJsonLoose(cur);
+            if(parsedCur && seen.indexOf(parsedCur) < 0) queue.push(parsedCur);
+            continue;
+          }
+          if(Array.isArray(cur)) {
+            if(cur.length && typeof cur[0] === 'object') {
+              const hasPartShape = cur.some((row) => row && (row.PartName != null || row.Name != null || row.name != null || row.DisplayName != null || row.displayName != null));
+              if(hasPartShape) return cur;
+            }
+            for(let i = 0; i < cur.length; i++) queue.push(cur[i]);
+            continue;
+          }
+          if(typeof cur === 'object') {
+            if(seen.indexOf(cur) >= 0) continue;
+            seen.push(cur);
+            const keys = Object.keys(cur);
+            for(let k = 0; k < keys.length; k++) queue.push(cur[keys[k]]);
+          }
+        }
+        return [];
+      }
       try {
         const res = await fetch(corebridgePartSearchEntriesUrl + '?_ts=' + Date.now(), {
           method: 'GET',
@@ -498,11 +533,8 @@
         });
         const text = await res.text();
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
-        let parsed = null;
-        try { parsed = JSON.parse(text); } catch(_ePsJson) { parsed = null; }
-        const rows = Array.isArray(parsed)
-          ? parsed
-          : (parsed && Array.isArray(parsed.data) ? parsed.data : (parsed && Array.isArray(parsed.items) ? parsed.items : []));
+        const parsed = tryParseJsonLoose(text);
+        const rows = extractPartRows(parsed);
         const byName = {};
         rows.forEach((row) => {
           const rawName = String((row && (row.PartName || row.Name || row.name || row.DisplayName || row.displayName)) || '').trim();
@@ -518,7 +550,12 @@
           window.corebridgePartSearchEntriesByName = byName;
           window.corebridgePartSearchEntriesRaw = rows;
         }
+        const sample = rows.slice(0, 5).map((row) => ({
+          name: String((row && (row.PartName || row.Name || row.name || row.DisplayName || row.displayName)) || ''),
+          thickness: String((row && (row.Thickness != null ? row.Thickness : (row.thickness != null ? row.thickness : ''))) || '')
+        }));
         log('Corebridge part search preload: ' + rows.length + ' rows (' + Object.keys(byName).length + ' indexed).');
+        log('Corebridge part search payload sample: ' + JSON.stringify(sample));
       } catch(err) {
         log('Corebridge part search preload failed: ' + (err && err.message ? err.message : err));
       }
