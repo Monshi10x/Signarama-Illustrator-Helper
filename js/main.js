@@ -1051,10 +1051,30 @@
       const mediaText = Array.isArray(groupedPartTypes['Vinyl -']) ? groupedPartTypes['Vinyl -'].join('\n') : '';
       const laminateText = Array.isArray(groupedPartTypes['Laminate -']) ? groupedPartTypes['Laminate -'].join('\n') : '';
       const substratePrefixes = ['ACM -', 'Acrylic -', 'Aluminium -', 'Mondoclad -', 'Foamed PVC -', 'Corflute -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -'];
+      function deriveSubstrateShortText(prefix, rawValue) {
+        const shortName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
+        const raw = String(rawValue == null ? '' : rawValue).trim();
+        if(!shortName) return '';
+        if(!raw) return shortName;
+        const compact = raw.replace(/\s+/g, '');
+        const xParts = compact.split('x');
+        let thickness = '';
+        if(xParts.length > 1) thickness = String(xParts[xParts.length - 1] || '');
+        if(!thickness) {
+          const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
+          if(m && m[1]) thickness = m[1];
+        }
+        thickness = String(thickness || '').replace(/[^0-9.]/g, '').trim();
+        if(!thickness) return shortName;
+        return shortName + ' ' + thickness + 'mm';
+      }
       const substrateRows = [];
       substratePrefixes.forEach((prefix) => {
         const vals = Array.isArray(groupedPartTypes[prefix]) ? groupedPartTypes[prefix] : [];
-        vals.forEach((v) => { if(v) substrateRows.push(v); });
+        vals.forEach((v) => {
+          const shortText = deriveSubstrateShortText(prefix, v);
+          if(shortText) substrateRows.push(shortText);
+        });
       });
       const substrateText = substrateRows.join('\n');
 
