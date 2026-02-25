@@ -2147,8 +2147,8 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
     var arrowHeadLen = Math.max(_srh_mm2ptDoc(5), h * 0.4);
     var arrowHeadHalfHeight = Math.max(_srh_mm2ptDoc(3), h * 0.3);
     var strokeW = _srh_pxStrokeDoc(3);
-    var x0 = right + gapFromText;
-    var x1 = x0 + shaftLen;
+    var tipX = right + gapFromText;
+    var tailX = tipX + shaftLen;
 
     var red = _srh_corebridge_makeRgb(255, 0, 0);
     try {layer.locked = false;} catch(_eArrowUnlock) { }
@@ -2157,21 +2157,21 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
     group.name = 'SRH_FlashArrow';
 
     var shaft = group.pathItems.add();
-    shaft.setEntirePath([[x0, centerY], [x1, centerY]]);
+    shaft.setEntirePath([[tailX, centerY], [tipX, centerY]]);
     shaft.stroked = true;
     shaft.filled = false;
     shaft.strokeWidth = strokeW;
     shaft.strokeColor = red;
 
     var headA = group.pathItems.add();
-    headA.setEntirePath([[x1, centerY], [x1 - arrowHeadLen, centerY + arrowHeadHalfHeight]]);
+    headA.setEntirePath([[tipX, centerY], [tipX + arrowHeadLen, centerY + arrowHeadHalfHeight]]);
     headA.stroked = true;
     headA.filled = false;
     headA.strokeWidth = strokeW;
     headA.strokeColor = red;
 
     var headB = group.pathItems.add();
-    headB.setEntirePath([[x1, centerY], [x1 - arrowHeadLen, centerY - arrowHeadHalfHeight]]);
+    headB.setEntirePath([[tipX, centerY], [tipX + arrowHeadLen, centerY - arrowHeadHalfHeight]]);
     headB.stroked = true;
     headB.filled = false;
     headB.strokeWidth = strokeW;
@@ -2311,7 +2311,12 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
     entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame);
   }
   _srh_corebridge_flashTick();
-  _srhCorebridgeFlashTaskId = null;
+  try {
+    var tickTaskCode = '(function(){try{if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}}catch(_eFlashTask){}})();';
+    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
+  } catch(_eScheduleFlash) {
+    _srhCorebridgeFlashTaskId = null;
+  }
   _srh_corebridge_flashDebug('Flash state primed. Waiting for external 300ms tick calls.');
   return {requested: names.length, found: entries.length};
 }

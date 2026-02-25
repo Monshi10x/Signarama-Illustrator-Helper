@@ -483,16 +483,7 @@
       }
     }
     function startCorebridgeFlashTickPolling() {
-      stopCorebridgeFlashTickPolling('restarting');
-      corebridgeFlashTickPollCount = 0;
-      corebridgeFlashTickPollTimer = setInterval(() => {
-        corebridgeFlashTickPollCount++;
-        callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (res) => {
-          const txt = String(res || '').trim();
-          if(/^INACTIVE\|/i.test(txt)) stopCorebridgeFlashTickPolling('no active flash entries');
-          if(/^ERROR\|/i.test(txt)) stopCorebridgeFlashTickPolling('tick task error');
-        });
-      }, 300);
+      stopCorebridgeFlashTickPolling('jsx scheduler active');
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
@@ -1517,8 +1508,7 @@
             proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeA4Options + '","' + safeFlashFieldsText + '")',
             {logFn: log, toastTitle: toastTitle, onResult: (res) => {
               const txt = String(res || '').trim();
-              if(!/^Error:/i.test(txt) && flashFieldsText) startCorebridgeFlashTickPolling();
-              else stopCorebridgeFlashTickPolling('proof result error or no flash fields');
+              if(/^Error:/i.test(txt) || !flashFieldsText) stopCorebridgeFlashTickPolling('proof result error or no flash fields');
             }}
           );
         } else {
@@ -1526,8 +1516,7 @@
             proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeFlashFieldsText + '")',
             {logFn: log, toastTitle: toastTitle, onResult: (res) => {
               const txt = String(res || '').trim();
-              if(!/^Error:/i.test(txt) && flashFieldsText) startCorebridgeFlashTickPolling();
-              else stopCorebridgeFlashTickPolling('proof result error or no flash fields');
+              if(/^Error:/i.test(txt) || !flashFieldsText) stopCorebridgeFlashTickPolling('proof result error or no flash fields');
             }}
           );
         }
