@@ -2269,6 +2269,18 @@ function signarama_helper_corebridge_flashTickTask() {
   }
 }
 try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
+function signarama_helper_corebridge_flashGetState() {
+  try {
+    var active = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) ? 1 : 0;
+    var remaining = active ? _srhCorebridgeFlashState.entries.length : 0;
+    var colorName = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.isRed) ? 'RED' : 'BLACK';
+    var taskId = (_srhCorebridgeFlashTaskId == null) ? -1 : _srhCorebridgeFlashTaskId;
+    return 'STATE|' + active + '|' + remaining + '|' + _srhCorebridgeFlashTickCount + '|' + colorName + '|' + taskId;
+  } catch(_eFlashState) {
+    return 'ERROR|' + (_eFlashState && _eFlashState.message ? _eFlashState.message : _eFlashState);
+  }
+}
+try {this.signarama_helper_corebridge_flashGetState = signarama_helper_corebridge_flashGetState;} catch(_eFlashStateBind) { }
 function signarama_helper_corebridge_flashTickTaskRunner() {
   try { return signarama_helper_corebridge_flashTickTask(); }
   catch(_eFlashTaskRunner) { return 'ERROR|' + (_eFlashTaskRunner && _eFlashTaskRunner.message ? _eFlashTaskRunner.message : _eFlashTaskRunner); }
@@ -3305,6 +3317,8 @@ try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebrid
 try {signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg18) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg19) { }
 try {signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg20) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashGetState = this.signarama_helper_corebridge_flashGetState;} catch(_eTg20a) { }
+try {signarama_helper_corebridge_flashGetState = this.signarama_helper_corebridge_flashGetState;} catch(_eTg20b) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg21) { }
 try {signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg22) { }
 

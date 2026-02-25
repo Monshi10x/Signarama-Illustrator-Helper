@@ -148,6 +148,7 @@
   let corebridgePageNumberWatcherErrorLogged = false;
   let corebridgeFlashTickPollTimer = null;
   let corebridgeFlashTickPollCount = 0;
+  let corebridgeFlashLastTickCount = -1;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -481,9 +482,47 @@
         clearInterval(corebridgeFlashTickPollTimer);
         corebridgeFlashTickPollTimer = null;
       }
+      if(reason) log('Corebridge flash poll stop: ' + reason);
+      corebridgeFlashLastTickCount = -1;
     }
     function startCorebridgeFlashTickPolling() {
-      stopCorebridgeFlashTickPolling('jsx scheduler active');
+      stopCorebridgeFlashTickPolling('restart');
+      corebridgeFlashTickPollCount = 0;
+      log('Corebridge flash poll start (300ms).');
+      corebridgeFlashTickPollTimer = setInterval(() => {
+        corebridgeFlashTickPollCount++;
+        callJSX('((typeof signarama_helper_corebridge_flashGetState === "function") ? signarama_helper_corebridge_flashGetState : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashGetState === "function") ? $.global.signarama_helper_corebridge_flashGetState : function(){return "ERROR|flashGetState missing";}))()', (stateRes) => {
+          const stateTxt = String(stateRes || '').trim();
+          if(/^ERROR\|/i.test(stateTxt)) {
+            log('Corebridge flash poll state error: ' + stateTxt);
+            return;
+          }
+          const parts = stateTxt.split('|');
+          if(parts.length < 6 || parts[0] !== 'STATE') return;
+          const active = parts[1] === '1';
+          const remaining = parseInt(parts[2], 10) || 0;
+          const tickCount = parseInt(parts[3], 10) || 0;
+          const color = parts[4] || 'BLACK';
+          const taskId = parseInt(parts[5], 10);
+          const stalled = active && corebridgeFlashLastTickCount >= 0 && tickCount === corebridgeFlashLastTickCount;
+          corebridgeFlashLastTickCount = tickCount;
+
+          if(corebridgeFlashTickPollCount <= 10 || corebridgeFlashTickPollCount % 10 === 0 || stalled || !active) {
+            log('Corebridge flash poll #' + corebridgeFlashTickPollCount + ': active=' + active + ' remaining=' + remaining + ' tick=' + tickCount + ' color=' + color + ' taskId=' + taskId + (stalled ? ' STALLED' : ''));
+          }
+
+          if(!active) {
+            stopCorebridgeFlashTickPolling('inactive');
+            return;
+          }
+
+          if(stalled) {
+            callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
+              log('Corebridge flash manual tick fallback: ' + String(tickRes || '').trim());
+            });
+          }
+        });
+      }, 300);
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
@@ -1508,6 +1547,7 @@
             proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeA4Options + '","' + safeFlashFieldsText + '")',
             {logFn: log, toastTitle: toastTitle, onResult: (res) => {
               const txt = String(res || '').trim();
+              if(!/^Error:/i.test(txt) && flashFieldsText) startCorebridgeFlashTickPolling();
               if(/^Error:/i.test(txt) || !flashFieldsText) stopCorebridgeFlashTickPolling('proof result error or no flash fields');
             }}
           );
@@ -1516,6 +1556,7 @@
             proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeFlashFieldsText + '")',
             {logFn: log, toastTitle: toastTitle, onResult: (res) => {
               const txt = String(res || '').trim();
+              if(!/^Error:/i.test(txt) && flashFieldsText) startCorebridgeFlashTickPolling();
               if(/^Error:/i.test(txt) || !flashFieldsText) stopCorebridgeFlashTickPolling('proof result error or no flash fields');
             }}
           );
