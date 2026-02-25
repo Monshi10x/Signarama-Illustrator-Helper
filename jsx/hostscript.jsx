@@ -2334,7 +2334,7 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   } catch(_eScheduleFlash) {
     _srhCorebridgeFlashTaskId = null;
   }
-  _srh_corebridge_flashDebug('Flash state primed. Waiting for external 300ms tick calls.');
+  _srh_corebridge_flashDebug('Flash state primed.');
   return {requested: names.length, found: entries.length};
 }
 

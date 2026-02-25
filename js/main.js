@@ -491,35 +491,27 @@
       log('Corebridge flash poll start (300ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
         corebridgeFlashTickPollCount++;
-        callJSX('((typeof signarama_helper_corebridge_flashGetState === "function") ? signarama_helper_corebridge_flashGetState : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashGetState === "function") ? $.global.signarama_helper_corebridge_flashGetState : function(){return "ERROR|flashGetState missing";}))()', (stateRes) => {
-          const stateTxt = String(stateRes || '').trim();
-          if(/^ERROR\|/i.test(stateTxt)) {
-            log('Corebridge flash poll state error: ' + stateTxt);
+        callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
+          const tickTxt = String(tickRes || '').trim();
+          if(/^ERROR\|/i.test(tickTxt)) {
+            log('Corebridge flash tick error: ' + tickTxt);
+            stopCorebridgeFlashTickPolling('tick error');
             return;
           }
-          const parts = stateTxt.split('|');
-          if(parts.length < 6 || parts[0] !== 'STATE') return;
-          const active = parts[1] === '1';
-          const remaining = parseInt(parts[2], 10) || 0;
-          const tickCount = parseInt(parts[3], 10) || 0;
-          const color = parts[4] || 'BLACK';
-          const taskId = parseInt(parts[5], 10);
-          const stalled = active && corebridgeFlashLastTickCount >= 0 && tickCount === corebridgeFlashLastTickCount;
-          corebridgeFlashLastTickCount = tickCount;
-
-          if(corebridgeFlashTickPollCount <= 10 || corebridgeFlashTickPollCount % 10 === 0 || stalled || !active) {
-            log('Corebridge flash poll #' + corebridgeFlashTickPollCount + ': active=' + active + ' remaining=' + remaining + ' tick=' + tickCount + ' color=' + color + ' taskId=' + taskId + (stalled ? ' STALLED' : ''));
+          if(corebridgeFlashTickPollCount <= 10 || corebridgeFlashTickPollCount % 10 === 0 || /^INACTIVE\|/i.test(tickTxt)) {
+            log('Corebridge flash poll #' + corebridgeFlashTickPollCount + ': ' + tickTxt);
           }
-
-          if(!active) {
+          if(/^INACTIVE\|/i.test(tickTxt)) {
             stopCorebridgeFlashTickPolling('inactive');
             return;
           }
-
-          if(stalled) {
-            callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
-              log('Corebridge flash manual tick fallback: ' + String(tickRes || '').trim());
-            });
+          const parts = tickTxt.split('|');
+          if(parts.length >= 4 && /^ACTIVE$/i.test(parts[0])) {
+            const tickCount = parseInt(parts[2], 10) || 0;
+            if(corebridgeFlashLastTickCount >= 0 && tickCount <= corebridgeFlashLastTickCount) {
+              log('Corebridge flash poll warning: non-incrementing tick count (' + tickCount + ').');
+            }
+            corebridgeFlashLastTickCount = tickCount;
           }
         });
       }, 300);
