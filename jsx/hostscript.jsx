@@ -2154,6 +2154,7 @@ function signarama_helper_corebridge_flashTickTask() {
   } catch(_eFlashTaskTick) { }
   return 'OK';
 }
+try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
 
 function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
@@ -2187,7 +2188,7 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   };
   _srh_corebridge_flashTick();
   try {
-    var tickTaskCode = '(function(){try{if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}else if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof _srh_corebridge_flashTick === "function"){_srh_corebridge_flashTick();}}catch(_eFlashTask){}})();';
+    var tickTaskCode = '(function(){try{if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}}catch(_eFlashTask){}})();';
     _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
   } catch(_eScheduleFlash) {
     _srhCorebridgeFlashTaskId = null;
