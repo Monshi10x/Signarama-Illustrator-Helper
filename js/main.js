@@ -480,20 +480,15 @@
       if(corebridgeFlashTickPollTimer) {
         clearInterval(corebridgeFlashTickPollTimer);
         corebridgeFlashTickPollTimer = null;
-        log('Corebridge flash polling stopped' + (reason ? ': ' + reason : '.'));
       }
     }
     function startCorebridgeFlashTickPolling() {
       stopCorebridgeFlashTickPolling('restarting');
       corebridgeFlashTickPollCount = 0;
-      log('Corebridge flash polling started (300ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
         corebridgeFlashTickPollCount++;
         callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (res) => {
           const txt = String(res || '').trim();
-          if(corebridgeFlashTickPollCount <= 8 || corebridgeFlashTickPollCount % 10 === 0 || /^ERROR\|/i.test(txt) || /^INACTIVE\|/i.test(txt)) {
-            log('Corebridge flash tick poll #' + corebridgeFlashTickPollCount + ': ' + txt);
-          }
           if(/^INACTIVE\|/i.test(txt)) stopCorebridgeFlashTickPolling('no active flash entries');
           if(/^ERROR\|/i.test(txt)) stopCorebridgeFlashTickPolling('tick task error');
         });

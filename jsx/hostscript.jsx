@@ -2060,8 +2060,9 @@ function signarama_helper_corebridge_updatePageNumbers() {
 var _srhCorebridgeFlashTaskId = null;
 var _srhCorebridgeFlashState = null;
 var _srhCorebridgeFlashTickCount = 0;
+var _srhCorebridgeFlashArrowLayerName = 'SRH Flash Arrows';
 function _srh_corebridge_flashDebug(msg) {
-  try {$.writeln('[SRH][CorebridgeFlash] ' + String(msg));} catch(_eFlashDbg) { }
+  return;
 }
 function _srh_corebridge_makeRgb(r, g, b) {
   var c = new RGBColor();
@@ -2108,6 +2109,82 @@ function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
   } catch(_eTfClr2) { }
   return false;
 }
+function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
+  if(!doc) return null;
+  var layer = null;
+  try {layer = doc.layers.getByName(_srhCorebridgeFlashArrowLayerName);} catch(_eArrowLayerGet) {layer = null;}
+  if(!layer && createIfMissing) {
+    try {
+      layer = doc.layers.add();
+      layer.name = _srhCorebridgeFlashArrowLayerName;
+      layer.visible = true;
+      layer.printable = false;
+    } catch(_eArrowLayerCreate) {layer = null;}
+  }
+  return layer;
+}
+function _srh_corebridge_removeArrow(entry) {
+  if(!entry || !entry.arrowGroup) return;
+  try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
+  entry.arrowGroup = null;
+}
+function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
+  if(!doc || !textFrame) return null;
+  var layer = _srh_corebridge_getArrowLayer(doc, true);
+  if(!layer) return null;
+  var group = null;
+  try {
+    var gb = textFrame.geometricBounds; // [L,T,R,B]
+    var left = Number(gb[0]);
+    var top = Number(gb[1]);
+    var right = Number(gb[2]);
+    var bottom = Number(gb[3]);
+    if(!isFinite(left) || !isFinite(top) || !isFinite(right) || !isFinite(bottom)) return null;
+    var h = Math.max(1, top - bottom);
+    var centerY = (top + bottom) / 2;
+    var shaftLen = Math.max(_srh_mm2ptDoc(14), h * 1.1);
+    var gapFromText = Math.max(_srh_mm2ptDoc(3), h * 0.25);
+    var arrowHeadLen = Math.max(_srh_mm2ptDoc(5), h * 0.4);
+    var arrowHeadHalfHeight = Math.max(_srh_mm2ptDoc(3), h * 0.3);
+    var strokeW = _srh_pxStrokeDoc(3);
+    var x0 = right + gapFromText;
+    var x1 = x0 + shaftLen;
+
+    var red = _srh_corebridge_makeRgb(255, 0, 0);
+    try {layer.locked = false;} catch(_eArrowUnlock) { }
+
+    group = layer.groupItems.add();
+    group.name = 'SRH_FlashArrow';
+
+    var shaft = group.pathItems.add();
+    shaft.setEntirePath([[x0, centerY], [x1, centerY]]);
+    shaft.stroked = true;
+    shaft.filled = false;
+    shaft.strokeWidth = strokeW;
+    shaft.strokeColor = red;
+
+    var headA = group.pathItems.add();
+    headA.setEntirePath([[x1, centerY], [x1 - arrowHeadLen, centerY + arrowHeadHalfHeight]]);
+    headA.stroked = true;
+    headA.filled = false;
+    headA.strokeWidth = strokeW;
+    headA.strokeColor = red;
+
+    var headB = group.pathItems.add();
+    headB.setEntirePath([[x1, centerY], [x1 - arrowHeadLen, centerY - arrowHeadHalfHeight]]);
+    headB.stroked = true;
+    headB.filled = false;
+    headB.strokeWidth = strokeW;
+    headB.strokeColor = red;
+
+    try {layer.locked = true;} catch(_eArrowRelock) { }
+    return group;
+  } catch(_eArrowCreate) {
+    try {if(group) group.remove();} catch(_eArrowCleanup) { }
+    try {if(layer) layer.locked = true;} catch(_eArrowRelock2) { }
+    return null;
+  }
+}
 function _srh_corebridge_stopFlashing(resetToBlack) {
   if(_srhCorebridgeFlashTaskId != null) {
     _srh_corebridge_flashDebug('Stopping flash task id=' + _srhCorebridgeFlashTaskId + ' (resetToBlack=' + (resetToBlack ? 'yes' : 'no') + ')');
@@ -2119,6 +2196,18 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
     for(var i = 0; i < _srhCorebridgeFlashState.entries.length; i++) {
       var entry = _srhCorebridgeFlashState.entries[i];
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eResetClr) { }
+      _srh_corebridge_removeArrow(entry);
+    }
+  }
+  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
+    var arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);
+    if(arrowLayer) {
+      try {
+        var hasItems = false;
+        try {hasItems = arrowLayer.pageItems && arrowLayer.pageItems.length > 0;} catch(_eArrowHasItems) {hasItems = true;}
+        if(!hasItems) arrowLayer.visible = false;
+      } catch(_eArrowLayerHide) { }
+      try {arrowLayer.locked = true;} catch(_eArrowLayerLock) { }
     }
   }
   _srhCorebridgeFlashState = null;
@@ -2152,6 +2241,7 @@ function _srh_corebridge_flashTick() {
     if(currentValue !== entry.baseValue) {
       _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
@@ -2213,9 +2303,13 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
 
   _srh_corebridge_flashDebug('Starting flashing with ' + entries.length + ' matched text frames.');
   _srhCorebridgeFlashState = {
+    doc: doc,
     entries: entries,
     isRed: false
   };
+  for(var e = 0; e < entries.length; e++) {
+    entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame);
+  }
   _srh_corebridge_flashTick();
   _srhCorebridgeFlashTaskId = null;
   _srh_corebridge_flashDebug('Flash state primed. Waiting for external 300ms tick calls.');
