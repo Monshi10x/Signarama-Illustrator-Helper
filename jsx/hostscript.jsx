@@ -2269,6 +2269,11 @@ function signarama_helper_corebridge_flashTickTask() {
   }
 }
 try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
+function signarama_helper_corebridge_flashTickTaskRunner() {
+  try { return signarama_helper_corebridge_flashTickTask(); }
+  catch(_eFlashTaskRunner) { return 'ERROR|' + (_eFlashTaskRunner && _eFlashTaskRunner.message ? _eFlashTaskRunner.message : _eFlashTaskRunner); }
+}
+try {this.signarama_helper_corebridge_flashTickTaskRunner = signarama_helper_corebridge_flashTickTaskRunner;} catch(_eFlashTaskRunnerBind) { }
 
 function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   _srh_corebridge_flashDebug('Start flashing requested. Raw text="' + String(flashFieldsText == null ? '' : flashFieldsText) + '"');
@@ -2312,7 +2317,7 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   }
   _srh_corebridge_flashTick();
   try {
-    var tickTaskCode = '(function(){try{if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}}catch(_eFlashTask){}})();';
+    var tickTaskCode = '((typeof signarama_helper_corebridge_flashTickTaskRunner === "function") ? signarama_helper_corebridge_flashTickTaskRunner() : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTaskRunner === "function") ? $.global.signarama_helper_corebridge_flashTickTaskRunner() : ((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask() : "ERROR|flash tick task missing")))';
     _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
   } catch(_eScheduleFlash) {
     _srhCorebridgeFlashTaskId = null;
@@ -3300,6 +3305,8 @@ try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebrid
 try {signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg18) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg19) { }
 try {signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg20) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg21) { }
+try {signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg22) { }
 
 
 
