@@ -2057,7 +2057,145 @@ function signarama_helper_corebridge_updatePageNumbers() {
   }
 }
 
-function signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText) {
+var _srhCorebridgeFlashTaskId = null;
+var _srhCorebridgeFlashState = null;
+function _srh_corebridge_makeRgb(r, g, b) {
+  var c = new RGBColor();
+  c.red = r;
+  c.green = g;
+  c.blue = b;
+  return c;
+}
+function _srh_corebridge_parseFlashFieldNames(rawText) {
+  function _trim(v) {return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');}
+  var out = [];
+  var seen = {};
+  var lines = String(rawText == null ? '' : rawText).split(/\r?\n/);
+  for(var i = 0; i < lines.length; i++) {
+    var line = _trim(lines[i]);
+    if(!line) continue;
+    if(line.indexOf('#') === 0) continue;
+    var idx = line.indexOf('->');
+    var targetName = idx >= 0 ? _trim(line.substring(idx + 2)) : line;
+    if(!targetName) continue;
+    var key = targetName.toLowerCase();
+    if(seen[key]) continue;
+    seen[key] = true;
+    out.push(targetName);
+  }
+  return out;
+}
+function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
+  if(!textFrame || !colorValue) return false;
+  try {
+    if(textFrame.textRange && textFrame.textRange.characterAttributes) {
+      textFrame.textRange.characterAttributes.fillColor = colorValue;
+      return true;
+    }
+  } catch(_eTfClr0) { }
+  try {
+    if(textFrame.characters && textFrame.characters.length) {
+      for(var i = 0; i < textFrame.characters.length; i++) {
+        try {textFrame.characters[i].characterAttributes.fillColor = colorValue;} catch(_eTfClr1) { }
+      }
+      return true;
+    }
+  } catch(_eTfClr2) { }
+  return false;
+}
+function _srh_corebridge_stopFlashing(resetToBlack) {
+  if(_srhCorebridgeFlashTaskId != null) {
+    try {app.cancelTask(_srhCorebridgeFlashTaskId);} catch(_eCancelFlash) { }
+    _srhCorebridgeFlashTaskId = null;
+  }
+  if(resetToBlack && _srhCorebridgeFlashState && _srhCorebridgeFlashState.entries) {
+    var black = _srh_corebridge_makeRgb(0, 0, 0);
+    for(var i = 0; i < _srhCorebridgeFlashState.entries.length; i++) {
+      var entry = _srhCorebridgeFlashState.entries[i];
+      try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eResetClr) { }
+    }
+  }
+  _srhCorebridgeFlashState = null;
+}
+function _srh_corebridge_flashTick() {
+  if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
+    _srh_corebridge_stopFlashing(false);
+    return;
+  }
+  var entries = _srhCorebridgeFlashState.entries;
+  var nextColorIsRed = !_srhCorebridgeFlashState.isRed;
+  var red = _srh_corebridge_makeRgb(255, 0, 0);
+  var black = _srh_corebridge_makeRgb(0, 0, 0);
+  for(var i = entries.length - 1; i >= 0; i--) {
+    var entry = entries[i];
+    if(!entry || !entry.frame) {
+      entries.splice(i, 1);
+      continue;
+    }
+    var currentValue = '';
+    try {currentValue = String(entry.frame.contents == null ? '' : entry.frame.contents);} catch(_eFlashRead) {
+      entries.splice(i, 1);
+      continue;
+    }
+    if(currentValue !== entry.baseValue) {
+      try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      entries.splice(i, 1);
+      continue;
+    }
+    try {_srh_corebridge_setTextFrameColor(entry.frame, nextColorIsRed ? red : black);} catch(_eFlashColor) { }
+  }
+  _srhCorebridgeFlashState.isRed = nextColorIsRed;
+  if(!entries.length) _srh_corebridge_stopFlashing(false);
+}
+
+function signarama_helper_corebridge_flashTickTask() {
+  try {
+    _srh_corebridge_flashTick();
+  } catch(_eFlashTaskTick) { }
+  return 'OK';
+}
+
+function _srh_corebridge_startFlashing(doc, flashFieldsText) {
+  var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
+  _srh_corebridge_stopFlashing(true);
+  if(!doc || !names.length) return {requested: names.length, found: 0};
+
+  var namesLookup = {};
+  for(var n = 0; n < names.length; n++) {
+    namesLookup[String(names[n]).toLowerCase()] = true;
+  }
+
+  var entries = [];
+  var allFrames = null;
+  try {allFrames = doc.textFrames;} catch(_eAllFlashTf) {allFrames = null;}
+  if(!allFrames || !allFrames.length) return {requested: names.length, found: 0};
+  for(var i = 0; i < allFrames.length; i++) {
+    var tf = allFrames[i];
+    var tfName = '';
+    try {tfName = String(tf.name || '');} catch(_eTfNameFlash) {tfName = '';}
+    if(!tfName) continue;
+    if(!namesLookup[tfName.toLowerCase()]) continue;
+    var baseValue = '';
+    try {baseValue = String(tf.contents == null ? '' : tf.contents);} catch(_eTfBaseFlash) {baseValue = '';}
+    entries.push({frame: tf, baseValue: baseValue});
+  }
+  if(!entries.length) return {requested: names.length, found: 0};
+
+  _srhCorebridgeFlashState = {
+    entries: entries,
+    isRed: false
+  };
+  _srh_corebridge_flashTick();
+  try {
+    var tickTaskCode = '(function(){try{if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}else if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof _srh_corebridge_flashTick === "function"){_srh_corebridge_flashTick();}}catch(_eFlashTask){}})();';
+    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
+  } catch(_eScheduleFlash) {
+    _srhCorebridgeFlashTaskId = null;
+  }
+  return {requested: names.length, found: entries.length};
+}
+
+function signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText, flashFieldsText) {
   function _trim(v) {
     return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
   }
@@ -2667,6 +2805,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     }
 
     var pageNumberRes = signarama_helper_corebridge_updatePageNumbers();
+    var flashRes = _srh_corebridge_startFlashing(doc, flashFieldsText);
+    var flashMessage = 'Flash monitoring: ' + flashRes.found + ' text frame' + (flashRes.found === 1 ? '' : 's') +
+      ' active from ' + flashRes.requested + ' requested name' + (flashRes.requested === 1 ? '' : 's') + '.';
     return 'Proof created. Applied ' + applied + ' text update' + (applied === 1 ? '' : 's') +
       ' and ' + appliedImages + ' image placement' + (appliedImages === 1 ? '' : 's') +
       '. Forced Address Text updates: ' + forcedAddressApplied +
@@ -2680,13 +2821,14 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
       '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. ' + flashMessage +
       '. ' + String(linkPlacementRes || '');
   } catch(e) {
     return 'Error: ' + e.message;
   }
 }
 
-function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson) {
+function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson, flashFieldsText) {
   function _trim(v) {
     return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
   }
@@ -2895,7 +3037,7 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
       try {app.executeMenuCommand('copy');} catch(_eCopy1) {return 'Error: Failed to copy scaled artwork.';}
     }
 
-    var proofRes = signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText);
+    var proofRes = signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText, flashFieldsText);
     if(/^Error:/i.test(String(proofRes || ''))) {
       try {scaledCopy.remove();} catch(_eRmCopy0) { }
       return proofRes;
@@ -3030,6 +3172,8 @@ try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebrid
 try {signarama_helper_corebridge_createProofForSelected = this.signarama_helper_corebridge_createProofForSelected;} catch(_eTg16b) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg17) { }
 try {signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg18) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg19) { }
+try {signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg20) { }
 
 
 
