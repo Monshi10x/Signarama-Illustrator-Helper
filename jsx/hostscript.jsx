@@ -2128,7 +2128,7 @@ function _srh_corebridge_flashTick() {
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
     _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
     _srh_corebridge_stopFlashing(false);
-    return;
+    return false;
   }
   var entries = _srhCorebridgeFlashState.entries;
   var nextColorIsRed = !_srhCorebridgeFlashState.isRed;
@@ -2161,15 +2161,22 @@ function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashState.isRed = nextColorIsRed;
   _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=' + (_srhCorebridgeFlashState.isRed ? 'RED' : 'BLACK'));
   if(!entries.length) _srh_corebridge_stopFlashing(false);
+  return !!(entries && entries.length);
 }
 
 function signarama_helper_corebridge_flashTickTask() {
   try {
-    _srh_corebridge_flashTick();
+    var isActive = _srh_corebridge_flashTick();
+    var remaining = 0;
+    var colorName = 'BLACK';
+    if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries) remaining = _srhCorebridgeFlashState.entries.length;
+    if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.isRed) colorName = 'RED';
+    if(isActive && remaining > 0) return 'ACTIVE|' + remaining + '|' + _srhCorebridgeFlashTickCount + '|' + colorName;
+    return 'INACTIVE|0|' + _srhCorebridgeFlashTickCount + '|BLACK';
   } catch(_eFlashTaskTick) {
     _srh_corebridge_flashDebug('Tick task exception: ' + (_eFlashTaskTick && _eFlashTaskTick.message ? _eFlashTaskTick.message : _eFlashTaskTick));
+    return 'ERROR|' + (_eFlashTaskTick && _eFlashTaskTick.message ? _eFlashTaskTick.message : _eFlashTaskTick);
   }
-  return 'OK';
 }
 try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
 
@@ -2210,14 +2217,8 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
     isRed: false
   };
   _srh_corebridge_flashTick();
-  try {
-    var tickTaskCode = '(function(){try{if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}}catch(_eFlashTask){}})();';
-    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
-    _srh_corebridge_flashDebug('Scheduled flash task id=' + _srhCorebridgeFlashTaskId + ' every 300ms.');
-  } catch(_eScheduleFlash) {
-    _srhCorebridgeFlashTaskId = null;
-    _srh_corebridge_flashDebug('Failed scheduling flash task: ' + (_eScheduleFlash && _eScheduleFlash.message ? _eScheduleFlash.message : _eScheduleFlash));
-  }
+  _srhCorebridgeFlashTaskId = null;
+  _srh_corebridge_flashDebug('Flash state primed. Waiting for external 300ms tick calls.');
   return {requested: names.length, found: entries.length};
 }
 
