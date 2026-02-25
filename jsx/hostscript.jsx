@@ -2147,6 +2147,14 @@ function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashState.isRed = nextColorIsRed;
   if(!entries.length) _srh_corebridge_stopFlashing(false);
 }
+
+function signarama_helper_corebridge_flashTickTask() {
+  try {
+    _srh_corebridge_flashTick();
+  } catch(_eFlashTaskTick) { }
+  return 'OK';
+}
+
 function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
   _srh_corebridge_stopFlashing(true);
@@ -2179,7 +2187,8 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   };
   _srh_corebridge_flashTick();
   try {
-    _srhCorebridgeFlashTaskId = app.scheduleTask('_srh_corebridge_flashTick()', 500, true);
+    var tickTaskCode = '(function(){try{if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}else if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof _srh_corebridge_flashTick === "function"){_srh_corebridge_flashTick();}}catch(_eFlashTask){}})();';
+    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
   } catch(_eScheduleFlash) {
     _srhCorebridgeFlashTaskId = null;
   }
@@ -3163,6 +3172,8 @@ try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebrid
 try {signarama_helper_corebridge_createProofForSelected = this.signarama_helper_corebridge_createProofForSelected;} catch(_eTg16b) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg17) { }
 try {signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg18) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg19) { }
+try {signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg20) { }
 
 
 
