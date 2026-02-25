@@ -2062,7 +2062,7 @@ var _srhCorebridgeFlashState = null;
 var _srhCorebridgeFlashTickCount = 0;
 var _srhCorebridgeFlashArrowLayerName = 'SRH Flash Arrows';
 function _srh_corebridge_flashDebug(msg) {
-  return;
+  try {$.writeln('[SRH][CorebridgeFlash] ' + String(msg));} catch(_eFlashDbg) { }
 }
 function _srh_corebridge_makeRgb(r, g, b) {
   var c = new RGBColor();
