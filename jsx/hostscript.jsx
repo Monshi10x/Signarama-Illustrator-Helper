@@ -2059,6 +2059,10 @@ function signarama_helper_corebridge_updatePageNumbers() {
 
 var _srhCorebridgeFlashTaskId = null;
 var _srhCorebridgeFlashState = null;
+var _srhCorebridgeFlashTickCount = 0;
+function _srh_corebridge_flashDebug(msg) {
+  try {$.writeln('[SRH][CorebridgeFlash] ' + String(msg));} catch(_eFlashDbg) { }
+}
 function _srh_corebridge_makeRgb(r, g, b) {
   var c = new RGBColor();
   c.red = r;
@@ -2083,6 +2087,7 @@ function _srh_corebridge_parseFlashFieldNames(rawText) {
     seen[key] = true;
     out.push(targetName);
   }
+  _srh_corebridge_flashDebug('Parsed flash field rows. Input lines=' + lines.length + ' | unique targets=' + out.length + ' | targets=' + out.join(', '));
   return out;
 }
 function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
@@ -2105,6 +2110,7 @@ function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
 }
 function _srh_corebridge_stopFlashing(resetToBlack) {
   if(_srhCorebridgeFlashTaskId != null) {
+    _srh_corebridge_flashDebug('Stopping flash task id=' + _srhCorebridgeFlashTaskId + ' (resetToBlack=' + (resetToBlack ? 'yes' : 'no') + ')');
     try {app.cancelTask(_srhCorebridgeFlashTaskId);} catch(_eCancelFlash) { }
     _srhCorebridgeFlashTaskId = null;
   }
@@ -2118,12 +2124,15 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
   _srhCorebridgeFlashState = null;
 }
 function _srh_corebridge_flashTick() {
+  _srhCorebridgeFlashTickCount++;
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
+    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
     _srh_corebridge_stopFlashing(false);
     return;
   }
   var entries = _srhCorebridgeFlashState.entries;
   var nextColorIsRed = !_srhCorebridgeFlashState.isRed;
+  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | nextColor=' + (nextColorIsRed ? 'RED' : 'BLACK'));
   var red = _srh_corebridge_makeRgb(255, 0, 0);
   var black = _srh_corebridge_makeRgb(0, 0, 0);
   for(var i = entries.length - 1; i >= 0; i--) {
@@ -2133,32 +2142,42 @@ function _srh_corebridge_flashTick() {
       continue;
     }
     var currentValue = '';
+    var frameName = '';
+    try {frameName = String(entry.frame.name || '');} catch(_eFlashName) {frameName = '';}
     try {currentValue = String(entry.frame.contents == null ? '' : entry.frame.contents);} catch(_eFlashRead) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' removing entry index=' + i + ' (failed reading contents).');
       entries.splice(i, 1);
       continue;
     }
     if(currentValue !== entry.baseValue) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
       entries.splice(i, 1);
       continue;
     }
+    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' toggling field "' + frameName + '" to ' + (nextColorIsRed ? 'RED' : 'BLACK') + '. value="' + currentValue + '"');
     try {_srh_corebridge_setTextFrameColor(entry.frame, nextColorIsRed ? red : black);} catch(_eFlashColor) { }
   }
   _srhCorebridgeFlashState.isRed = nextColorIsRed;
+  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=' + (_srhCorebridgeFlashState.isRed ? 'RED' : 'BLACK'));
   if(!entries.length) _srh_corebridge_stopFlashing(false);
 }
 
 function signarama_helper_corebridge_flashTickTask() {
   try {
     _srh_corebridge_flashTick();
-  } catch(_eFlashTaskTick) { }
+  } catch(_eFlashTaskTick) {
+    _srh_corebridge_flashDebug('Tick task exception: ' + (_eFlashTaskTick && _eFlashTaskTick.message ? _eFlashTaskTick.message : _eFlashTaskTick));
+  }
   return 'OK';
 }
 try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
 
 function _srh_corebridge_startFlashing(doc, flashFieldsText) {
+  _srh_corebridge_flashDebug('Start flashing requested. Raw text="' + String(flashFieldsText == null ? '' : flashFieldsText) + '"');
   var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
   _srh_corebridge_stopFlashing(true);
+  _srhCorebridgeFlashTickCount = 0;
   if(!doc || !names.length) return {requested: names.length, found: 0};
 
   var namesLookup = {};
@@ -2180,8 +2199,12 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
     try {baseValue = String(tf.contents == null ? '' : tf.contents);} catch(_eTfBaseFlash) {baseValue = '';}
     entries.push({frame: tf, baseValue: baseValue});
   }
-  if(!entries.length) return {requested: names.length, found: 0};
+  if(!entries.length) {
+    _srh_corebridge_flashDebug('No matching text frames found for requested flash names.');
+    return {requested: names.length, found: 0};
+  }
 
+  _srh_corebridge_flashDebug('Starting flashing with ' + entries.length + ' matched text frames.');
   _srhCorebridgeFlashState = {
     entries: entries,
     isRed: false
@@ -2190,8 +2213,10 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   try {
     var tickTaskCode = '(function(){try{if(typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function"){$.global.signarama_helper_corebridge_flashTickTask();}else if(typeof signarama_helper_corebridge_flashTickTask === "function"){signarama_helper_corebridge_flashTickTask();}}catch(_eFlashTask){}})();';
     _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
+    _srh_corebridge_flashDebug('Scheduled flash task id=' + _srhCorebridgeFlashTaskId + ' every 300ms.');
   } catch(_eScheduleFlash) {
     _srhCorebridgeFlashTaskId = null;
+    _srh_corebridge_flashDebug('Failed scheduling flash task: ' + (_eScheduleFlash && _eScheduleFlash.message ? _eScheduleFlash.message : _eScheduleFlash));
   }
   return {requested: names.length, found: entries.length};
 }
