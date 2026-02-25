@@ -2057,7 +2057,288 @@ function signarama_helper_corebridge_updatePageNumbers() {
   }
 }
 
-function signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText) {
+var _srhCorebridgeFlashTaskId = null;
+var _srhCorebridgeFlashState = null;
+var _srhCorebridgeFlashTickCount = 0;
+var _srhCorebridgeFlashArrowLayerName = 'SRH Flash Arrows';
+function _srh_corebridge_flashDebug(msg) {
+  try {$.writeln('[SRH][CorebridgeFlash] ' + String(msg));} catch(_eFlashDbg) { }
+}
+function _srh_corebridge_makeRgb(r, g, b) {
+  var c = new RGBColor();
+  c.red = r;
+  c.green = g;
+  c.blue = b;
+  return c;
+}
+function _srh_corebridge_parseFlashFieldNames(rawText) {
+  function _trim(v) {return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');}
+  var out = [];
+  var seen = {};
+  var lines = String(rawText == null ? '' : rawText).split(/\r?\n/);
+  for(var i = 0; i < lines.length; i++) {
+    var line = _trim(lines[i]);
+    if(!line) continue;
+    if(line.indexOf('#') === 0) continue;
+    var idx = line.indexOf('->');
+    var targetName = idx >= 0 ? _trim(line.substring(idx + 2)) : line;
+    if(!targetName) continue;
+    var key = targetName.toLowerCase();
+    if(seen[key]) continue;
+    seen[key] = true;
+    out.push(targetName);
+  }
+  _srh_corebridge_flashDebug('Parsed flash field rows. Input lines=' + lines.length + ' | unique targets=' + out.length + ' | targets=' + out.join(', '));
+  return out;
+}
+function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
+  if(!textFrame || !colorValue) return false;
+  try {
+    if(textFrame.textRange && textFrame.textRange.characterAttributes) {
+      textFrame.textRange.characterAttributes.fillColor = colorValue;
+      return true;
+    }
+  } catch(_eTfClr0) { }
+  try {
+    if(textFrame.characters && textFrame.characters.length) {
+      for(var i = 0; i < textFrame.characters.length; i++) {
+        try {textFrame.characters[i].characterAttributes.fillColor = colorValue;} catch(_eTfClr1) { }
+      }
+      return true;
+    }
+  } catch(_eTfClr2) { }
+  return false;
+}
+function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
+  if(!doc) return null;
+  var layer = null;
+  try {layer = doc.layers.getByName(_srhCorebridgeFlashArrowLayerName);} catch(_eArrowLayerGet) {layer = null;}
+  if(!layer && createIfMissing) {
+    try {
+      layer = doc.layers.add();
+      layer.name = _srhCorebridgeFlashArrowLayerName;
+      layer.visible = true;
+      layer.printable = false;
+    } catch(_eArrowLayerCreate) {layer = null;}
+  }
+  return layer;
+}
+function _srh_corebridge_removeArrow(entry) {
+  if(!entry || !entry.arrowGroup) return;
+  try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
+  entry.arrowGroup = null;
+}
+function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
+  if(!doc || !textFrame) return null;
+  var layer = _srh_corebridge_getArrowLayer(doc, true);
+  if(!layer) return null;
+  var group = null;
+  try {
+    var gb = textFrame.geometricBounds; // [L,T,R,B]
+    var left = Number(gb[0]);
+    var top = Number(gb[1]);
+    var right = Number(gb[2]);
+    var bottom = Number(gb[3]);
+    if(!isFinite(left) || !isFinite(top) || !isFinite(right) || !isFinite(bottom)) return null;
+    var h = Math.max(1, top - bottom);
+    var centerY = (top + bottom) / 2;
+    var shaftLen = Math.max(_srh_mm2ptDoc(14), h * 1.1);
+    var gapFromText = Math.max(_srh_mm2ptDoc(3), h * 0.25);
+    var arrowHeadLen = Math.max(_srh_mm2ptDoc(5), h * 0.4);
+    var arrowHeadHalfHeight = Math.max(_srh_mm2ptDoc(3), h * 0.3);
+    var strokeW = _srh_pxStrokeDoc(3);
+    var tipX = right + gapFromText;
+    var tailX = tipX + shaftLen;
+
+    var red = _srh_corebridge_makeRgb(255, 0, 0);
+    try {layer.locked = false;} catch(_eArrowUnlock) { }
+
+    group = layer.groupItems.add();
+    group.name = 'SRH_FlashArrow';
+
+    var shaft = group.pathItems.add();
+    shaft.setEntirePath([[tailX, centerY], [tipX, centerY]]);
+    shaft.stroked = true;
+    shaft.filled = false;
+    shaft.strokeWidth = strokeW;
+    shaft.strokeColor = red;
+
+    var headA = group.pathItems.add();
+    headA.setEntirePath([[tipX, centerY], [tipX + arrowHeadLen, centerY + arrowHeadHalfHeight]]);
+    headA.stroked = true;
+    headA.filled = false;
+    headA.strokeWidth = strokeW;
+    headA.strokeColor = red;
+
+    var headB = group.pathItems.add();
+    headB.setEntirePath([[tipX, centerY], [tipX + arrowHeadLen, centerY - arrowHeadHalfHeight]]);
+    headB.stroked = true;
+    headB.filled = false;
+    headB.strokeWidth = strokeW;
+    headB.strokeColor = red;
+
+    try {layer.locked = true;} catch(_eArrowRelock) { }
+    return group;
+  } catch(_eArrowCreate) {
+    try {if(group) group.remove();} catch(_eArrowCleanup) { }
+    try {if(layer) layer.locked = true;} catch(_eArrowRelock2) { }
+    return null;
+  }
+}
+function _srh_corebridge_stopFlashing(resetToBlack) {
+  if(_srhCorebridgeFlashTaskId != null) {
+    _srh_corebridge_flashDebug('Stopping flash task id=' + _srhCorebridgeFlashTaskId + ' (resetToBlack=' + (resetToBlack ? 'yes' : 'no') + ')');
+    try {app.cancelTask(_srhCorebridgeFlashTaskId);} catch(_eCancelFlash) { }
+    _srhCorebridgeFlashTaskId = null;
+  }
+  if(resetToBlack && _srhCorebridgeFlashState && _srhCorebridgeFlashState.entries) {
+    var black = _srh_corebridge_makeRgb(0, 0, 0);
+    for(var i = 0; i < _srhCorebridgeFlashState.entries.length; i++) {
+      var entry = _srhCorebridgeFlashState.entries[i];
+      try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eResetClr) { }
+      _srh_corebridge_removeArrow(entry);
+    }
+  }
+  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
+    var arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);
+    if(arrowLayer) {
+      try {
+        var hasItems = false;
+        try {hasItems = arrowLayer.pageItems && arrowLayer.pageItems.length > 0;} catch(_eArrowHasItems) {hasItems = true;}
+        if(!hasItems) arrowLayer.visible = false;
+      } catch(_eArrowLayerHide) { }
+      try {arrowLayer.locked = true;} catch(_eArrowLayerLock) { }
+    }
+  }
+  _srhCorebridgeFlashState = null;
+}
+function _srh_corebridge_flashTick() {
+  _srhCorebridgeFlashTickCount++;
+  if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
+    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
+    _srh_corebridge_stopFlashing(false);
+    return false;
+  }
+  var entries = _srhCorebridgeFlashState.entries;
+  var nextColorIsRed = !_srhCorebridgeFlashState.isRed;
+  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | nextColor=' + (nextColorIsRed ? 'RED' : 'BLACK'));
+  var red = _srh_corebridge_makeRgb(255, 0, 0);
+  var black = _srh_corebridge_makeRgb(0, 0, 0);
+  for(var i = entries.length - 1; i >= 0; i--) {
+    var entry = entries[i];
+    if(!entry || !entry.frame) {
+      entries.splice(i, 1);
+      continue;
+    }
+    var currentValue = '';
+    var frameName = '';
+    try {frameName = String(entry.frame.name || '');} catch(_eFlashName) {frameName = '';}
+    try {currentValue = String(entry.frame.contents == null ? '' : entry.frame.contents);} catch(_eFlashRead) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' removing entry index=' + i + ' (failed reading contents).');
+      entries.splice(i, 1);
+      continue;
+    }
+    if(currentValue !== entry.baseValue) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
+      try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      _srh_corebridge_removeArrow(entry);
+      entries.splice(i, 1);
+      continue;
+    }
+    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' toggling field "' + frameName + '" to ' + (nextColorIsRed ? 'RED' : 'BLACK') + '. value="' + currentValue + '"');
+    try {_srh_corebridge_setTextFrameColor(entry.frame, nextColorIsRed ? red : black);} catch(_eFlashColor) { }
+  }
+  _srhCorebridgeFlashState.isRed = nextColorIsRed;
+  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=' + (_srhCorebridgeFlashState.isRed ? 'RED' : 'BLACK'));
+  if(!entries.length) _srh_corebridge_stopFlashing(false);
+  return !!(entries && entries.length);
+}
+
+function signarama_helper_corebridge_flashTickTask() {
+  try {
+    var isActive = _srh_corebridge_flashTick();
+    var remaining = 0;
+    var colorName = 'BLACK';
+    if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries) remaining = _srhCorebridgeFlashState.entries.length;
+    if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.isRed) colorName = 'RED';
+    if(isActive && remaining > 0) return 'ACTIVE|' + remaining + '|' + _srhCorebridgeFlashTickCount + '|' + colorName;
+    return 'INACTIVE|0|' + _srhCorebridgeFlashTickCount + '|BLACK';
+  } catch(_eFlashTaskTick) {
+    _srh_corebridge_flashDebug('Tick task exception: ' + (_eFlashTaskTick && _eFlashTaskTick.message ? _eFlashTaskTick.message : _eFlashTaskTick));
+    return 'ERROR|' + (_eFlashTaskTick && _eFlashTaskTick.message ? _eFlashTaskTick.message : _eFlashTaskTick);
+  }
+}
+try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
+function signarama_helper_corebridge_flashGetState() {
+  try {
+    var active = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) ? 1 : 0;
+    var remaining = active ? _srhCorebridgeFlashState.entries.length : 0;
+    var colorName = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.isRed) ? 'RED' : 'BLACK';
+    var taskId = (_srhCorebridgeFlashTaskId == null) ? -1 : _srhCorebridgeFlashTaskId;
+    return 'STATE|' + active + '|' + remaining + '|' + _srhCorebridgeFlashTickCount + '|' + colorName + '|' + taskId;
+  } catch(_eFlashState) {
+    return 'ERROR|' + (_eFlashState && _eFlashState.message ? _eFlashState.message : _eFlashState);
+  }
+}
+try {this.signarama_helper_corebridge_flashGetState = signarama_helper_corebridge_flashGetState;} catch(_eFlashStateBind) { }
+function signarama_helper_corebridge_flashTickTaskRunner() {
+  try { return signarama_helper_corebridge_flashTickTask(); }
+  catch(_eFlashTaskRunner) { return 'ERROR|' + (_eFlashTaskRunner && _eFlashTaskRunner.message ? _eFlashTaskRunner.message : _eFlashTaskRunner); }
+}
+try {this.signarama_helper_corebridge_flashTickTaskRunner = signarama_helper_corebridge_flashTickTaskRunner;} catch(_eFlashTaskRunnerBind) { }
+
+function _srh_corebridge_startFlashing(doc, flashFieldsText) {
+  _srh_corebridge_flashDebug('Start flashing requested. Raw text="' + String(flashFieldsText == null ? '' : flashFieldsText) + '"');
+  var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
+  _srh_corebridge_stopFlashing(true);
+  _srhCorebridgeFlashTickCount = 0;
+  if(!doc || !names.length) return {requested: names.length, found: 0};
+
+  var namesLookup = {};
+  for(var n = 0; n < names.length; n++) {
+    namesLookup[String(names[n]).toLowerCase()] = true;
+  }
+
+  var entries = [];
+  var allFrames = null;
+  try {allFrames = doc.textFrames;} catch(_eAllFlashTf) {allFrames = null;}
+  if(!allFrames || !allFrames.length) return {requested: names.length, found: 0};
+  for(var i = 0; i < allFrames.length; i++) {
+    var tf = allFrames[i];
+    var tfName = '';
+    try {tfName = String(tf.name || '');} catch(_eTfNameFlash) {tfName = '';}
+    if(!tfName) continue;
+    if(!namesLookup[tfName.toLowerCase()]) continue;
+    var baseValue = '';
+    try {baseValue = String(tf.contents == null ? '' : tf.contents);} catch(_eTfBaseFlash) {baseValue = '';}
+    entries.push({frame: tf, baseValue: baseValue});
+  }
+  if(!entries.length) {
+    _srh_corebridge_flashDebug('No matching text frames found for requested flash names.');
+    return {requested: names.length, found: 0};
+  }
+
+  _srh_corebridge_flashDebug('Starting flashing with ' + entries.length + ' matched text frames.');
+  _srhCorebridgeFlashState = {
+    doc: doc,
+    entries: entries,
+    isRed: false
+  };
+  for(var e = 0; e < entries.length; e++) {
+    entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame);
+  }
+  _srh_corebridge_flashTick();
+  try {
+    var tickTaskCode = '((typeof signarama_helper_corebridge_flashTickTaskRunner === "function") ? signarama_helper_corebridge_flashTickTaskRunner() : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTaskRunner === "function") ? $.global.signarama_helper_corebridge_flashTickTaskRunner() : ((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask() : "ERROR|flash tick task missing")))';
+    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
+  } catch(_eScheduleFlash) {
+    _srhCorebridgeFlashTaskId = null;
+  }
+  _srh_corebridge_flashDebug('Flash state primed. Waiting for external 300ms tick calls.');
+  return {requested: names.length, found: entries.length};
+}
+
+function signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText, flashFieldsText) {
   function _trim(v) {
     return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
   }
@@ -2667,6 +2948,9 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     }
 
     var pageNumberRes = signarama_helper_corebridge_updatePageNumbers();
+    var flashRes = _srh_corebridge_startFlashing(doc, flashFieldsText);
+    var flashMessage = 'Flash monitoring: ' + flashRes.found + ' text frame' + (flashRes.found === 1 ? '' : 's') +
+      ' active from ' + flashRes.requested + ' requested name' + (flashRes.requested === 1 ? '' : 's') + '.';
     return 'Proof created. Applied ' + applied + ' text update' + (applied === 1 ? '' : 's') +
       ' and ' + appliedImages + ' image placement' + (appliedImages === 1 ? '' : 's') +
       '. Forced Address Text updates: ' + forcedAddressApplied +
@@ -2680,13 +2964,14 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
       '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. ' + flashMessage +
       '. ' + String(linkPlacementRes || '');
   } catch(e) {
     return 'Error: ' + e.message;
   }
 }
 
-function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson) {
+function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, mappingText, a4OptionsJson, flashFieldsText) {
   function _trim(v) {
     return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
   }
@@ -2895,7 +3180,7 @@ function signarama_helper_corebridge_createProofForSelected(pathText, dataJson, 
       try {app.executeMenuCommand('copy');} catch(_eCopy1) {return 'Error: Failed to copy scaled artwork.';}
     }
 
-    var proofRes = signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText);
+    var proofRes = signarama_helper_corebridge_createProofFromData(pathText, dataJson, mappingText, flashFieldsText);
     if(/^Error:/i.test(String(proofRes || ''))) {
       try {scaledCopy.remove();} catch(_eRmCopy0) { }
       return proofRes;
@@ -3030,6 +3315,12 @@ try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebrid
 try {signarama_helper_corebridge_createProofForSelected = this.signarama_helper_corebridge_createProofForSelected;} catch(_eTg16b) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg17) { }
 try {signarama_helper_corebridge_updatePageNumbers = this.signarama_helper_corebridge_updatePageNumbers;} catch(_eTg18) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg19) { }
+try {signarama_helper_corebridge_flashTickTask = this.signarama_helper_corebridge_flashTickTask;} catch(_eTg20) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashGetState = this.signarama_helper_corebridge_flashGetState;} catch(_eTg20a) { }
+try {signarama_helper_corebridge_flashGetState = this.signarama_helper_corebridge_flashGetState;} catch(_eTg20b) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg21) { }
+try {signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg22) { }
 
 
 
