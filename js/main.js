@@ -146,6 +146,11 @@
   let lightboxMeasureLiveInFlight = false;
   let corebridgePageNumberWatchTimer = null;
   let corebridgePageNumberWatcherErrorLogged = false;
+  let corebridgeFlashTickPollTimer = null;
+  let corebridgeFlashTickPollCount = 0;
+  let corebridgeFlashLastTickCount = -1;
+  let coloursPendingApplyFns = [];
+  let coloursHasPendingChanges = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -464,14 +469,55 @@
     const corebridgePullControlsWrap = $('corebridgePullControlsWrap');
     const corebridgeDevDumpWrap = $('corebridgeDevDumpWrap');
     const corebridgeProofMappingsWrap = $('corebridgeProofMappingsWrap');
+    const corebridgeFlashFieldsWrap = $('corebridgeFlashFieldsWrap');
     const corebridgeDerivedMappingsWrap = $('corebridgeDerivedMappingsWrap');
     const corebridgeJobNumber = $('corebridgeJobNumber');
     const corebridgeItemNumber = $('corebridgeItemNumber');
     const corebridgeProofPath = $('corebridgeProofPath');
     const corebridgeProofMappings = $('corebridgeProofMappings');
+    const corebridgeFlashFields = $('corebridgeFlashFields');
     const corebridgeDerivedMappingsPreview = document.querySelector('textarea[data-corebridge-derived-mappings]');
     const corebridgeDumpHost = $('corebridgeDataDumpHost');
     const corebridgeFetchStatus = $('corebridgeFetchStatus');
+    function stopCorebridgeFlashTickPolling(reason) {
+      if(corebridgeFlashTickPollTimer) {
+        clearInterval(corebridgeFlashTickPollTimer);
+        corebridgeFlashTickPollTimer = null;
+      }
+      if(reason) log('Corebridge flash poll stop: ' + reason);
+      corebridgeFlashLastTickCount = -1;
+    }
+    function startCorebridgeFlashTickPolling() {
+      stopCorebridgeFlashTickPolling('restart');
+      corebridgeFlashTickPollCount = 0;
+      log('Corebridge flash poll start (300ms).');
+      corebridgeFlashTickPollTimer = setInterval(() => {
+        corebridgeFlashTickPollCount++;
+        callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
+          const tickTxt = String(tickRes || '').trim();
+          if(/^ERROR\|/i.test(tickTxt)) {
+            log('Corebridge flash tick error: ' + tickTxt);
+            stopCorebridgeFlashTickPolling('tick error');
+            return;
+          }
+          if(corebridgeFlashTickPollCount <= 10 || corebridgeFlashTickPollCount % 10 === 0 || /^INACTIVE\|/i.test(tickTxt)) {
+            log('Corebridge flash poll #' + corebridgeFlashTickPollCount + ': ' + tickTxt);
+          }
+          if(/^INACTIVE\|/i.test(tickTxt)) {
+            stopCorebridgeFlashTickPolling('inactive');
+            return;
+          }
+          const parts = tickTxt.split('|');
+          if(parts.length >= 4 && /^ACTIVE$/i.test(parts[0])) {
+            const tickCount = parseInt(parts[2], 10) || 0;
+            if(corebridgeFlashLastTickCount >= 0 && tickCount <= corebridgeFlashLastTickCount) {
+              log('Corebridge flash poll warning: non-incrementing tick count (' + tickCount + ').');
+            }
+            corebridgeFlashLastTickCount = tickCount;
+          }
+        });
+      }, 300);
+    }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
       corebridgeLastFilteredData = [];
@@ -600,6 +646,7 @@
       if(corebridgePullControlsWrap) corebridgePullControlsWrap.classList.toggle('hidden', !show);
       if(corebridgeDevDumpWrap) corebridgeDevDumpWrap.classList.toggle('hidden', !show);
       if(corebridgeProofMappingsWrap) corebridgeProofMappingsWrap.classList.toggle('hidden', !show);
+      if(corebridgeFlashFieldsWrap) corebridgeFlashFieldsWrap.classList.toggle('hidden', !show);
       if(corebridgeDerivedMappingsWrap) corebridgeDerivedMappingsWrap.classList.toggle('hidden', !show);
     }
     setCorebridgeDerivedMappingsPreview();
@@ -1476,6 +1523,8 @@
         );
         const safeDataJson = jsxEscapeDoubleQuoted(JSON.stringify(proofPayload));
         const safeMappingText = jsxEscapeDoubleQuoted(mappingText);
+        const flashFieldsText = (corebridgeFlashFields && corebridgeFlashFields.value ? corebridgeFlashFields.value : '').trim();
+        const safeFlashFieldsText = jsxEscapeDoubleQuoted(flashFieldsText);
         const proofFnName = (mode === 'selected')
           ? 'signarama_helper_corebridge_createProofForSelected'
           : 'signarama_helper_corebridge_createProofFromData';
@@ -1489,13 +1538,21 @@
           };
           const safeA4Options = jsxEscapeDoubleQuoted(JSON.stringify(a4Options));
           runButtonJsxOperation(
-            proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeA4Options + '")',
-            {logFn: log, toastTitle: toastTitle}
+            proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeA4Options + '","' + safeFlashFieldsText + '")',
+            {logFn: log, toastTitle: toastTitle, onResult: (res) => {
+              const txt = String(res || '').trim();
+              if(!/^Error:/i.test(txt) && flashFieldsText) startCorebridgeFlashTickPolling();
+              if(/^Error:/i.test(txt) || !flashFieldsText) stopCorebridgeFlashTickPolling('proof result error or no flash fields');
+            }}
           );
         } else {
           runButtonJsxOperation(
-            proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '")',
-            {logFn: log, toastTitle: toastTitle}
+            proofFnName + '("' + safeProofPath + '","' + safeDataJson + '","' + safeMappingText + '","' + safeFlashFieldsText + '")',
+            {logFn: log, toastTitle: toastTitle, onResult: (res) => {
+              const txt = String(res || '').trim();
+              if(!/^Error:/i.test(txt) && flashFieldsText) startCorebridgeFlashTickPolling();
+              if(/^Error:/i.test(txt) || !flashFieldsText) stopCorebridgeFlashTickPolling('proof result error or no flash fields');
+            }}
           );
         }
       }
@@ -1774,6 +1831,33 @@
   function wireColours() {
     const refreshBtn = $('btnRefreshColours');
     if(refreshBtn) refreshBtn.onclick = () => refreshColours({showToastOnComplete: true});
+    const applyBtn = $('btnApplyColours');
+    function refreshApplyButtonState() {
+      if(!applyBtn) return;
+      applyBtn.disabled = !coloursHasPendingChanges;
+      applyBtn.classList.toggle('pulse-alert', !!coloursHasPendingChanges);
+    }
+    if(applyBtn) {
+      applyBtn.onclick = () => {
+        if(!coloursPendingApplyFns.length) return;
+        const fns = coloursPendingApplyFns.slice(0);
+        coloursPendingApplyFns = [];
+        coloursHasPendingChanges = false;
+        refreshApplyButtonState();
+        let idx = 0;
+        function runNext() {
+          if(idx >= fns.length) {
+            refreshColours();
+            return;
+          }
+          const fn = fns[idx++];
+          try {fn(runNext);} catch(_eApplyNext) {runNext();}
+        }
+        runNext();
+      };
+      refreshApplyButtonState();
+    }
+    window.refreshColoursApplyState = refreshApplyButtonState;
     window.refreshColours = refreshColours;
   }
 
@@ -1890,6 +1974,10 @@
           return byCmyk || byRgb;
         }
 
+        coloursPendingApplyFns = [];
+        coloursHasPendingChanges = false;
+        if(typeof window.refreshColoursApplyState === 'function') window.refreshColoursApplyState();
+
         data.forEach((entry) => {
           if(colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type &&
             colourEditState.lastEdit.mode === colourEditState.mode) {
@@ -1940,21 +2028,22 @@
             ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
 
           const row = document.createElement('div');
-          row.className = 'row';
+          row.className = 'row colour-row-shell';
           row.style.alignItems = 'center';
           row.style.gap = '10px';
 
           const swatch = document.createElement('div');
-          swatch.style.width = '34px';
+          swatch.style.width = '68px';
           swatch.style.height = '34px';
-          swatch.style.minWidth = '34px';
+          swatch.style.minWidth = '68px';
           swatch.style.minHeight = '34px';
-          swatch.style.maxWidth = '34px';
+          swatch.style.maxWidth = '68px';
           swatch.style.maxHeight = '34px';
-          swatch.style.flex = '0 0 34px';
+          swatch.style.flex = '0 0 68px';
           swatch.style.border = '1px solid #444';
           swatch.style.borderRadius = '6px';
           swatch.style.background = entry.hex || '#000000';
+          const baseSwatchHex = entry.hex || '#000000';
 
           const cmyk = getDisplayCmyk(entry);
           const typeText = String(entry.type || 'fill').toUpperCase();
@@ -1965,15 +2054,15 @@
           label.style.display = 'flex';
           label.style.flexDirection = 'column';
           label.style.gap = '2px';
-          label.style.minWidth = '180px';
-          label.style.flex = '1 1 auto';
+          label.style.minWidth = '76px';
+          label.style.flex = '0 0 76px';
           const labelTop = document.createElement('div');
           labelTop.textContent = typeText;
           labelTop.style.fontSize = '12px';
           labelTop.style.fontWeight = '700';
           labelTop.style.color = '#d7d7d7';
           const labelBottom = document.createElement('div');
-          labelBottom.textContent = cmykLine;
+          labelBottom.textContent = '';
           labelBottom.style.fontSize = '11px';
           labelBottom.style.color = '#bcbcbc';
           label.appendChild(labelTop);
@@ -2006,13 +2095,46 @@
             kInput.value = entry.k || 0;
             inputs.push(cInput, mInput, yInput, kInput);
           }
-          inputs.forEach(inp => {
-            inp.style.width = '35px';
+          const inputWraps = [];
+          const floatLabels = colourEditState.mode === 'RGB' ? ['R', 'G', 'B'] : ['C', 'M', 'Y', 'K'];
+          inputs.forEach((inp, idx) => {
+            inp.style.width = '100%';
+            inp.style.borderColor = '#252525';
+            const w = document.createElement('div');
+            w.className = 'colour-input-wrap';
+            const fl = document.createElement('span');
+            fl.className = 'colour-input-float';
+            fl.textContent = floatLabels[idx] || '';
+            w.appendChild(inp);
+            w.appendChild(fl);
+            inputWraps.push(w);
           });
           log('Colours: set inputs key=' + (entry.key || '') + ' type=' + (entry.type || '') +
             ' values=' + inputs.map(i => i.value).join(','));
 
-          function applyValues() {
+          function previewSwatch() {
+            if(!rowDirty) {
+              swatch.style.background = baseSwatchHex;
+              return;
+            }
+            if(colourEditState.mode === 'RGB') {
+              const r = isFinite(parseFloat(inputs[0].value)) ? parseFloat(inputs[0].value) : num(entry.r);
+              const g = isFinite(parseFloat(inputs[1].value)) ? parseFloat(inputs[1].value) : num(entry.g);
+              const b = isFinite(parseFloat(inputs[2].value)) ? parseFloat(inputs[2].value) : num(entry.b);
+              const nextHex = rgbToHex(r, g, b);
+              swatch.style.background = 'linear-gradient(to right, ' + baseSwatchHex + ' 0 50%, ' + nextHex + ' 50% 100%)';
+              return;
+            }
+            const c = isFinite(parseFloat(inputs[0].value)) ? parseFloat(inputs[0].value) : num(entry.c);
+            const m = isFinite(parseFloat(inputs[1].value)) ? parseFloat(inputs[1].value) : num(entry.m);
+            const y = isFinite(parseFloat(inputs[2].value)) ? parseFloat(inputs[2].value) : num(entry.y);
+            const k = isFinite(parseFloat(inputs[3].value)) ? parseFloat(inputs[3].value) : num(entry.k);
+            const nextHex = cmykToHex(c, m, y, k);
+            swatch.style.background = 'linear-gradient(to right, ' + baseSwatchHex + ' 0 50%, ' + nextHex + ' 50% 100%)';
+          }
+
+          function applyValues(onDone) {
+            const finish = () => { if(typeof onDone === 'function') onDone(); };
             if(colourEditState.mode === 'RGB') {
               const rRaw = parseFloat(inputs[0].value);
               const gRaw = parseFloat(inputs[1].value);
@@ -2046,8 +2168,9 @@
                   toKey: rgbKey(r, g, b),
                   r, g, b
                 };
-                log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
-                refreshColours();
+                log('Colours: apply RGB done toKey=' + colourEditState.lastEdit.toKey);
+                row.classList.remove('colour-row-dirty');
+                finish();
               });
               return;
             }
@@ -2072,10 +2195,7 @@
               const match = (result || '').match(/Updated\s+(\d+)/i);
               const updated = match ? parseInt(match[1], 10) : 0;
               log('Colours: replace result=' + (result || '') + ' updated=' + updated);
-              if(!updated) {
-                refreshColours();
-                return;
-              }
+              if(!updated) { finish(); return; }
               swatch.style.background = cmykToHex(c, m, y, k);
               colourEditState.lastEdit = {
                 mode: 'CMYK',
@@ -2085,13 +2205,29 @@
                 toKey: cmykKey(c, m, y, k),
                 c, m, y, k
               };
-              log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
-              refreshColours();
+              log('Colours: apply CMYK done toKey=' + colourEditState.lastEdit.toKey);
+              row.classList.remove('colour-row-dirty');
+              finish();
             });
           }
 
+          let rowDirty = false;
+          function markRowDirty() {
+            if(rowDirty) return;
+            rowDirty = true;
+            row.classList.add('colour-row-dirty');
+            coloursHasPendingChanges = true;
+            coloursPendingApplyFns.push((done) => applyValues(done));
+            if(typeof window.refreshColoursApplyState === 'function') window.refreshColoursApplyState();
+            previewSwatch();
+          }
+
           inputs.forEach((inp, idx) => {
-            inp.addEventListener('change', applyValues);
+            inp.addEventListener('change', markRowDirty);
+            inp.addEventListener('input', () => {
+              markRowDirty();
+              previewSwatch();
+            });
             inp.addEventListener('focus', () => {
               try {inp.select();} catch(_eSel) { }
             });
@@ -2114,7 +2250,7 @@
 
           row.appendChild(swatch);
           row.appendChild(label);
-          inputs.forEach(inp => row.appendChild(inp));
+          inputWraps.forEach(w => row.appendChild(w));
           if(showBlackHazard) {
             const hazard = document.createElement('span');
             hazard.textContent = '\u26A0';
@@ -2122,17 +2258,15 @@
             hazard.style.color = '#ffba00';
             hazard.style.fontWeight = '800';
             hazard.style.fontSize = '16px';
-            hazard.style.marginLeft = '6px';
+            hazard.style.marginLeft = '2px';
+            hazard.style.flex = '0 0 auto';
             row.appendChild(hazard);
           }
           list.appendChild(row);
         });
 
         if(debug) {
-          const dbg = document.createElement('div');
-          dbg.className = 'small';
-          dbg.style.marginTop = '8px';
-          dbg.textContent = 'Debug: total=' + (debug.totalItems || 0) +
+          const dbgText = 'Debug: total=' + (debug.totalItems || 0) +
             ', scanned=' + (debug.scanned || 0) +
             ', path=' + (debug.pathItems || 0) +
             ', text=' + (debug.textFrames || 0) +
@@ -2140,8 +2274,7 @@
             ', docText=' + (debug.totalTextFrames || 0) +
             ', fallback=' + (debug.fallbackUsed ? 'yes' : 'no') +
             ', samples=' + (debug.sampleTypes || []).join(', ');
-          list.appendChild(dbg);
-          log('Colours debug: ' + dbg.textContent);
+          log('Colours debug: ' + dbgText);
         }
 
         if(focusedMeta) {
