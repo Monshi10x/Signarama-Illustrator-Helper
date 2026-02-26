@@ -1518,6 +1518,18 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return adjusted;
   }
 
+  // Back-compat shims for older cached JSX paths that may still call the
+  // previous snapshot-based gradient helpers.
+  function _collectGradientItems(container) {
+    return [{container: container}];
+  }
+
+  function _compensateGradientScale(snapshot) {
+    if(!snapshot || !snapshot.length) return 0;
+    var container = snapshot[0] && snapshot[0].container ? snapshot[0].container : null;
+    return _shiftGradientInContainer(container, offsetPt);
+  }
+
   function _uniteContainer(container) {
     if(!container) return false;
     var ok = _runOnSelection(container, function() {
