@@ -1465,6 +1465,87 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return count;
   }
 
+  function _getBoundsInfo(item) {
+    var b = null;
+    try {b = item.visibleBounds;} catch(_eGb0) {b = null;}
+    if(!b || b.length !== 4) {
+      try {b = item.geometricBounds;} catch(_eGb1) {b = null;}
+    }
+    if(!b || b.length !== 4) return null;
+    var l = Number(b[0]), t = Number(b[1]), r = Number(b[2]), bt = Number(b[3]);
+    if(!isFinite(l) || !isFinite(t) || !isFinite(r) || !isFinite(bt)) return null;
+    var left = Math.min(l, r);
+    var right = Math.max(l, r);
+    var top = Math.max(t, bt);
+    var bottom = Math.min(t, bt);
+    return {
+      left: left,
+      top: top,
+      right: right,
+      bottom: bottom,
+      width: Math.max(0.0001, right - left),
+      height: Math.max(0.0001, top - bottom),
+      cx: (left + right) / 2,
+      cy: (top + bottom) / 2
+    };
+  }
+
+  function _hasGradientColor(item) {
+    if(!item) return false;
+    var hasFillGrad = false;
+    var hasStrokeGrad = false;
+    try {hasFillGrad = !!(item.filled && item.fillColor && item.fillColor.typename === 'GradientColor');} catch(_eHg0) {hasFillGrad = false;}
+    try {hasStrokeGrad = !!(item.stroked && item.strokeColor && item.strokeColor.typename === 'GradientColor');} catch(_eHg1) {hasStrokeGrad = false;}
+    return hasFillGrad || hasStrokeGrad;
+  }
+
+  function _collectGradientItems(container) {
+    var out = [];
+    if(!container) return out;
+    var stack = [];
+    try {stack.push(container);} catch(_eCg0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      if(_hasGradientColor(cur)) {
+        var before = _getBoundsInfo(cur);
+        if(before) out.push({item: cur, before: before});
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eCg1) { }
+    }
+    return out;
+  }
+
+  function _compensateGradientScale(snapshot) {
+    if(!snapshot || !snapshot.length) return 0;
+    var adjusted = 0;
+    for(var i = 0; i < snapshot.length; i++) {
+      var rec = snapshot[i];
+      if(!rec || !rec.item || !rec.before) continue;
+      var now = _getBoundsInfo(rec.item);
+      if(!now) continue;
+      var sx = (rec.before.width / now.width) * 100;
+      var sy = (rec.before.height / now.height) * 100;
+      if(!isFinite(sx) || !isFinite(sy)) continue;
+      if(sx < 1 || sy < 1) continue;
+      try {
+        var gradScaleMx = app.getScaleMatrix(sx, sy);
+        rec.item.transform(gradScaleMx, false, false, true, false, 100, Transformation.CENTER);
+      } catch(_eGc0) { }
+      var dx = rec.before.cx - now.cx;
+      var dy = rec.before.cy - now.cy;
+      if((Math.abs(dx) > 0.0001) || (Math.abs(dy) > 0.0001)) {
+        try {rec.item.translate(dx, dy, false, false, true, false);} catch(_eGc1) { }
+      }
+      adjusted++;
+    }
+    return adjusted;
+  }
+
   function _uniteContainer(container) {
     if(!container) return false;
     var ok = _runOnSelection(container, function() {
@@ -1555,7 +1636,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
   if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
+  var gradientSnapshot = _collectGradientItems(bleedGroup || bleedLayer);
   var offsetApplied = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var gradientAdjusted = _compensateGradientScale(gradientSnapshot);
 
   if(createCutline && cutGroup) {
     if(outlineText) _outlineTextInContainer(cutGroup);
@@ -1572,6 +1655,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   try {doc.selection = null;} catch(_eSel1) { }
 
   var msg = "Path bleed applied (grouped). Originals: " + originalCount + ", targets: " + movedCount + ", bleed paths: " + offsetCount;
+  if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
   if(!offsetApplied) msg += ". Note: Offset effect fallback was limited on this selection.";
   try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide2) { }
