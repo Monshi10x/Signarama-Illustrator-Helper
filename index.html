@@ -318,6 +318,49 @@
       background:#3a3a3a;
       color:#fff;
     }
+    .btn2.pulse-alert {
+      animation: srh-pulse-red 0.9s ease-in-out infinite;
+      border-color:#8f0d23;
+    }
+    @keyframes srh-pulse-red {
+      0%, 100% { background:#2a2a2a; }
+      50% { background:#7a0d22; }
+    }
+    .colour-input-wrap {
+      position:relative;
+      min-width:56px;
+      flex:1 1 56px;
+      max-width:74px;
+    }
+    .colour-input-wrap input {
+      width:100%;
+      box-sizing:border-box;
+      padding-top:14px;
+      padding-bottom:6px;
+      text-align:center;
+      color:#cfcfcf;
+      -moz-appearance:textfield;
+    }
+    .colour-input-wrap input::-webkit-outer-spin-button,
+    .colour-input-wrap input::-webkit-inner-spin-button {
+      -webkit-appearance:none;
+      margin:0;
+    }
+    .colour-input-float {
+      position:absolute;
+      left:10px;
+      top:3px;
+      font-size:10px;
+      color:#9f9f9f;
+      pointer-events:none;
+      font-weight:700;
+    }
+    .colour-row-dirty {
+      border:1px solid #8f0d23;
+      border-radius:10px;
+      padding:6px;
+      animation: srh-pulse-red 0.9s ease-in-out infinite;
+    }
   </style>
 </head>
 <body>
@@ -874,6 +917,10 @@
           <span>Proof Mappings (source -> text frame name)</span>
           <textarea id="corebridgeProofMappings" class="log" style="height:140px;width:100%;box-sizing:border-box;">SalesPersonName -> Salesperson</textarea>
         </label>
+        <label id="corebridgeFlashFieldsWrap" class="fld hidden">
+          <span>Fields to flash until changed (target text frame name per row)</span>
+          <textarea id="corebridgeFlashFields" class="log" style="height:90px;width:100%;box-sizing:border-box;">Salesperson</textarea>
+        </label>
         <label id="corebridgeDerivedMappingsWrap" class="fld hidden">
           <span>Derived Mappings (preview only, not saved)</span>
           <textarea data-corebridge-derived-mappings class="log" style="height:140px;width:100%;box-sizing:border-box;" readonly></textarea>
@@ -1029,6 +1076,7 @@
         <div id="coloursList" class="wrap" style="padding:0;"></div>
         <div class="row" style="margin-top:10px;">
           <button id="btnRefreshColours" class="btn2" type="button">Refresh Colours</button>
+          <button id="btnApplyColours" class="btn2" type="button">Apply</button>
         </div>
         <div id="coloursCount" class="small" style="margin-top:8px;">Document colours: 0</div>
         <div id="colourModeBanner" style="display:none; margin-top:12px; padding:8px 10px; border-radius:8px; background:#b00020; color:#fff; font-size:12px; font-weight:600;">
@@ -1054,4 +1102,3 @@
   <script src="js/main.js"></script>
 </body>
 </html>
-
