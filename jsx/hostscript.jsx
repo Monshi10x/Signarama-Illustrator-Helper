@@ -1465,55 +1465,116 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return count;
   }
 
-  function _shiftGradientInContainer(container, shiftPt) {
-    if(!container || !(shiftPt > 0)) return 0;
-    var adjusted = 0;
-    function _shiftGradientOnItem(it) {
-      if(!it) return;
-      function _shiftGradientColor(getter, setter) {
-        var gc = null;
-        try {gc = getter();} catch(_eGg0) {gc = null;}
-        if(!gc || gc.typename !== 'GradientColor') return;
-        var angleDeg = 0;
-        try {angleDeg = Number(gc.angle || 0);} catch(_eGg1) {angleDeg = 0;}
-        if(!isFinite(angleDeg)) angleDeg = 0;
-        var rad = angleDeg * Math.PI / 180.0;
-        var dx = Math.cos(rad) * shiftPt;
-        var dy = Math.sin(rad) * shiftPt;
-        var shifted = false;
-        try {
-          var origin = gc.origin;
-          if(origin && origin.length >= 2) {
-            gc.origin = [Number(origin[0]) - dx, Number(origin[1]) - dy];
-            shifted = true;
-          }
-        } catch(_eGg2) {shifted = false;}
-        if(!shifted) {
-          try {
-            var tmx = app.getTranslationMatrix(-dx, -dy);
-            it.transform(tmx, false, false, true, false, 100, Transformation.CENTER);
-            shifted = true;
-          } catch(_eGg3) {shifted = false;}
-        }
-        if(shifted) {
-          try {setter(gc);} catch(_eGg4) { }
-          adjusted++;
-        }
-      }
-      _shiftGradientColor(function(){return (it.filled ? it.fillColor : null);}, function(v){it.fillColor = v;});
-      _shiftGradientColor(function(){return (it.stroked ? it.strokeColor : null);}, function(v){it.strokeColor = v;});
-    }
+  function _isLinearGradient(gc) {
+    if(!gc || gc.typename !== 'GradientColor') return false;
+    try {
+      var gt = gc.gradient && gc.gradient.type;
+      return String(gt) === String(GradientType.LINEAR) || String(gt).toLowerCase().indexOf('linear') >= 0;
+    } catch(_eGl0) {return false;}
+  }
+
+  function _captureGradientSnapshot(container) {
+    var out = [];
+    if(!container) return out;
     var stack = [];
     try {stack.push(container);} catch(_eGs0) { }
     while(stack.length) {
       var cur = stack.pop();
       if(!cur) continue;
-      _shiftGradientOnItem(cur);
+      function _captureOne(kind) {
+        var gc = null;
+        try {
+          gc = (kind === 'fill') ? (cur.filled ? cur.fillColor : null) : (cur.stroked ? cur.strokeColor : null);
+        } catch(_eGl1) {gc = null;}
+        if(!_isLinearGradient(gc)) return;
+        var angle = 0;
+        var length = 0;
+        var origin = null;
+        try {angle = Number(gc.angle || 0);} catch(_eGl2) {angle = 0;}
+        try {length = Number(gc.length || 0);} catch(_eGl3) {length = 0;}
+        try {
+          if(gc.origin && gc.origin.length >= 2) origin = [Number(gc.origin[0]), Number(gc.origin[1])];
+        } catch(_eGl4) {origin = null;}
+        if(!origin) return;
+        out.push({item: cur, kind: kind, angle: angle, length: length, origin: origin});
+      }
+      _captureOne('fill');
+      _captureOne('stroke');
       try {
         if(cur.pageItems && cur.pageItems.length) {
           for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
         }
       } catch(_eGs1) { }
+    }
+    return out;
+  }
+
+  function _shiftGradientBySnapshot(snapshot, shiftPt) {
+    if(!snapshot || !snapshot.length || !(shiftPt > 0)) return 0;
+    var adjusted = 0;
+    for(var i = 0; i < snapshot.length; i++) {
+      var rec = snapshot[i];
+      if(!rec || !rec.item || !rec.origin) continue;
+      var gc = null;
+      try {
+        gc = (rec.kind === 'fill') ? (rec.item.filled ? rec.item.fillColor : null) : (rec.item.stroked ? rec.item.strokeColor : null);
+      } catch(_eGs2) {gc = null;}
+      if(!_isLinearGradient(gc)) continue;
+      var angleDeg = isFinite(rec.angle) ? rec.angle : 0;
+      var rad = angleDeg * Math.PI / 180.0;
+      var dx = Math.cos(rad) * shiftPt;
+      var dy = Math.sin(rad) * shiftPt;
+      try {
+        gc.origin = [rec.origin[0] - dx, rec.origin[1] - dy];
+        if(isFinite(rec.length) && rec.length > 0) gc.length = rec.length + (shiftPt * 2);
+        if(rec.kind === 'fill') rec.item.fillColor = gc;
+        else rec.item.strokeColor = gc;
+        adjusted++;
+      } catch(_eGs3) { }
+    }
+    return adjusted;
+  }
+
+  function _shiftGradientInContainer(container, shiftPt) {
+    if(!container || !(shiftPt > 0)) return 0;
+    var adjusted = 0;
+    function _shiftOne(it, kind) {
+      if(!it) return;
+      var gc = null;
+      try {
+        gc = (kind === 'fill') ? (it.filled ? it.fillColor : null) : (it.stroked ? it.strokeColor : null);
+      } catch(_eGs4) {gc = null;}
+      if(!_isLinearGradient(gc)) return;
+      var angleDeg = 0;
+      var length = 0;
+      try {angleDeg = Number(gc.angle || 0);} catch(_eGs5) {angleDeg = 0;}
+      try {length = Number(gc.length || 0);} catch(_eGs6) {length = 0;}
+      if(!isFinite(angleDeg)) angleDeg = 0;
+      var rad = angleDeg * Math.PI / 180.0;
+      var dx = Math.cos(rad) * shiftPt;
+      var dy = Math.sin(rad) * shiftPt;
+      try {
+        if(gc.origin && gc.origin.length >= 2) {
+          gc.origin = [Number(gc.origin[0]) - dx, Number(gc.origin[1]) - dy];
+          if(isFinite(length) && length > 0) gc.length = length + (shiftPt * 2);
+          if(kind === 'fill') it.fillColor = gc;
+          else it.strokeColor = gc;
+          adjusted++;
+        }
+      } catch(_eGs7) { }
+    }
+    var stack = [];
+    try {stack.push(container);} catch(_eGs8) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      _shiftOne(cur, 'fill');
+      _shiftOne(cur, 'stroke');
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eGs9) { }
     }
     return adjusted;
   }
@@ -1521,13 +1582,11 @@ function signarama_helper_applyPathBleed(jsonStr) {
   // Back-compat shims for older cached JSX paths that may still call the
   // previous snapshot-based gradient helpers.
   function _collectGradientItems(container) {
-    return [{container: container}];
+    return _captureGradientSnapshot(container);
   }
 
   function _compensateGradientScale(snapshot) {
-    if(!snapshot || !snapshot.length) return 0;
-    var container = snapshot[0] && snapshot[0].container ? snapshot[0].container : null;
-    return _shiftGradientInContainer(container, offsetPt);
+    return _shiftGradientBySnapshot(snapshot, offsetPt);
   }
 
   function _uniteContainer(container) {
@@ -1620,9 +1679,10 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
   if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
-  var gradientSnapshot = _collectGradientItems(bleedGroup || bleedLayer);
+  var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer);
   var offsetApplied = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
-  var gradientAdjusted = _shiftGradientInContainer(bleedGroup || bleedLayer, offsetPt);
+  var gradientAdjusted = _shiftGradientBySnapshot(gradientSnapshot, offsetPt);
+  if(gradientAdjusted < 1) gradientAdjusted = _shiftGradientInContainer(bleedGroup || bleedLayer, offsetPt);
 
   if(createCutline && cutGroup) {
     if(outlineText) _outlineTextInContainer(cutGroup);
