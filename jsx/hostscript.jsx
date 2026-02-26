@@ -1620,6 +1620,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
   if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
+  var gradientSnapshot = _collectGradientItems(bleedGroup || bleedLayer);
   var offsetApplied = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
   var gradientAdjusted = _shiftGradientInContainer(bleedGroup || bleedLayer, offsetPt);
 
