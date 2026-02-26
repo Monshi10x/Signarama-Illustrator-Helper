@@ -1979,44 +1979,6 @@
         if(typeof window.refreshColoursApplyState === 'function') window.refreshColoursApplyState();
 
         data.forEach((entry) => {
-          if(colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type &&
-            colourEditState.lastEdit.mode === colourEditState.mode) {
-            const expectedHex = colourEditState.mode === 'RGB'
-              ? rgbToHex(colourEditState.lastEdit.r, colourEditState.lastEdit.g, colourEditState.lastEdit.b)
-              : cmykToHex(colourEditState.lastEdit.c, colourEditState.lastEdit.m, colourEditState.lastEdit.y, colourEditState.lastEdit.k);
-            const matchesEdit = entry.key === colourEditState.lastEdit.toKey ||
-              entry.key === colourEditState.lastEdit.fromKey ||
-              (entry.hex && entry.hex.toLowerCase() === expectedHex.toLowerCase()) ||
-              (entry.hex && colourEditState.lastEdit.fromHex &&
-                entry.hex.toLowerCase() === colourEditState.lastEdit.fromHex.toLowerCase());
-            if(matchesEdit) {
-              if(colourEditState.mode === 'RGB') {
-                entry.r = colourEditState.lastEdit.r;
-                entry.g = colourEditState.lastEdit.g;
-                entry.b = colourEditState.lastEdit.b;
-                entry.key = colourEditState.lastEdit.toKey;
-                entry.hex = expectedHex;
-                entry.label = (entry.type || 'fill').toUpperCase() + '  R ' + entry.r + ' G ' + entry.g + ' B ' + entry.b;
-              } else {
-                entry.c = colourEditState.lastEdit.c;
-                entry.m = colourEditState.lastEdit.m;
-                entry.y = colourEditState.lastEdit.y;
-                entry.k = colourEditState.lastEdit.k;
-                entry.key = colourEditState.lastEdit.toKey;
-                entry.hex = expectedHex;
-                entry.label = (entry.type || 'fill').toUpperCase() + '  C ' + entry.c + ' M ' + entry.m + ' Y ' + entry.y + ' K ' + entry.k;
-              }
-              const valueLog = colourEditState.mode === 'RGB'
-                ? [entry.r, entry.g, entry.b].join(',')
-                : [entry.c, entry.m, entry.y, entry.k].join(',');
-              log('Colours: matched lastEdit toKey=' + colourEditState.lastEdit.toKey + ' type=' + (entry.type || '') +
-                ' values=' + valueLog + ' hexMatch=' +
-                (entry.hex ? entry.hex.toLowerCase() === expectedHex.toLowerCase() : false) +
-                ' fromKeyMatch=' + (entry.key === colourEditState.lastEdit.fromKey) +
-                ' fromHexMatch=' + (entry.hex && colourEditState.lastEdit.fromHex ?
-                  entry.hex.toLowerCase() === colourEditState.lastEdit.fromHex.toLowerCase() : false));
-            }
-          }
           if(colourEditState.mode === 'RGB') {
             log('Colours: row values key=' + (entry.key || '') + ' type=' + (entry.type || '') +
               ' rgb=' + [entry.r, entry.g, entry.b].join(',') + ' hex=' + (entry.hex || ''));
