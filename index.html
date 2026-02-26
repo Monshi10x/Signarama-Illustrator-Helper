@@ -318,6 +318,36 @@
       background:#3a3a3a;
       color:#fff;
     }
+    .btn2.pulse-alert {
+      animation: srh-pulse-red 0.9s ease-in-out infinite;
+      border-color:#8f0d23;
+    }
+    @keyframes srh-pulse-red {
+      0%, 100% { background:#2a2a2a; }
+      50% { background:#7a0d22; }
+    }
+    .colour-input-wrap {
+      position:relative;
+      min-width:56px;
+      flex:1 1 56px;
+      max-width:74px;
+    }
+    .colour-input-wrap input {
+      width:100%;
+      box-sizing:border-box;
+      padding-top:14px;
+      padding-bottom:6px;
+      text-align:center;
+    }
+    .colour-input-float {
+      position:absolute;
+      left:10px;
+      top:3px;
+      font-size:10px;
+      color:#9f9f9f;
+      pointer-events:none;
+      font-weight:700;
+    }
   </style>
 </head>
 <body>
@@ -1033,6 +1063,7 @@
         <div id="coloursList" class="wrap" style="padding:0;"></div>
         <div class="row" style="margin-top:10px;">
           <button id="btnRefreshColours" class="btn2" type="button">Refresh Colours</button>
+          <button id="btnApplyColours" class="btn2" type="button">Apply</button>
         </div>
         <div id="coloursCount" class="small" style="margin-top:8px;">Document colours: 0</div>
         <div id="colourModeBanner" style="display:none; margin-top:12px; padding:8px 10px; border-radius:8px; background:#b00020; color:#fff; font-size:12px; font-weight:600;">

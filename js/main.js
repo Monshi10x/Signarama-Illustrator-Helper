@@ -149,6 +149,8 @@
   let corebridgeFlashTickPollTimer = null;
   let corebridgeFlashTickPollCount = 0;
   let corebridgeFlashLastTickCount = -1;
+  let coloursPendingApplyFns = [];
+  let coloursHasPendingChanges = false;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -1829,6 +1831,33 @@
   function wireColours() {
     const refreshBtn = $('btnRefreshColours');
     if(refreshBtn) refreshBtn.onclick = () => refreshColours({showToastOnComplete: true});
+    const applyBtn = $('btnApplyColours');
+    function refreshApplyButtonState() {
+      if(!applyBtn) return;
+      applyBtn.disabled = !coloursHasPendingChanges;
+      applyBtn.classList.toggle('pulse-alert', !!coloursHasPendingChanges);
+    }
+    if(applyBtn) {
+      applyBtn.onclick = () => {
+        if(!coloursPendingApplyFns.length) return;
+        const fns = coloursPendingApplyFns.slice(0);
+        coloursPendingApplyFns = [];
+        coloursHasPendingChanges = false;
+        refreshApplyButtonState();
+        let idx = 0;
+        function runNext() {
+          if(idx >= fns.length) {
+            refreshColours();
+            return;
+          }
+          const fn = fns[idx++];
+          try {fn(runNext);} catch(_eApplyNext) {runNext();}
+        }
+        runNext();
+      };
+      refreshApplyButtonState();
+    }
+    window.refreshColoursApplyState = refreshApplyButtonState;
     window.refreshColours = refreshColours;
   }
 
@@ -1945,6 +1974,10 @@
           return byCmyk || byRgb;
         }
 
+        coloursPendingApplyFns = [];
+        coloursHasPendingChanges = false;
+        if(typeof window.refreshColoursApplyState === 'function') window.refreshColoursApplyState();
+
         data.forEach((entry) => {
           if(colourEditState.lastEdit && entry.type === colourEditState.lastEdit.type &&
             colourEditState.lastEdit.mode === colourEditState.mode) {
@@ -2020,15 +2053,15 @@
           label.style.display = 'flex';
           label.style.flexDirection = 'column';
           label.style.gap = '2px';
-          label.style.minWidth = '180px';
-          label.style.flex = '1 1 auto';
+          label.style.minWidth = '76px';
+          label.style.flex = '0 0 76px';
           const labelTop = document.createElement('div');
           labelTop.textContent = typeText;
           labelTop.style.fontSize = '12px';
           labelTop.style.fontWeight = '700';
           labelTop.style.color = '#d7d7d7';
           const labelBottom = document.createElement('div');
-          labelBottom.textContent = cmykLine;
+          labelBottom.textContent = '';
           labelBottom.style.fontSize = '11px';
           labelBottom.style.color = '#bcbcbc';
           label.appendChild(labelTop);
@@ -2061,13 +2094,24 @@
             kInput.value = entry.k || 0;
             inputs.push(cInput, mInput, yInput, kInput);
           }
-          inputs.forEach(inp => {
-            inp.style.width = '35px';
+          const inputWraps = [];
+          const floatLabels = colourEditState.mode === 'RGB' ? ['R', 'G', 'B'] : ['C', 'M', 'Y', 'K'];
+          inputs.forEach((inp, idx) => {
+            inp.style.width = '100%';
+            const w = document.createElement('div');
+            w.className = 'colour-input-wrap';
+            const fl = document.createElement('span');
+            fl.className = 'colour-input-float';
+            fl.textContent = floatLabels[idx] || '';
+            w.appendChild(inp);
+            w.appendChild(fl);
+            inputWraps.push(w);
           });
           log('Colours: set inputs key=' + (entry.key || '') + ' type=' + (entry.type || '') +
             ' values=' + inputs.map(i => i.value).join(','));
 
-          function applyValues() {
+          function applyValues(onDone) {
+            const finish = () => { if(typeof onDone === 'function') onDone(); };
             if(colourEditState.mode === 'RGB') {
               const rRaw = parseFloat(inputs[0].value);
               const gRaw = parseFloat(inputs[1].value);
@@ -2101,8 +2145,8 @@
                   toKey: rgbKey(r, g, b),
                   r, g, b
                 };
-                log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
-                refreshColours();
+                log('Colours: apply RGB done toKey=' + colourEditState.lastEdit.toKey);
+                finish();
               });
               return;
             }
@@ -2127,10 +2171,7 @@
               const match = (result || '').match(/Updated\s+(\d+)/i);
               const updated = match ? parseInt(match[1], 10) : 0;
               log('Colours: replace result=' + (result || '') + ' updated=' + updated);
-              if(!updated) {
-                refreshColours();
-                return;
-              }
+              if(!updated) { finish(); return; }
               swatch.style.background = cmykToHex(c, m, y, k);
               colourEditState.lastEdit = {
                 mode: 'CMYK',
@@ -2140,13 +2181,23 @@
                 toKey: cmykKey(c, m, y, k),
                 c, m, y, k
               };
-              log('Colours: refresh after replace toKey=' + colourEditState.lastEdit.toKey);
-              refreshColours();
+              log('Colours: apply CMYK done toKey=' + colourEditState.lastEdit.toKey);
+              finish();
             });
           }
 
+          let rowDirty = false;
+          function markRowDirty() {
+            if(rowDirty) return;
+            rowDirty = true;
+            coloursHasPendingChanges = true;
+            coloursPendingApplyFns.push((done) => applyValues(done));
+            if(typeof window.refreshColoursApplyState === 'function') window.refreshColoursApplyState();
+          }
+
           inputs.forEach((inp, idx) => {
-            inp.addEventListener('change', applyValues);
+            inp.addEventListener('change', markRowDirty);
+            inp.addEventListener('input', markRowDirty);
             inp.addEventListener('focus', () => {
               try {inp.select();} catch(_eSel) { }
             });
@@ -2169,7 +2220,7 @@
 
           row.appendChild(swatch);
           row.appendChild(label);
-          inputs.forEach(inp => row.appendChild(inp));
+          inputWraps.forEach(w => row.appendChild(w));
           if(showBlackHazard) {
             const hazard = document.createElement('span');
             hazard.textContent = '\u26A0';
@@ -2177,7 +2228,8 @@
             hazard.style.color = '#ffba00';
             hazard.style.fontWeight = '800';
             hazard.style.fontSize = '16px';
-            hazard.style.marginLeft = '6px';
+            hazard.style.marginLeft = '2px';
+            hazard.style.flex = '0 0 auto';
             row.appendChild(hazard);
           }
           list.appendChild(row);

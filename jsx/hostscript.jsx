@@ -2119,6 +2119,7 @@ function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
       layer.name = _srhCorebridgeFlashArrowLayerName;
       layer.visible = true;
       layer.printable = false;
+      layer.locked = true;
     } catch(_eArrowLayerCreate) {layer = null;}
   }
   return layer;
@@ -2241,6 +2242,14 @@ function _srh_corebridge_flashTick() {
     if(currentValue !== entry.baseValue) {
       _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      _srh_corebridge_removeArrow(entry);
+      entries.splice(i, 1);
+      continue;
+    }
+    var isSelected = false;
+    try {isSelected = !!entry.frame.selected;} catch(_eFlashSelected) {isSelected = false;}
+    if(isSelected) {
+      try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone2) { }
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
