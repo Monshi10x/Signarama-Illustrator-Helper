@@ -2028,7 +2028,7 @@
             ' cmyk=' + [entry.c, entry.m, entry.y, entry.k].join(',') + ' hex=' + (entry.hex || ''));
 
           const row = document.createElement('div');
-          row.className = 'row';
+          row.className = 'row colour-row-shell';
           row.style.alignItems = 'center';
           row.style.gap = '10px';
 
@@ -2099,6 +2099,7 @@
           const floatLabels = colourEditState.mode === 'RGB' ? ['R', 'G', 'B'] : ['C', 'M', 'Y', 'K'];
           inputs.forEach((inp, idx) => {
             inp.style.width = '100%';
+            inp.style.borderColor = '#252525';
             const w = document.createElement('div');
             w.className = 'colour-input-wrap';
             const fl = document.createElement('span');
@@ -2265,10 +2266,7 @@
         });
 
         if(debug) {
-          const dbg = document.createElement('div');
-          dbg.className = 'small';
-          dbg.style.marginTop = '8px';
-          dbg.textContent = 'Debug: total=' + (debug.totalItems || 0) +
+          const dbgText = 'Debug: total=' + (debug.totalItems || 0) +
             ', scanned=' + (debug.scanned || 0) +
             ', path=' + (debug.pathItems || 0) +
             ', text=' + (debug.textFrames || 0) +
@@ -2276,8 +2274,7 @@
             ', docText=' + (debug.totalTextFrames || 0) +
             ', fallback=' + (debug.fallbackUsed ? 'yes' : 'no') +
             ', samples=' + (debug.sampleTypes || []).join(', ');
-          list.appendChild(dbg);
-          log('Colours debug: ' + dbg.textContent);
+          log('Colours debug: ' + dbgText);
         }
 
         if(focusedMeta) {
