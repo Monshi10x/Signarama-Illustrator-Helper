@@ -338,6 +338,13 @@
       padding-top:14px;
       padding-bottom:6px;
       text-align:center;
+      color:#cfcfcf;
+      -moz-appearance:textfield;
+    }
+    .colour-input-wrap input::-webkit-outer-spin-button,
+    .colour-input-wrap input::-webkit-inner-spin-button {
+      -webkit-appearance:none;
+      margin:0;
     }
     .colour-input-float {
       position:absolute;
@@ -347,6 +354,12 @@
       color:#9f9f9f;
       pointer-events:none;
       font-weight:700;
+    }
+    .colour-row-dirty {
+      border:1px solid #8f0d23;
+      border-radius:10px;
+      padding:6px;
+      animation: srh-pulse-red 0.9s ease-in-out infinite;
     }
   </style>
 </head>

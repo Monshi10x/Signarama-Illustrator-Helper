@@ -2033,16 +2033,17 @@
           row.style.gap = '10px';
 
           const swatch = document.createElement('div');
-          swatch.style.width = '34px';
+          swatch.style.width = '68px';
           swatch.style.height = '34px';
-          swatch.style.minWidth = '34px';
+          swatch.style.minWidth = '68px';
           swatch.style.minHeight = '34px';
-          swatch.style.maxWidth = '34px';
+          swatch.style.maxWidth = '68px';
           swatch.style.maxHeight = '34px';
-          swatch.style.flex = '0 0 34px';
+          swatch.style.flex = '0 0 68px';
           swatch.style.border = '1px solid #444';
           swatch.style.borderRadius = '6px';
           swatch.style.background = entry.hex || '#000000';
+          const baseSwatchHex = entry.hex || '#000000';
 
           const cmyk = getDisplayCmyk(entry);
           const typeText = String(entry.type || 'fill').toUpperCase();
@@ -2110,6 +2111,27 @@
           log('Colours: set inputs key=' + (entry.key || '') + ' type=' + (entry.type || '') +
             ' values=' + inputs.map(i => i.value).join(','));
 
+          function previewSwatch() {
+            if(!rowDirty) {
+              swatch.style.background = baseSwatchHex;
+              return;
+            }
+            if(colourEditState.mode === 'RGB') {
+              const r = isFinite(parseFloat(inputs[0].value)) ? parseFloat(inputs[0].value) : num(entry.r);
+              const g = isFinite(parseFloat(inputs[1].value)) ? parseFloat(inputs[1].value) : num(entry.g);
+              const b = isFinite(parseFloat(inputs[2].value)) ? parseFloat(inputs[2].value) : num(entry.b);
+              const nextHex = rgbToHex(r, g, b);
+              swatch.style.background = 'linear-gradient(to right, ' + baseSwatchHex + ' 0 50%, ' + nextHex + ' 50% 100%)';
+              return;
+            }
+            const c = isFinite(parseFloat(inputs[0].value)) ? parseFloat(inputs[0].value) : num(entry.c);
+            const m = isFinite(parseFloat(inputs[1].value)) ? parseFloat(inputs[1].value) : num(entry.m);
+            const y = isFinite(parseFloat(inputs[2].value)) ? parseFloat(inputs[2].value) : num(entry.y);
+            const k = isFinite(parseFloat(inputs[3].value)) ? parseFloat(inputs[3].value) : num(entry.k);
+            const nextHex = cmykToHex(c, m, y, k);
+            swatch.style.background = 'linear-gradient(to right, ' + baseSwatchHex + ' 0 50%, ' + nextHex + ' 50% 100%)';
+          }
+
           function applyValues(onDone) {
             const finish = () => { if(typeof onDone === 'function') onDone(); };
             if(colourEditState.mode === 'RGB') {
@@ -2146,6 +2168,7 @@
                   r, g, b
                 };
                 log('Colours: apply RGB done toKey=' + colourEditState.lastEdit.toKey);
+                row.classList.remove('colour-row-dirty');
                 finish();
               });
               return;
@@ -2182,6 +2205,7 @@
                 c, m, y, k
               };
               log('Colours: apply CMYK done toKey=' + colourEditState.lastEdit.toKey);
+              row.classList.remove('colour-row-dirty');
               finish();
             });
           }
@@ -2190,14 +2214,19 @@
           function markRowDirty() {
             if(rowDirty) return;
             rowDirty = true;
+            row.classList.add('colour-row-dirty');
             coloursHasPendingChanges = true;
             coloursPendingApplyFns.push((done) => applyValues(done));
             if(typeof window.refreshColoursApplyState === 'function') window.refreshColoursApplyState();
+            previewSwatch();
           }
 
           inputs.forEach((inp, idx) => {
             inp.addEventListener('change', markRowDirty);
-            inp.addEventListener('input', markRowDirty);
+            inp.addEventListener('input', () => {
+              markRowDirty();
+              previewSwatch();
+            });
             inp.addEventListener('focus', () => {
               try {inp.select();} catch(_eSel) { }
             });
