@@ -27,6 +27,298 @@ function signarama_helper_fitArtboardToArtwork() {
   return 'Artboard fitted to artwork bounds: ' + _srh_fmtBounds(b);
 }
 
+/**
+ * Debug helper: create a rectangle at active artboard center and apply
+ * a brand-new linear gradient intended to use stop rampPoints 10/90.
+ */
+function signarama_helper_debugCreateGradientRect1090() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var errs = [];
+  function _err(tag, e) {
+    var t = '';
+    try {t = String(e);} catch(_eDbgEr0) {t = 'unknown';}
+    errs.push(tag + ': ' + t);
+  }
+
+  try {app.beginUndoGroup('SRH Debug Gradient 10/90');} catch(_eDbgUg0) { }
+  try {
+    var abIdx = 0;
+    var ab = null;
+    try {abIdx = doc.artboards.getActiveArtboardIndex();} catch(_eDbgGr0) {abIdx = 0; _err('activeArtboardIndex', _eDbgGr0);}
+    try {ab = doc.artboards[abIdx].artboardRect;} catch(_eDbgGr1) {ab = null; _err('artboardRect', _eDbgGr1);}
+    if(!ab || ab.length !== 4) return 'Could not read active artboard. errors=' + errs.join(' | ');
+
+    var left = Number(ab[0]);
+    var top = Number(ab[1]);
+    var right = Number(ab[2]);
+    var bottom = Number(ab[3]);
+    var cx = (left + right) / 2;
+    var cy = (top + bottom) / 2;
+
+    var w = _srh_mm2ptDoc(120);
+    var h = _srh_mm2ptDoc(60);
+    if(!(w > 0)) w = 340;
+    if(!(h > 0)) h = 170;
+    var rectLeft = cx - (w / 2);
+    var rectTop = cy + (h / 2);
+
+    var dbgLayer = null;
+    try {dbgLayer = doc.layers.getByName('SRH_DEBUG');} catch(_eDbgLay0) {dbgLayer = null;}
+    if(!dbgLayer) {
+      try {
+        dbgLayer = doc.layers.add();
+        dbgLayer.name = 'SRH_DEBUG';
+      } catch(_eDbgLay1) {dbgLayer = null; _err('createLayer', _eDbgLay1);}
+    }
+    if(dbgLayer) {
+      try {dbgLayer.visible = true;} catch(_eDbgLay2) { _err('layerVisible', _eDbgLay2); }
+      try {dbgLayer.locked = false;} catch(_eDbgLay3) { _err('layerUnlocked', _eDbgLay3); }
+      try {doc.activeLayer = dbgLayer;} catch(_eDbgLay5) { _err('setActiveLayer', _eDbgLay5); }
+    }
+
+    var rect = null;
+    try {
+      if(dbgLayer) rect = dbgLayer.pathItems.rectangle(rectTop, rectLeft, w, h);
+      else rect = doc.pathItems.rectangle(rectTop, rectLeft, w, h);
+    } catch(_eDbgGr2) {rect = null; _err('createRectangle', _eDbgGr2);}
+    if(!rect) {
+      return 'Failed to create debug rectangle. targetLayer=' + (dbgLayer ? 'SRH_DEBUG' : 'document') +
+        ' | rectTop=' + rectTop + ' rectLeft=' + rectLeft + ' w=' + w + ' h=' + h +
+        ' | errors=' + errs.join(' | ');
+    }
+
+    try {rect.name = 'SRH_DEBUG_GRAD_10_90';} catch(_eDbgGr3) { _err('nameRectangle', _eDbgGr3); }
+    try {rect.stroked = false;} catch(_eDbgGr4) { _err('setStrokedFalse', _eDbgGr4); }
+    try {rect.filled = true;} catch(_eDbgGr5) { _err('setFilledTrue', _eDbgGr5); }
+
+    var white = new RGBColor();
+    white.red = 255; white.green = 255; white.blue = 255;
+    var black = new RGBColor();
+    black.red = 0; black.green = 0; black.blue = 0;
+
+    var g = null;
+    try {g = doc.gradients.add();} catch(_eDbgGr6) {g = null; _err('createGradient', _eDbgGr6);}
+    if(!g) return 'Failed to create gradient. errors=' + errs.join(' | ');
+    try {g.type = GradientType.LINEAR;} catch(_eDbgGr7) { _err('setGradientType', _eDbgGr7); }
+    try {g.name = 'SRH_DEBUG_10_90_' + new Date().getTime();} catch(_eDbgGr8) { _err('setGradientName', _eDbgGr8); }
+
+    try {
+      while(g.gradientStops.length > 2) {
+        try {g.gradientStops[g.gradientStops.length - 1].remove();} catch(_eDbgGr9) { _err('trimStops', _eDbgGr9); break;}
+      }
+      while(g.gradientStops.length < 2) g.gradientStops.add();
+    } catch(_eDbgGr10) { _err('normalizeStops', _eDbgGr10); }
+    try {g.gradientStops[0].color = white;} catch(_eDbgGr11) { _err('setStop0Color', _eDbgGr11); }
+    try {g.gradientStops[1].color = black;} catch(_eDbgGr12) { _err('setStop1Color', _eDbgGr12); }
+    try {g.gradientStops[0].rampPoint = 10;} catch(_eDbgGr13) { _err('setStop0Ramp10', _eDbgGr13); }
+    try {g.gradientStops[1].rampPoint = 90;} catch(_eDbgGr14) { _err('setStop1Ramp90', _eDbgGr14); }
+
+    var gc = null;
+    try {gc = new GradientColor();} catch(_eDbgGr15) {gc = null; _err('newGradientColor', _eDbgGr15);}
+    if(!gc) return 'Failed to create GradientColor. errors=' + errs.join(' | ');
+    try {gc.gradient = g;} catch(_eDbgGr16) { _err('assignGradientToColor', _eDbgGr16); }
+    try {gc.angle = 0;} catch(_eDbgGr17) { _err('setAngle', _eDbgGr17); }
+    try {gc.origin = [rectLeft, cy];} catch(_eDbgGr18) { _err('setOrigin', _eDbgGr18); }
+    try {gc.length = w;} catch(_eDbgGr19) { _err('setLength', _eDbgGr19); }
+
+    try {rect.fillColor = gc;} catch(_eDbgGr20) {
+      _err('assignFillColor', _eDbgGr20);
+      return 'Failed to assign gradient fill. errors=' + errs.join(' | ');
+    }
+
+    try {rect.selected = true;} catch(_eDbgSel0) { _err('selectRect', _eDbgSel0); }
+    try {app.redraw();} catch(_eDbgRedraw0) { _err('redraw', _eDbgRedraw0); }
+
+    var readbackStops = [];
+    var readbackName = '';
+    var readbackCount = 0;
+    try {
+      var applied = rect.fillColor;
+      if(applied && applied.typename === 'GradientColor' && applied.gradient && applied.gradient.gradientStops) {
+        try {readbackName = String(applied.gradient.name || '');} catch(_eDbgGr23) {readbackName = '';}
+        try {readbackCount = Number(applied.gradient.gradientStops.length || 0);} catch(_eDbgGr24) {readbackCount = 0;}
+        for(var i = 0; i < applied.gradient.gradientStops.length; i++) {
+          var rp = 0;
+          try {rp = Number(applied.gradient.gradientStops[i].rampPoint || 0);} catch(_eDbgGr21) {rp = 0;}
+          readbackStops.push(Math.round(rp * 1000) / 1000);
+        }
+      }
+    } catch(_eDbgGr22) { _err('readback', _eDbgGr22); }
+
+    var rb = null;
+    try {rb = rect.visibleBounds;} catch(_eDbgRb0) {rb = null; _err('readBounds', _eDbgRb0); }
+
+    return 'Debug rect created: ' + (rect.name || 'unnamed') +
+      ' | layer=' + (function() {try {return String((rect.layer && rect.layer.name) || '');} catch(_eDbgLay4) {return '';}})() +
+      ' | center=[' + (Math.round(cx * 1000) / 1000) + ', ' + (Math.round(cy * 1000) / 1000) + ']' +
+      ' | bounds=' + (rb && rb.length === 4 ? ('[' + (Math.round(rb[0] * 1000) / 1000) + ',' + (Math.round(rb[1] * 1000) / 1000) + ',' + (Math.round(rb[2] * 1000) / 1000) + ',' + (Math.round(rb[3] * 1000) / 1000) + ']') : '[n/a]') +
+      ' | requestedStops=[10,90]' +
+      ' | readbackStops=[' + readbackStops.join(', ') + ']' +
+      ' | readbackStopCount=' + readbackCount +
+      ' | gradient=' + readbackName +
+      (errs.length ? (' | warnings=' + errs.join(' | ')) : '');
+  } finally {
+    try {app.endUndoGroup();} catch(_eDbgUg1) { }
+  }
+}
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_debugCreateGradientRect1090 = signarama_helper_debugCreateGradientRect1090;} catch(_eDbgExp0) { }
+try {this.signarama_helper_debugCreateGradientRect1090 = signarama_helper_debugCreateGradientRect1090;} catch(_eDbgExp1) { }
+
+/**
+ * Debug helper: for selected items, force gradient stop ramp points into
+ * a 10..90 range while preserving stop count/colors.
+ */
+function signarama_helper_debugSetSelectedGradientStops1090() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  if(!doc.selection || !doc.selection.length) return 'No selection.';
+
+  function _isGradientColor(gc) {
+    try {return !!(gc && gc.typename === 'GradientColor' && gc.gradient && gc.gradient.gradientStops);} catch(_eSg0) {return false;}
+  }
+  function _readStops(grad) {
+    var out = [];
+    if(!grad) return out;
+    var stops = null;
+    try {stops = grad.gradientStops;} catch(_eSg1) {stops = null;}
+    if(!stops || !stops.length) return out;
+    for(var i = 0; i < stops.length; i++) {
+      out.push({
+        color: (function(s) {try {return s.color;} catch(_eSg2) {return null;}})(stops[i]),
+        midPoint: (function(s) {try {return Number(s.midPoint || 50);} catch(_eSg3) {return 50;}})(stops[i]),
+        opacity: (function(s) {try {return Number(s.opacity || 100);} catch(_eSg4) {return 100;}})(stops[i]),
+        rampPoint: (function(s) {try {return Number(s.rampPoint || 0);} catch(_eSg5) {return 0;}})(stops[i])
+      });
+    }
+    return out;
+  }
+  function _build1090Stops(srcStops) {
+    var out = [];
+    if(!srcStops || !srcStops.length) return out;
+    if(srcStops.length === 1) {
+      out.push({color: srcStops[0].color, midPoint: srcStops[0].midPoint, opacity: srcStops[0].opacity, rampPoint: 50});
+      return out;
+    }
+    for(var i = 0; i < srcStops.length; i++) {
+      var t = i / (srcStops.length - 1);
+      out.push({
+        color: srcStops[i].color,
+        midPoint: srcStops[i].midPoint,
+        opacity: srcStops[i].opacity,
+        rampPoint: 10 + (80 * t)
+      });
+    }
+    return out;
+  }
+  function _rebuildGradientColor(gc) {
+    var res = {ok: false, color: null, stopCount: 0, stopsText: ''};
+    if(!_isGradientColor(gc)) return res;
+    var srcGrad = null;
+    try {srcGrad = gc.gradient;} catch(_eSg6) {srcGrad = null;}
+    if(!srcGrad) return res;
+    var srcStops = _readStops(srcGrad);
+    if(!srcStops.length) return res;
+    var newStops = _build1090Stops(srcStops);
+    if(!newStops.length) return res;
+
+    var newGrad = null;
+    try {newGrad = doc.gradients.add();} catch(_eSg7) {newGrad = null;}
+    if(!newGrad) return res;
+    try {newGrad.type = srcGrad.type;} catch(_eSg8) { }
+    try {newGrad.name = 'SRH_SET_10_90_' + new Date().getTime();} catch(_eSg9) { }
+    try {
+      while(newGrad.gradientStops.length < newStops.length) newGrad.gradientStops.add();
+      while(newGrad.gradientStops.length > newStops.length && newGrad.gradientStops.length > 2) {
+        try {newGrad.gradientStops[newGrad.gradientStops.length - 1].remove();} catch(_eSg10) {break;}
+      }
+    } catch(_eSg11) { }
+    for(var i = 0; i < newStops.length; i++) {
+      var ds = null;
+      try {ds = newGrad.gradientStops[i];} catch(_eSg12) {ds = null;}
+      if(!ds) continue;
+      try {ds.color = newStops[i].color;} catch(_eSg13) { }
+      try {ds.midPoint = newStops[i].midPoint;} catch(_eSg14) { }
+      try {ds.opacity = newStops[i].opacity;} catch(_eSg15) { }
+      try {ds.rampPoint = Number(newStops[i].rampPoint);} catch(_eSg16) { }
+    }
+
+    var outGc = null;
+    try {outGc = new GradientColor();} catch(_eSg17) {outGc = null;}
+    if(!outGc) return res;
+    try {outGc.gradient = newGrad;} catch(_eSg18) {return res;}
+    try {outGc.angle = gc.angle;} catch(_eSg19) { }
+    try {if(gc.origin && gc.origin.length >= 2) outGc.origin = [Number(gc.origin[0]), Number(gc.origin[1])];} catch(_eSg20) { }
+    try {outGc.length = gc.length;} catch(_eSg21) { }
+    try {outGc.hiliteAngle = gc.hiliteAngle;} catch(_eSg22) { }
+    try {outGc.hiliteLength = gc.hiliteLength;} catch(_eSg23) { }
+    try {outGc.matrix = gc.matrix;} catch(_eSg24) { }
+
+    var txt = [];
+    try {
+      var gs = newGrad.gradientStops;
+      for(var k = 0; k < gs.length; k++) txt.push(String(Math.round(Number(gs[k].rampPoint || 0) * 1000) / 1000));
+    } catch(_eSg25) { }
+    res.ok = true;
+    res.color = outGc;
+    res.stopCount = newStops.length;
+    res.stopsText = '[' + txt.join(', ') + ']';
+    return res;
+  }
+
+  function _setFillGradient(item) {
+    var gc = null;
+    try {gc = (item.filled ? item.fillColor : null);} catch(_eSg26) {gc = null;}
+    if(!_isGradientColor(gc)) return 0;
+    var rebuilt = _rebuildGradientColor(gc);
+    if(!rebuilt.ok || !rebuilt.color) return 0;
+    try {item.filled = true;} catch(_eSg27) { }
+    try {item.fillColor = rebuilt.color; return 1;} catch(_eSg28) {return 0;}
+  }
+  function _setStrokeGradient(item) {
+    var gc = null;
+    try {gc = (item.stroked ? item.strokeColor : null);} catch(_eSg29) {gc = null;}
+    if(!_isGradientColor(gc)) return 0;
+    var rebuilt = _rebuildGradientColor(gc);
+    if(!rebuilt.ok || !rebuilt.color) return 0;
+    try {item.stroked = true;} catch(_eSg30) { }
+    try {item.strokeColor = rebuilt.color; return 1;} catch(_eSg31) {return 0;}
+  }
+
+  var stack = [];
+  for(var s = 0; s < doc.selection.length; s++) stack.push(doc.selection[s]);
+  var seen = [];
+  var touchedItems = 0;
+  var changedGradients = 0;
+  while(stack.length) {
+    var cur = stack.pop();
+    if(!cur) continue;
+    var dupe = false;
+    for(var si = 0; si < seen.length; si++) {if(seen[si] === cur) {dupe = true; break;}}
+    if(dupe) continue;
+    seen.push(cur);
+
+    var changed = 0;
+    changed += _setFillGradient(cur);
+    changed += _setStrokeGradient(cur);
+    if(changed > 0) {
+      touchedItems++;
+      changedGradients += changed;
+    }
+    try {
+      if(cur.typename === 'CompoundPathItem' && cur.pathItems && cur.pathItems.length) {
+        for(var cp = 0; cp < cur.pathItems.length; cp++) stack.push(cur.pathItems[cp]);
+      } else if(cur.pageItems && cur.pageItems.length) {
+        for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+      }
+    } catch(_eSg32) { }
+  }
+  try {app.redraw();} catch(_eSg33) { }
+  return 'Set gradient stops to 10/90. Items touched: ' + touchedItems + ', gradients updated: ' + changedGradients + '.';
+}
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_debugSetSelectedGradientStops1090 = signarama_helper_debugSetSelectedGradientStops1090;} catch(_eDbgExp2) { }
+try {this.signarama_helper_debugSetSelectedGradientStops1090 = signarama_helper_debugSetSelectedGradientStops1090;} catch(_eDbgExp3) { }
+
 function _srh_fmtBounds(b) {
   function r(n) {return Math.round(n * 1000) / 1000;}
   return '[L ' + r(b.left) + ', T ' + r(b.top) + ', R ' + r(b.right) + ', B ' + r(b.bottom) + ']';
@@ -1283,6 +1575,15 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   var offsetPt = _srh_mm2ptDoc(offsetMm);
   if(!(offsetPt > 0)) {return "Offset amount must be > 0 mm.";}
+  var forceBleedSolidRedTest = false;
+  var forceBleedStopTest2080 = false;
+  var forceSolidPrimeBeforeGradientAssign = false;
+  var pathBleedDebugVerbose = false;
+  var _pathBleedLogLines = [];
+  function _pathBleedWithDbg(msg) {
+    if(!_pathBleedLogLines || !_pathBleedLogLines.length) return msg;
+    return msg + '\n' + _pathBleedLogLines.join('\n');
+  }
 
   function _getOrCreateCutContourSpot() {
     var spot = null;
@@ -1416,16 +1717,19 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   function _applyOffsetToContainer(container, ofst) {
     if(!container) return false;
+    _pathBleedDebug('offset START | ofst=' + _fmtNum3(ofst) + ' | container=' + _itemRef(container));
     var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(ofst) + ' I jntp 0 R mlim 180"/></LiveEffect>';
     var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(ofst) + ' I jntp 0"/></LiveEffect>';
     var applied = false;
     try {
       container.applyEffect(fx1);
       applied = true;
+      _pathBleedDebug('offset applyEffect fx1 on container OK');
     } catch(_eFxA) {
       try {
         container.applyEffect(fx2);
         applied = true;
+        _pathBleedDebug('offset applyEffect fx2 on container OK');
       } catch(_eFxB) { }
     }
     if(!applied) {
@@ -1436,17 +1740,21 @@ function signarama_helper_applyPathBleed(jsonStr) {
         try {
           it.applyEffect(fx1);
           applied = true;
+          _pathBleedDebug('offset applyEffect fx1 on child OK | ' + _itemRef(it));
         } catch(_eFxK1) {
           try {
             it.applyEffect(fx2);
             applied = true;
+            _pathBleedDebug('offset applyEffect fx2 on child OK | ' + _itemRef(it));
           } catch(_eFxK2) { }
         }
       }
     }
     if(applied) {
       _runOnSelection(container, function() {_expandSelection();});
+      _pathBleedDebug('offset expand selection OK');
     }
+    _pathBleedDebug('offset END | applied=' + (applied ? 'yes' : 'no'));
     return applied;
   }
 
@@ -1466,14 +1774,780 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
 
   function _isLinearGradient(gc) {
-    if(!gc || gc.typename !== 'GradientColor') return false;
+    if(!_isGradientColor(gc)) return false;
     try {
       var gt = gc.gradient && gc.gradient.type;
       return String(gt) === String(GradientType.LINEAR) || String(gt).toLowerCase().indexOf('linear') >= 0;
     } catch(_eGl0) {return false;}
   }
 
-  function _captureGradientSnapshot(container) {
+  function _pathBleedDebug(msg) {
+    if(!pathBleedDebugVerbose) return;
+    try {$.writeln('[SRH][pathBleed] ' + msg);} catch(_eDbgPb0) { }
+    try {_pathBleedLogLines.push('[SRH][pathBleed] ' + msg);} catch(_eDbgPb1) { }
+  }
+  var _gradientCloneCache = {};
+
+  function _isGradientColor(gc) {
+    return !!(gc && gc.typename === 'GradientColor');
+  }
+
+  function _fmtNum3(v) {
+    var n = Number(v);
+    if(!isFinite(n)) return 'NaN';
+    return String(Math.round(n * 1000) / 1000);
+  }
+
+  function _fmtPoint(pt) {
+    if(!pt || pt.length < 2) return '[n/a]';
+    return '[' + _fmtNum3(pt[0]) + ', ' + _fmtNum3(pt[1]) + ']';
+  }
+
+  function _fmtBounds4(b) {
+    if(!b || b.length !== 4) return '[n/a]';
+    return '[' + _fmtNum3(b[0]) + ',' + _fmtNum3(b[1]) + ',' + _fmtNum3(b[2]) + ',' + _fmtNum3(b[3]) + ']';
+  }
+
+  function _itemRef(it) {
+    if(!it) return 'null-item';
+    var tn = 'Item';
+    var nm = '';
+    var lyr = '';
+    var ptn = '';
+    var pnm = '';
+    var vb = null;
+    try {tn = String(it.typename || 'Item');} catch(_eIr0) { }
+    try {nm = String(it.name || '');} catch(_eIr1) {nm = '';}
+    try {if(it.layer) lyr = String(it.layer.name || '');} catch(_eIr2) {lyr = '';}
+    try {if(it.parent) ptn = String(it.parent.typename || '');} catch(_eIr3) {ptn = '';}
+    try {if(it.parent) pnm = String(it.parent.name || '');} catch(_eIr4) {pnm = '';}
+    try {vb = it.visibleBounds;} catch(_eIr5) {vb = null;}
+    return tn +
+      (nm ? (' "' + nm + '"') : '') +
+      (lyr ? (' @layer=' + lyr) : '') +
+      (ptn ? (' @parent=' + ptn + (pnm ? (':' + pnm) : '')) : '') +
+      ' @vb=' + _fmtBounds4(vb);
+  }
+
+  function _getGradientItemLabel(it) {
+    if(!it) return 'UnknownItem';
+    var tn = 'Item';
+    var nm = '';
+    try {tn = String(it.typename || 'Item');} catch(_eLbl0) { }
+    try {nm = String(it.name || '');} catch(_eLbl1) {nm = '';}
+    if(nm) return tn + ' "' + nm + '"';
+    return tn;
+  }
+
+  function _logGradientStateForItem(it, label) {
+    if(!it) return;
+    function _logOne(kind) {
+      var gc = _getGradientColorForKind(it, kind);
+      if(!_isGradientColor(gc)) return;
+      var angle = 0;
+      var len = 0;
+      var origin = null;
+      try {angle = Number(gc.angle || 0);} catch(_eLgs0) {angle = 0;}
+      try {len = Number(gc.length || 0);} catch(_eLgs1) {len = 0;}
+      try {if(gc.origin && gc.origin.length >= 2) origin = [Number(gc.origin[0]), Number(gc.origin[1])];} catch(_eLgs2) {origin = null;}
+      _pathBleedDebug(
+        'state ' + (label || 'item') +
+        ' | ' + kind +
+        ' | ' + _itemRef(it) +
+        ' | gradient=' + (_getGradientName(gc) || '(unnamed)') +
+        ' | stopCount=' + _getGradientStopCount(gc) +
+        ' | stops=' + _formatStops(_readGradientStopRampPoints(gc)) +
+        ' | angle=' + _fmtNum3(angle) +
+        ' | origin=' + _fmtPoint(origin) +
+        ' | length=' + _fmtNum3(len)
+      );
+    }
+    _logOne('fill');
+    _logOne('stroke');
+  }
+
+  function _logContainerState(container, label) {
+    if(!pathBleedDebugVerbose || !container) return;
+    var stack = [];
+    var total = 0;
+    var gradCount = 0;
+    try {stack.push(container);} catch(_eLcs0) { }
+    _pathBleedDebug('container-scan START ' + (label || '') + ' | root=' + _itemRef(container));
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      total++;
+      var hadGrad = false;
+      var gf = _getGradientColorForKind(cur, 'fill');
+      var gs = _getGradientColorForKind(cur, 'stroke');
+      if(_isGradientColor(gf) || _isGradientColor(gs)) {
+        hadGrad = true;
+        gradCount++;
+        _logGradientStateForItem(cur, label || 'scan');
+      } else {
+        _pathBleedDebug('state ' + (label || 'scan') + ' | no-gradient | ' + _itemRef(cur));
+      }
+      _pushGradientChildren(cur, stack);
+    }
+    _pathBleedDebug('container-scan END ' + (label || '') + ' | totalItems=' + total + ' | gradientItems=' + gradCount);
+  }
+
+  function _getGradientColorForKind(item, kind) {
+    if(!item) return null;
+    try {
+      if(kind === 'fill') {
+        try {
+          if(item.filled && _isGradientColor(item.fillColor)) return item.fillColor;
+        } catch(_eGcKind1) { }
+        try {
+          if(item.typename === "TextFrame" && item.textRange && item.textRange.characterAttributes && _isGradientColor(item.textRange.characterAttributes.fillColor)) {
+            return item.textRange.characterAttributes.fillColor;
+          }
+        } catch(_eGcKind2) { }
+        return null;
+      }
+      try {return (item.stroked && _isGradientColor(item.strokeColor)) ? item.strokeColor : null;} catch(_eGcKind3) {return null;}
+    } catch(_eGcKind0) {return null;}
+  }
+
+  function _setGradientColorForKind(item, kind, gc) {
+    if(!item || !gc) return false;
+    try {
+      var isGradientAssign = _isGradientColor(gc);
+      function _makePrimeRed() {
+        var r = new RGBColor();
+        r.red = 255; r.green = 0; r.blue = 0;
+        return r;
+      }
+      if(kind === 'fill') {
+        try {if(typeof item.filled !== 'undefined') item.filled = true;} catch(_eSetGcFill0) { }
+        if(forceSolidPrimeBeforeGradientAssign && isGradientAssign) {
+          var primeOkFill = false;
+          var redFill = _makePrimeRed();
+          try {item.fillColor = redFill; primeOkFill = true;} catch(_eSetGcPrimeF0) { }
+          if(!primeOkFill) {
+            try {
+              if(item.typename === "TextFrame" && item.textRange && item.textRange.characterAttributes) {
+                item.textRange.characterAttributes.fillColor = redFill;
+                primeOkFill = true;
+              }
+            } catch(_eSetGcPrimeF1) { }
+          }
+          if(primeOkFill) {
+            try {app.redraw();} catch(_eSetGcPrimeF2) { }
+            try {_pathBleedDebug('prime fill red before gradient | item=' + _getGradientItemLabel(item));} catch(_eSetGcPrimeF3) { }
+          }
+        }
+        var setFill = false;
+        try {
+          item.fillColor = gc;
+          setFill = true;
+        } catch(_eSetGc1) { }
+        if(!setFill) {
+          try {
+            if(item.typename === "TextFrame" && item.textRange && item.textRange.characterAttributes) {
+              item.textRange.characterAttributes.fillColor = gc;
+              setFill = true;
+            }
+          } catch(_eSetGc2) { }
+        }
+        if(!setFill) return false;
+      } else {
+        try {if(typeof item.stroked !== 'undefined') item.stroked = true;} catch(_eSetGcStroke0) { }
+        if(forceSolidPrimeBeforeGradientAssign && isGradientAssign) {
+          var primeOkStroke = false;
+          var redStroke = _makePrimeRed();
+          try {item.strokeColor = redStroke; primeOkStroke = true;} catch(_eSetGcPrimeS0) { }
+          if(primeOkStroke) {
+            try {app.redraw();} catch(_eSetGcPrimeS1) { }
+            try {_pathBleedDebug('prime stroke red before gradient | item=' + _getGradientItemLabel(item));} catch(_eSetGcPrimeS2) { }
+          }
+        }
+        item.strokeColor = gc;
+      }
+      return true;
+    } catch(_eSetGc0) {return false;}
+  }
+
+  function _pushGradientChildren(parent, stack) {
+    if(!parent || !stack) return;
+    var isCompound = false;
+    try {isCompound = (parent.typename === "CompoundPathItem");} catch(_ePgChType0) {isCompound = false;}
+    if(isCompound) {
+      try {
+        if(parent.pathItems && parent.pathItems.length) {
+          for(var j = 0; j < parent.pathItems.length; j++) stack.push(parent.pathItems[j]);
+        }
+      } catch(_ePgCh1) { }
+    } else {
+      try {
+        if(parent.pageItems && parent.pageItems.length) {
+          for(var i = 0; i < parent.pageItems.length; i++) stack.push(parent.pageItems[i]);
+        }
+      } catch(_ePgCh0) { }
+      try {
+        if(parent.pathItems && parent.pathItems.length && parent.typename === "TextFrame") {
+          for(var k = 0; k < parent.pathItems.length; k++) stack.push(parent.pathItems[k]);
+        }
+      } catch(_ePgCh2) { }
+    }
+  }
+
+  function _countDocumentGradientFillObjects(docRef) {
+    if(!docRef) return 0;
+    var count = 0;
+    var stack = [];
+    try {
+      if(docRef.pageItems && docRef.pageItems.length) {
+        for(var i = 0; i < docRef.pageItems.length; i++) stack.push(docRef.pageItems[i]);
+      }
+    } catch(_eCntGf0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      if(_isGradientColor(_getGradientColorForKind(cur, 'fill'))) count++;
+      _pushGradientChildren(cur, stack);
+    }
+    return count;
+  }
+
+  function _readGradientStopRampPoints(gc) {
+    var out = [];
+    if(!gc || !gc.gradient) return out;
+    var stops = null;
+    try {stops = gc.gradient.gradientStops;} catch(_eGsStops0) {stops = null;}
+    if(!stops || !stops.length) return out;
+    for(var i = 0; i < stops.length; i++) {
+      var rp = 0;
+      try {rp = Number(stops[i].rampPoint || 0);} catch(_eGsStops1) {rp = 0;}
+      if(!isFinite(rp)) rp = 0;
+      out.push(rp);
+    }
+    return out;
+  }
+
+  function _getGradientStopCount(gc) {
+    if(!gc || !gc.gradient) return 0;
+    try {
+      var stops = gc.gradient.gradientStops;
+      return (stops && stops.length) ? Number(stops.length) : 0;
+    } catch(_eGsc0) {return 0;}
+  }
+
+  function _getGradientName(gc) {
+    if(!gc || !gc.gradient) return '';
+    try {return String(gc.gradient.name || '');} catch(_eGn0) {return '';}
+  }
+
+  function _readGradientStopDescriptorsFromGradient(grad) {
+    var out = [];
+    if(!grad) return out;
+    var stops = null;
+    try {stops = grad.gradientStops;} catch(_eGsd0) {stops = null;}
+    if(!stops || !stops.length) return out;
+    for(var i = 0; i < stops.length; i++) {
+      var rp = 0;
+      try {rp = Number(stops[i].rampPoint || 0);} catch(_eGsd1) {rp = 0;}
+      if(!isFinite(rp)) rp = 0;
+      out.push({
+        rampPoint: rp,
+        color: (function(s) {try {return s.color;} catch(_eGsd2) {return null;}})(stops[i]),
+        midPoint: (function(s) {try {return Number(s.midPoint || 50);} catch(_eGsd3) {return 50;}})(stops[i]),
+        opacity: (function(s) {try {return Number(s.opacity || 100);} catch(_eGsd4) {return 100;}})(stops[i])
+      });
+    }
+    return out;
+  }
+
+  function _formatStops(stops) {
+    if(!stops || !stops.length) return '[]';
+    var parts = [];
+    for(var i = 0; i < stops.length; i++) parts.push(_fmtNum3(stops[i]));
+    return '[' + parts.join(', ') + ']';
+  }
+
+  function _getItemBoundsForGradient(item) {
+    if(!item) return null;
+    var b = null;
+    try {b = item.visibleBounds;} catch(_eGbA0) {b = null;}
+    if(!b || b.length !== 4) {
+      try {b = item.geometricBounds;} catch(_eGbA1) {b = null;}
+    }
+    return (b && b.length === 4) ? b : null;
+  }
+
+  function _estimateGradientLengthFromItem(item, angleDeg) {
+    var b = _getItemBoundsForGradient(item);
+    if(!b) return 0;
+    var w = Math.abs(Number(b[2]) - Number(b[0]));
+    var h = Math.abs(Number(b[1]) - Number(b[3]));
+    if(!(w > 0) && !(h > 0)) return 0;
+    var rad = Number(angleDeg || 0) * Math.PI / 180.0;
+    var c = Math.abs(Math.cos(rad));
+    var s = Math.abs(Math.sin(rad));
+    var proj = (w * c) + (h * s);
+    if(!(proj > 0)) proj = Math.max(w, h);
+    return proj;
+  }
+
+  function _gradientLinePoints(origin, angleDeg, length) {
+    if(!origin || origin.length < 2) return null;
+    var ox = Number(origin[0]);
+    var oy = Number(origin[1]);
+    if(!isFinite(ox) || !isFinite(oy)) return null;
+    var len = Number(length || 0);
+    if(!isFinite(len)) len = 0;
+    var rad = Number(angleDeg || 0) * Math.PI / 180.0;
+    return {
+      start: [ox, oy],
+      end: [ox + (Math.cos(rad) * len), oy + (Math.sin(rad) * len)]
+    };
+  }
+
+  function _fmtLinePoints(line) {
+    if(!line) return 'start=[n/a], end=[n/a]';
+    return 'start=' + _fmtPoint(line.start) + ', end=' + _fmtPoint(line.end);
+  }
+
+  function _serializeStops(stops) {
+    if(!stops || !stops.length) return '';
+    var parts = [];
+    for(var i = 0; i < stops.length; i++) {
+      var n = Number(stops[i]);
+      if(!isFinite(n)) n = 0;
+      parts.push(String(Math.round(n * 1000) / 1000));
+    }
+    return parts.join(',');
+  }
+
+  function _computeInwardRampPoints(stops, baseLength, shiftPt) {
+    if(!stops || !stops.length) return [];
+    var oldLen = Number(baseLength || 0);
+    var shift = Number(shiftPt || 0);
+    if(!(oldLen > 0) || !(shift > 0)) return stops.slice(0);
+
+    var newLen = oldLen + (shift * 2);
+    if(!(newLen > 0)) return stops.slice(0);
+
+    var out = [];
+    for(var i = 0; i < stops.length; i++) {
+      var rp = Number(stops[i]);
+      if(!isFinite(rp)) rp = 0;
+      var t = rp / 100.0;
+      var mapped = ((t * oldLen) + shift) / newLen * 100.0;
+      if(!isFinite(mapped)) mapped = rp;
+      if(mapped < 0) mapped = 0;
+      if(mapped > 100) mapped = 100;
+      out.push(mapped);
+    }
+
+    for(var f = 1; f < out.length; f++) {
+      if(out[f] <= out[f - 1]) out[f] = Math.min(100, out[f - 1] + 0.01);
+    }
+    for(var b = out.length - 2; b >= 0; b--) {
+      if(out[b] >= out[b + 1]) out[b] = Math.max(0, out[b + 1] - 0.01);
+    }
+    return out;
+  }
+
+  // Debug override for bleed testing: force all compensated gradients to
+  // a fixed 20/80 stop span so we can verify Illustrator actually applies
+  // non-endpoint ramp points on bleed results.
+  function _forceBleedTestStops2080(stops, startPct, endPct) {
+    var out = [];
+    if(!stops || !stops.length) return out;
+    if(stops.length === 1) return [50];
+    var start = Number(startPct);
+    var end = Number(endPct);
+    if(!isFinite(start)) start = 20;
+    if(!isFinite(end)) end = 80;
+    if(start < 0) start = 0;
+    if(end > 100) end = 100;
+    if(end < start) {var t0 = start; start = end; end = t0;}
+    var span = end - start;
+    for(var i = 0; i < stops.length; i++) {
+      var t = (stops.length <= 1) ? 0 : (i / (stops.length - 1));
+      out.push(start + (span * t));
+    }
+    return out;
+  }
+
+  function _buildPanelVisibleStops(srcStops, mappedRampPoints) {
+    var out = [];
+    if(!srcStops || srcStops.length < 2 || !mappedRampPoints || mappedRampPoints.length !== srcStops.length) {
+      for(var i0 = 0; i0 < srcStops.length; i0++) {
+        out.push({
+          rampPoint: srcStops[i0].rampPoint,
+          color: srcStops[i0].color,
+          midPoint: srcStops[i0].midPoint,
+          opacity: srcStops[i0].opacity
+        });
+      }
+      return out;
+    }
+
+    function _cloneDesc(base, rp) {
+      return {
+        rampPoint: rp,
+        color: base.color,
+        midPoint: base.midPoint,
+        opacity: base.opacity
+      };
+    }
+
+    var first = srcStops[0];
+    var last = srcStops[srcStops.length - 1];
+    var leftInner = Number(mappedRampPoints[0]);
+    var rightInner = Number(mappedRampPoints[mappedRampPoints.length - 1]);
+    if(!isFinite(leftInner)) leftInner = 0;
+    if(!isFinite(rightInner)) rightInner = 100;
+    if(leftInner < 0) leftInner = 0;
+    if(leftInner > 100) leftInner = 100;
+    if(rightInner < 0) rightInner = 0;
+    if(rightInner > 100) rightInner = 100;
+
+    out.push(_cloneDesc(first, 0));
+    if(leftInner > 0.01) out.push(_cloneDesc(first, leftInner));
+
+    for(var i = 1; i < srcStops.length - 1; i++) {
+      var rpMid = Number(mappedRampPoints[i]);
+      if(!isFinite(rpMid)) rpMid = Number(srcStops[i].rampPoint || 0);
+      if(rpMid < 0) rpMid = 0;
+      if(rpMid > 100) rpMid = 100;
+      out.push(_cloneDesc(srcStops[i], rpMid));
+    }
+
+    if(rightInner < 99.99) out.push(_cloneDesc(last, rightInner));
+    out.push(_cloneDesc(last, 100));
+
+    for(var f = 1; f < out.length; f++) {
+      if(out[f].rampPoint <= out[f - 1].rampPoint) out[f].rampPoint = Math.min(100, out[f - 1].rampPoint + 0.01);
+    }
+    for(var b = out.length - 2; b >= 0; b--) {
+      if(out[b].rampPoint >= out[b + 1].rampPoint) out[b].rampPoint = Math.max(0, out[b + 1].rampPoint - 0.01);
+    }
+    if(out.length > 0) out[0].rampPoint = 0;
+    if(out.length > 1) out[out.length - 1].rampPoint = 100;
+    return out;
+  }
+
+  // Debug-style stop rebuild: keep original stop count/colors and directly
+  // assign mapped ramp points (same approach as the working debug rectangle flow).
+  function _buildDirectReapplyStops(srcStops, mappedRampPoints) {
+    var out = [];
+    if(!srcStops || !srcStops.length) return out;
+    for(var i = 0; i < srcStops.length; i++) {
+      var rp = Number(srcStops[i].rampPoint || 0);
+      if(mappedRampPoints && mappedRampPoints.length === srcStops.length) {
+        var m = Number(mappedRampPoints[i]);
+        if(isFinite(m)) rp = m;
+      }
+      if(!isFinite(rp)) rp = 0;
+      if(rp < 0) rp = 0;
+      if(rp > 100) rp = 100;
+      out.push({
+        rampPoint: rp,
+        color: srcStops[i].color,
+        midPoint: srcStops[i].midPoint,
+        opacity: srcStops[i].opacity
+      });
+    }
+    for(var f = 1; f < out.length; f++) {
+      if(out[f].rampPoint <= out[f - 1].rampPoint) out[f].rampPoint = Math.min(100, out[f - 1].rampPoint + 0.01);
+    }
+    for(var b = out.length - 2; b >= 0; b--) {
+      if(out[b].rampPoint >= out[b + 1].rampPoint) out[b].rampPoint = Math.max(0, out[b + 1].rampPoint - 0.01);
+    }
+    return out;
+  }
+
+  function _cloneGradientForStops(gc, rampPoints) {
+    if(!gc || !gc.gradient || !rampPoints || !rampPoints.length) return null;
+    var srcGrad = null;
+    var srcStops = null;
+    try {srcGrad = gc.gradient;} catch(_eCg0) {srcGrad = null;}
+    if(!srcGrad) return null;
+    srcStops = _readGradientStopDescriptorsFromGradient(srcGrad);
+    if(!srcStops || !srcStops.length) return null;
+    var uiStops = _buildPanelVisibleStops(srcStops, rampPoints);
+    if(!uiStops || !uiStops.length) return null;
+
+    var cloned = null;
+    try {cloned = doc.gradients.add();} catch(_eCg2) {cloned = null;}
+    if(!cloned) return null;
+
+    try {cloned.type = srcGrad.type;} catch(_eCg3) { }
+    try {cloned.name = 'SRH_Bleed_' + String(srcGrad.name || 'Gradient') + '_' + new Date().getTime();} catch(_eCg4) { }
+
+    try {
+      while(cloned.gradientStops.length < uiStops.length) cloned.gradientStops.add();
+      while(cloned.gradientStops.length > uiStops.length && cloned.gradientStops.length > 2) {
+        try {cloned.gradientStops[cloned.gradientStops.length - 1].remove();} catch(_eCg5) {break;}
+      }
+    } catch(_eCg6) { }
+
+    for(var i = 0; i < uiStops.length; i++) {
+      var srcStop = uiStops[i];
+      var dstStop = null;
+      try {dstStop = cloned.gradientStops[i];} catch(_eCg7) {dstStop = null;}
+      if(!dstStop) continue;
+      try {dstStop.color = srcStop.color;} catch(_eCg8) { }
+      try {dstStop.midPoint = srcStop.midPoint;} catch(_eCg9) { }
+      try {dstStop.opacity = srcStop.opacity;} catch(_eCg10) { }
+      var rp = Number(srcStop.rampPoint || 0);
+      if(rp < 0) rp = 0;
+      if(rp > 100) rp = 100;
+      try {dstStop.rampPoint = rp;} catch(_eCg12) { }
+    }
+    return cloned;
+  }
+
+  function _rebuildGradientColorWithNewGradient(gc, rampPoints, angleDeg, targetOrigin, targetLength, options) {
+    var res = {ok: false, color: null, stopCount: 0, gradientName: ''};
+    if(!gc || !gc.gradient || !rampPoints || !rampPoints.length) return res;
+    options = options || {};
+    var panelVisibleStops = !!options.panelVisibleStops;
+
+    var srcGrad = null;
+    try {srcGrad = gc.gradient;} catch(_eRb0) {srcGrad = null;}
+    if(!srcGrad) return res;
+
+    var srcStops = _readGradientStopDescriptorsFromGradient(srcGrad);
+    if(!srcStops || !srcStops.length) return res;
+    var uiStops = panelVisibleStops
+      ? _buildPanelVisibleStops(srcStops, rampPoints)
+      : _buildDirectReapplyStops(srcStops, rampPoints);
+    if(!uiStops || !uiStops.length) return res;
+
+    var newGrad = null;
+    try {newGrad = doc.gradients.add();} catch(_eRb1) {newGrad = null;}
+    if(!newGrad) return res;
+
+    try {newGrad.type = srcGrad.type;} catch(_eRb2) { }
+    try {newGrad.name = 'SRH_Reapply_' + String(srcGrad.name || 'Gradient') + '_' + new Date().getTime();} catch(_eRb3) { }
+
+    try {
+      while(newGrad.gradientStops.length < uiStops.length) newGrad.gradientStops.add();
+      while(newGrad.gradientStops.length > uiStops.length && newGrad.gradientStops.length > 2) {
+        try {newGrad.gradientStops[newGrad.gradientStops.length - 1].remove();} catch(_eRb4) {break;}
+      }
+    } catch(_eRb5) { }
+
+    for(var i = 0; i < uiStops.length; i++) {
+      var srcStop = uiStops[i];
+      var dstStop = null;
+      try {dstStop = newGrad.gradientStops[i];} catch(_eRb6) {dstStop = null;}
+      if(!dstStop) continue;
+      try {dstStop.color = srcStop.color;} catch(_eRb7) { }
+      try {dstStop.midPoint = srcStop.midPoint;} catch(_eRb8) { }
+      try {dstStop.opacity = srcStop.opacity;} catch(_eRb9) { }
+      var rp = Number(srcStop.rampPoint || 0);
+      if(!isFinite(rp)) rp = 0;
+      if(rp < 0) rp = 0;
+      if(rp > 100) rp = 100;
+      try {dstStop.rampPoint = rp;} catch(_eRb10) { }
+    }
+
+    var newGc = null;
+    try {newGc = new GradientColor();} catch(_eRb11) {newGc = null;}
+    if(!newGc) return res;
+    try {newGc.gradient = newGrad;} catch(_eRb12) {return res;}
+
+    try {newGc.angle = Number(angleDeg || 0);} catch(_eRb13) { }
+    try {
+      var ln = Number(targetLength || 0);
+      if(isFinite(ln) && ln > 0) newGc.length = ln;
+    } catch(_eRb14) { }
+    try {
+      if(targetOrigin && targetOrigin.length >= 2) {
+        newGc.origin = [Number(targetOrigin[0]), Number(targetOrigin[1])];
+      }
+    } catch(_eRb15) { }
+
+    res.ok = true;
+    res.color = newGc;
+    res.stopCount = uiStops.length;
+    try {res.gradientName = String(newGrad.name || '');} catch(_eRb16) {res.gradientName = '';}
+    return res;
+  }
+
+  function _applyRampPointsToGradient(gc, rampPoints) {
+    if(!gc || !gc.gradient || !rampPoints || !rampPoints.length) return false;
+    var stops = null;
+    try {stops = gc.gradient.gradientStops;} catch(_eAg0) {stops = null;}
+    if(!stops || !stops.length) return false;
+    var n = Math.min(stops.length, rampPoints.length);
+    var changed = false;
+    for(var i = 0; i < n; i++) {
+      var rp = Number(rampPoints[i]);
+      if(!isFinite(rp)) continue;
+      if(rp < 0) rp = 0;
+      if(rp > 100) rp = 100;
+      try {
+        stops[i].rampPoint = rp;
+        changed = true;
+      } catch(_eAg1) { }
+    }
+    return changed;
+  }
+
+  function _tryApplyGradientStops(gc, rampPoints) {
+    var res = {applied: false, usedClone: false, usedCache: false};
+    if(!gc || !rampPoints || !rampPoints.length) return res;
+    var cacheKey = '';
+    try {
+      var g = gc.gradient;
+      cacheKey =
+        String(g && g.name ? g.name : '') + '|' +
+        String(g && g.type ? g.type : '') + '|' +
+        _serializeStops(rampPoints);
+    } catch(_eTasKey0) {cacheKey = '';}
+
+    if(cacheKey && _gradientCloneCache[cacheKey]) {
+      try {
+        gc.gradient = _gradientCloneCache[cacheKey];
+        res.applied = true;
+        res.usedClone = true;
+        res.usedCache = true;
+        return res;
+      } catch(_eTasCache0) { }
+    }
+
+    var clone = _cloneGradientForStops(gc, rampPoints);
+    if(clone) {
+      try {
+        gc.gradient = clone;
+        if(cacheKey) _gradientCloneCache[cacheKey] = clone;
+        res.applied = true;
+        res.usedClone = true;
+        return res;
+      } catch(_eTas0) { }
+    }
+    res.applied = _applyRampPointsToGradient(gc, rampPoints);
+    return res;
+  }
+
+  function _applyGradientCompensation(item, kind, rec, shiftPt) {
+    if(!item) return false;
+    var gc = _getGradientColorForKind(item, kind);
+    if(!_isLinearGradient(gc)) return false;
+
+    var itemLabel = _getGradientItemLabel(item);
+    var angleDeg = 0;
+    var baseLength = 0;
+    var baseOrigin = null;
+
+    if(rec) {
+      if(isFinite(rec.angle)) angleDeg = Number(rec.angle);
+      if(isFinite(rec.length)) baseLength = Number(rec.length);
+      if(rec.origin && rec.origin.length >= 2) baseOrigin = [Number(rec.origin[0]), Number(rec.origin[1])];
+    }
+    if(!isFinite(angleDeg)) angleDeg = 0;
+    if(!(baseLength > 0)) {
+      try {baseLength = Number(gc.length || 0);} catch(_eAcs0) {baseLength = 0;}
+    }
+    if(!(baseLength > 0)) {
+      baseLength = _estimateGradientLengthFromItem(item, angleDeg);
+    }
+    if(!baseOrigin) {
+      try {
+        if(gc.origin && gc.origin.length >= 2) baseOrigin = [Number(gc.origin[0]), Number(gc.origin[1])];
+      } catch(_eAcs1) {baseOrigin = null;}
+    }
+    if(!baseOrigin) return false;
+
+    var sourceStops = null;
+    if(rec && rec.stops && rec.stops.length) sourceStops = rec.stops.slice(0);
+    else sourceStops = _readGradientStopRampPoints(gc);
+    var mappedStops = _computeInwardRampPoints(sourceStops, baseLength, shiftPt);
+    var forcedStopTestMode = forceBleedStopTest2080;
+    if(forcedStopTestMode) mappedStops = _forceBleedTestStops2080(sourceStops, 20, 80);
+    var beforeLine = _gradientLinePoints(baseOrigin, angleDeg, baseLength);
+
+    var rad = angleDeg * Math.PI / 180.0;
+    var dx = Math.cos(rad) * shiftPt;
+    var dy = Math.sin(rad) * shiftPt;
+    var targetOrigin = [baseOrigin[0] - dx, baseOrigin[1] - dy];
+    var targetLength = (baseLength > 0) ? (baseLength + (shiftPt * 2)) : 0;
+
+    var stopApply = {applied: false, usedClone: false, usedCache: false, mode: 'none', rebuiltStopCount: 0, gradientName: ''};
+    var panelVisibleForTwoStop = (sourceStops && sourceStops.length <= 2);
+    var rebuilt = _rebuildGradientColorWithNewGradient(gc, mappedStops, angleDeg, targetOrigin, targetLength, {panelVisibleStops: panelVisibleForTwoStop});
+    var colorSet = false;
+    if(rebuilt.ok && rebuilt.color) {
+      colorSet = _setGradientColorForKind(item, kind, rebuilt.color);
+      if(colorSet) {
+        stopApply.applied = true;
+        stopApply.mode = panelVisibleForTwoStop ? 'rebuild-panel-visible' : 'rebuild-debugstyle';
+        stopApply.rebuiltStopCount = rebuilt.stopCount;
+        stopApply.gradientName = rebuilt.gradientName;
+      }
+    }
+
+    if(!colorSet) {
+      var oldStopApply = _tryApplyGradientStops(gc, mappedStops);
+      stopApply.applied = oldStopApply.applied;
+      stopApply.usedClone = oldStopApply.usedClone;
+      stopApply.usedCache = oldStopApply.usedCache;
+      stopApply.mode = oldStopApply.applied ? 'legacy' : 'none';
+
+      try {gc.origin = targetOrigin;} catch(_eAcs2) { }
+      if(baseLength > 0) {
+        try {gc.length = targetLength;} catch(_eAcs3) { }
+      }
+      colorSet = _setGradientColorForKind(item, kind, gc);
+    }
+
+    var appliedGc = _getGradientColorForKind(item, kind);
+    var afterStops = _readGradientStopRampPoints(appliedGc || gc);
+    var appliedStopCount = _getGradientStopCount(appliedGc || gc);
+    var appliedGradientName = _getGradientName(appliedGc || gc);
+    var appliedOrigin = null;
+    var appliedLength = 0;
+    try {
+      if(appliedGc && appliedGc.origin && appliedGc.origin.length >= 2) {
+        appliedOrigin = [Number(appliedGc.origin[0]), Number(appliedGc.origin[1])];
+      }
+    } catch(_eAcs4) {appliedOrigin = null;}
+    try {appliedLength = Number((appliedGc ? appliedGc.length : gc.length) || 0);} catch(_eAcs5) {appliedLength = 0;}
+    if(!appliedOrigin) {
+      try {
+        if(gc.origin && gc.origin.length >= 2) appliedOrigin = [Number(gc.origin[0]), Number(gc.origin[1])];
+      } catch(_eAcs6) {appliedOrigin = null;}
+    }
+    if(!isFinite(appliedLength)) appliedLength = 0;
+    var afterLine = _gradientLinePoints(appliedOrigin, angleDeg, appliedLength);
+
+    _pathBleedDebug(
+      'gradient ' + kind +
+      ' | item=' + itemLabel +
+      ' | angle=' + _fmtNum3(angleDeg) +
+      ' | origin ' + _fmtPoint(baseOrigin) + ' -> ' + _fmtPoint(appliedOrigin) +
+      ' | length ' + _fmtNum3(baseLength) + ' -> ' + _fmtNum3(appliedLength) +
+      ' | stopPos before=' + _formatStops(sourceStops) + ' mapped=' + _formatStops(mappedStops) + ' after=' + _formatStops(afterStops) +
+      ' | gradient=' + (appliedGradientName || '(unnamed)') + ' stopCount=' + appliedStopCount +
+      ' | points before{' + _fmtLinePoints(beforeLine) + '} after{' + _fmtLinePoints(afterLine) + '}' +
+      ' | forcedStopTest2080=' + (forcedStopTestMode ? 'yes' : 'no') +
+      ' | stopApply=' + (
+        stopApply.applied
+          ? (
+            stopApply.mode === 'rebuild-reapply'
+              ? ('rebuild-reapply(' + stopApply.rebuiltStopCount + ' stops' + (stopApply.gradientName ? ', ' + stopApply.gradientName : '') + ')')
+              : (stopApply.mode === 'rebuild-debugstyle'
+                ? ('rebuild-debugstyle(' + stopApply.rebuiltStopCount + ' stops' + (stopApply.gradientName ? ', ' + stopApply.gradientName : '') + ')')
+                : (stopApply.mode === 'rebuild-panel-visible'
+                  ? ('rebuild-panel-visible(' + stopApply.rebuiltStopCount + ' stops' + (stopApply.gradientName ? ', ' + stopApply.gradientName : '') + ')')
+                : (stopApply.usedClone ? (stopApply.usedCache ? 'clone-cache' : 'clone') : 'direct'))
+                )
+          )
+          : 'none'
+      ) +
+      ' | colorSet=' + (colorSet ? 'yes' : 'no')
+    );
+    return colorSet;
+  }
+
+  function _captureGradientSnapshot(container, stageLabel) {
     var out = [];
     if(!container) return out;
     var stack = [];
@@ -1482,10 +2556,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
       var cur = stack.pop();
       if(!cur) continue;
       function _captureOne(kind) {
-        var gc = null;
-        try {
-          gc = (kind === 'fill') ? (cur.filled ? cur.fillColor : null) : (cur.stroked ? cur.strokeColor : null);
-        } catch(_eGl1) {gc = null;}
+        var gc = _getGradientColorForKind(cur, kind);
         if(!_isLinearGradient(gc)) return;
         var angle = 0;
         var length = 0;
@@ -1496,42 +2567,62 @@ function signarama_helper_applyPathBleed(jsonStr) {
           if(gc.origin && gc.origin.length >= 2) origin = [Number(gc.origin[0]), Number(gc.origin[1])];
         } catch(_eGl4) {origin = null;}
         if(!origin) return;
-        out.push({item: cur, kind: kind, angle: angle, length: length, origin: origin});
+        var stops = _readGradientStopRampPoints(gc);
+        var linePts = _gradientLinePoints(origin, angle, length);
+        out.push({item: cur, kind: kind, angle: angle, length: length, origin: origin, stops: stops});
+        _pathBleedDebug(
+          'gradient snapshot' +
+          (stageLabel ? ' (' + stageLabel + ')' : '') +
+          ' | ' + kind +
+          ' | item=' + _getGradientItemLabel(cur) +
+          ' | origin=' + _fmtPoint(origin) +
+          ' | angle=' + _fmtNum3(angle) +
+          ' | length=' + _fmtNum3(length) +
+          ' | stops=' + _formatStops(stops) +
+          ' | points{' + _fmtLinePoints(linePts) + '}'
+        );
       }
       _captureOne('fill');
       _captureOne('stroke');
-      try {
-        if(cur.pageItems && cur.pageItems.length) {
-          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
-        }
-      } catch(_eGs1) { }
+      _pushGradientChildren(cur, stack);
     }
     return out;
   }
 
-  function _shiftGradientBySnapshot(snapshot, shiftPt) {
+  function _shiftGradientBySnapshot(snapshot, shiftPt, container) {
     if(!snapshot || !snapshot.length || !(shiftPt > 0)) return 0;
     var adjusted = 0;
+    var liveSnapshot = [];
+    if(container) liveSnapshot = _captureGradientSnapshot(container, 'post-offset pre-comp');
+    var liveUsed = {};
+
+    function _takeLiveRecord(kind) {
+      if(!liveSnapshot || !liveSnapshot.length) return null;
+      for(var li = 0; li < liveSnapshot.length; li++) {
+        if(liveUsed[li]) continue;
+        var recLive = liveSnapshot[li];
+        if(!recLive || !recLive.item || recLive.kind !== kind) continue;
+        liveUsed[li] = true;
+        return recLive;
+      }
+      return null;
+    }
+
     for(var i = 0; i < snapshot.length; i++) {
       var rec = snapshot[i];
       if(!rec || !rec.item || !rec.origin) continue;
-      var gc = null;
-      try {
-        gc = (rec.kind === 'fill') ? (rec.item.filled ? rec.item.fillColor : null) : (rec.item.stroked ? rec.item.strokeColor : null);
-      } catch(_eGs2) {gc = null;}
-      if(!_isLinearGradient(gc)) continue;
-      var angleDeg = isFinite(rec.angle) ? rec.angle : 0;
-      var rad = angleDeg * Math.PI / 180.0;
-      var dx = Math.cos(rad) * shiftPt;
-      var dy = Math.sin(rad) * shiftPt;
-      try {
-        gc.origin = [rec.origin[0] - dx, rec.origin[1] - dy];
-        if(isFinite(rec.length) && rec.length > 0) gc.length = rec.length + (shiftPt * 2);
-        if(rec.kind === 'fill') rec.item.fillColor = gc;
-        else rec.item.strokeColor = gc;
-        adjusted++;
-      } catch(_eGs3) { }
+      var usedItem = rec.item;
+      var gc = _getGradientColorForKind(usedItem, rec.kind);
+      if(!_isLinearGradient(gc)) {
+        var liveRec = _takeLiveRecord(rec.kind);
+        if(liveRec && liveRec.item) {
+          usedItem = liveRec.item;
+          _pathBleedDebug('snapshot fallback matched ' + rec.kind + ' gradient to ' + _getGradientItemLabel(usedItem));
+        }
+      }
+      if(_applyGradientCompensation(usedItem, rec.kind, rec, shiftPt)) adjusted++;
     }
+    if(container) _captureGradientSnapshot(container, 'post-compensation');
     return adjusted;
   }
 
@@ -1540,28 +2631,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
     var adjusted = 0;
     function _shiftOne(it, kind) {
       if(!it) return;
-      var gc = null;
-      try {
-        gc = (kind === 'fill') ? (it.filled ? it.fillColor : null) : (it.stroked ? it.strokeColor : null);
-      } catch(_eGs4) {gc = null;}
-      if(!_isLinearGradient(gc)) return;
-      var angleDeg = 0;
-      var length = 0;
-      try {angleDeg = Number(gc.angle || 0);} catch(_eGs5) {angleDeg = 0;}
-      try {length = Number(gc.length || 0);} catch(_eGs6) {length = 0;}
-      if(!isFinite(angleDeg)) angleDeg = 0;
-      var rad = angleDeg * Math.PI / 180.0;
-      var dx = Math.cos(rad) * shiftPt;
-      var dy = Math.sin(rad) * shiftPt;
-      try {
-        if(gc.origin && gc.origin.length >= 2) {
-          gc.origin = [Number(gc.origin[0]) - dx, Number(gc.origin[1]) - dy];
-          if(isFinite(length) && length > 0) gc.length = length + (shiftPt * 2);
-          if(kind === 'fill') it.fillColor = gc;
-          else it.strokeColor = gc;
-          adjusted++;
-        }
-      } catch(_eGs7) { }
+      if(_applyGradientCompensation(it, kind, null, shiftPt)) adjusted++;
     }
     var stack = [];
     try {stack.push(container);} catch(_eGs8) { }
@@ -1570,13 +2640,168 @@ function signarama_helper_applyPathBleed(jsonStr) {
       if(!cur) continue;
       _shiftOne(cur, 'fill');
       _shiftOne(cur, 'stroke');
-      try {
-        if(cur.pageItems && cur.pageItems.length) {
-          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
-        }
-      } catch(_eGs9) { }
+      _pushGradientChildren(cur, stack);
     }
     return adjusted;
+  }
+
+  function _forceGradientStopsOnItem(it, kind, startPct, endPct) {
+    if(!it) return false;
+    var gc = _getGradientColorForKind(it, kind);
+    if(!_isLinearGradient(gc)) return false;
+
+    var angleDeg = 0;
+    var length = 0;
+    var origin = null;
+    try {angleDeg = Number(gc.angle || 0);} catch(_eFg0) {angleDeg = 0;}
+    try {length = Number(gc.length || 0);} catch(_eFg1) {length = 0;}
+    try {
+      if(gc.origin && gc.origin.length >= 2) origin = [Number(gc.origin[0]), Number(gc.origin[1])];
+    } catch(_eFg2) {origin = null;}
+    if(!(length > 0)) length = _estimateGradientLengthFromItem(it, angleDeg);
+    if(!origin) {
+      var b = _getItemBoundsForGradient(it);
+      if(b && b.length === 4) origin = [Number(b[0]), (Number(b[1]) + Number(b[3])) / 2];
+    }
+    if(!origin) return false;
+
+    var sourceStops = _readGradientStopRampPoints(gc);
+    var forcedStops = _forceBleedTestStops2080(sourceStops, startPct, endPct);
+    var rebuilt = _rebuildGradientColorWithNewGradient(gc, forcedStops, angleDeg, origin, length, {panelVisibleStops: true});
+    var setOk = false;
+    if(rebuilt.ok && rebuilt.color) setOk = _setGradientColorForKind(it, kind, rebuilt.color);
+    if(!setOk) {
+      var oldApply = _tryApplyGradientStops(gc, forcedStops);
+      if(oldApply.applied) setOk = _setGradientColorForKind(it, kind, gc);
+    }
+
+    if(setOk) {
+      var appliedGc = _getGradientColorForKind(it, kind);
+      _pathBleedDebug(
+        'force-pass ' + kind +
+        ' | item=' + _getGradientItemLabel(it) +
+        ' | source=' + _formatStops(sourceStops) +
+        ' | forced=' + _formatStops(forcedStops) +
+        ' | after=' + _formatStops(_readGradientStopRampPoints(appliedGc || gc)) +
+        ' | stopCount=' + _getGradientStopCount(appliedGc || gc)
+      );
+    }
+    return setOk;
+  }
+
+  function _forceGradientStopsInContainer(container, startPct, endPct) {
+    if(!container) return 0;
+    var adjusted = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eFg3) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      if(_forceGradientStopsOnItem(cur, 'fill', startPct, endPct)) adjusted++;
+      if(_forceGradientStopsOnItem(cur, 'stroke', startPct, endPct)) adjusted++;
+      _pushGradientChildren(cur, stack);
+    }
+    if(container) _captureGradientSnapshot(container, 'post-force-pass');
+    return adjusted;
+  }
+
+  // Final-target pass: adjust stops on the actual post-offset bleed objects.
+  // This handles cases where expand/offset creates a new target path that does
+  // not preserve the earlier compensated gradient object reference.
+  function _finalizeBleedGradientStopsByFinalItems(container, shiftPt) {
+    if(!container || !(shiftPt > 0)) return 0;
+    var adjusted = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eFgFin0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      function _one(kind) {
+        var gc = _getGradientColorForKind(cur, kind);
+        if(!_isLinearGradient(gc)) return;
+        var len = 0;
+        var ang = 0;
+        var org = null;
+        try {len = Number(gc.length || 0);} catch(_eFgFin1) {len = 0;}
+        try {ang = Number(gc.angle || 0);} catch(_eFgFin2) {ang = 0;}
+        try {if(gc.origin && gc.origin.length >= 2) org = [Number(gc.origin[0]), Number(gc.origin[1])];} catch(_eFgFin3) {org = null;}
+        if(!(len > 0)) len = _estimateGradientLengthFromItem(cur, ang);
+        if(!(len > 0)) return;
+        var sourceStops = _readGradientStopRampPoints(gc);
+        if(!sourceStops || !sourceStops.length) return;
+        // Only re-target simple endpoint gradients on final output items.
+        // This avoids re-adjusting already-compensated multi-stop gradients.
+        if(sourceStops.length > 2) return;
+        if(!org) {
+          var bb = _getItemBoundsForGradient(cur);
+          if(bb && bb.length === 4) org = [Number(bb[0]), (Number(bb[1]) + Number(bb[3])) / 2];
+        }
+        if(!org) return;
+
+        var mapped = _computeInwardRampPoints(sourceStops, len, shiftPt);
+        if(!mapped || !mapped.length) return;
+        var rebuilt = _rebuildGradientColorWithNewGradient(gc, mapped, ang, org, len, {panelVisibleStops: true});
+        var ok = false;
+        if(rebuilt.ok && rebuilt.color) ok = _setGradientColorForKind(cur, kind, rebuilt.color);
+        if(ok) {
+          adjusted++;
+          var agc = _getGradientColorForKind(cur, kind);
+          _pathBleedDebug(
+            'final-target pass ' + kind +
+            ' | item=' + _itemRef(cur) +
+            ' | len=' + _fmtNum3(len) +
+            ' | mapped=' + _formatStops(mapped) +
+            ' | after=' + _formatStops(_readGradientStopRampPoints(agc || gc)) +
+            ' | stopCount=' + _getGradientStopCount(agc || gc)
+          );
+        }
+      }
+      _one('fill');
+      _one('stroke');
+      _pushGradientChildren(cur, stack);
+    }
+    if(container) _captureGradientSnapshot(container, 'post-final-target-pass');
+    return adjusted;
+  }
+
+  function _forceSolidRedInContainer(container) {
+    if(!container) return 0;
+    var changed = 0;
+    var stack = [];
+    var red = new RGBColor();
+    red.red = 255; red.green = 0; red.blue = 0;
+    var noColor = new NoColor();
+    try {stack.push(container);} catch(_eFs0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var did = false;
+      try {
+        if(typeof cur.filled !== 'undefined') {
+          cur.filled = true;
+          cur.fillColor = red;
+          try {if(typeof cur.stroked !== 'undefined') cur.stroked = false;} catch(_eFsStroke0) { }
+          try {if(typeof cur.strokeColor !== 'undefined') cur.strokeColor = noColor;} catch(_eFsStroke1) { }
+          did = true;
+        }
+      } catch(_eFs1) { }
+      if(!did) {
+        try {
+          if(cur.typename === "TextFrame" && cur.textRange && cur.textRange.characterAttributes) {
+            cur.textRange.characterAttributes.fillColor = red;
+            try {cur.textRange.characterAttributes.strokeColor = noColor;} catch(_eFsTxtStroke0) { }
+            did = true;
+          }
+        } catch(_eFs2) { }
+      }
+      if(did) {
+        changed++;
+        _pathBleedDebug('force-solid-red | item=' + _getGradientItemLabel(cur));
+      }
+      _pushGradientChildren(cur, stack);
+    }
+    try {app.redraw();} catch(_eFs3) { }
+    return changed;
   }
 
   // Back-compat shims for older cached JSX paths that may still call the
@@ -1607,6 +2832,8 @@ function signarama_helper_applyPathBleed(jsonStr) {
   // Snapshot selection because we'll move items to layers.
   var sel = [];
   for(var s = 0; s < doc.selection.length; s++) {sel.push(doc.selection[s]);}
+  _pathBleedDebug('selection snapshot count=' + sel.length);
+  for(var ss = 0; ss < sel.length; ss++) _pathBleedDebug('selection[' + ss + '] ' + _itemRef(sel[ss]));
 
   var bleedGroup = null;
   var originalGroup = null;
@@ -1630,11 +2857,15 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var cutCount = 0;
   var movedCount = 0;
   var originalItems = [];
+  var docGradientFillCount = _countDocumentGradientFillObjects(doc);
+  _pathBleedDebug('doc gradient-fill object count=' + docGradientFillCount);
+  _pathBleedDebug('layers: bleed=' + (bleedLayer ? bleedLayer.name : 'n/a') + ', original=' + (originalLayer ? originalLayer.name : 'n/a') + ', cut=' + (cutLayer ? cutLayer.name : 'n/a'));
 
   // First operation: move selected source artwork to the original layer/group.
   for(var n0 = 0; n0 < sel.length; n0++) {
     var src = sel[n0];
     if(!src || src.locked || src.hidden) continue;
+    _pathBleedDebug('move->original candidate[' + n0 + '] ' + _itemRef(src));
     try {
       if(originalGroup) {
         src.move(originalGroup, ElementPlacement.PLACEATEND);
@@ -1643,19 +2874,21 @@ function signarama_helper_applyPathBleed(jsonStr) {
       }
       originalCount++;
       originalItems.push(src);
+      _pathBleedDebug('move->original OK[' + n0 + ']');
     } catch(_eMoveOrig0) { }
   }
 
   if(!originalCount) {
     try {doc.selection = null;} catch(_eSelOrig0) { }
     try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide0) { }
-    return "No eligible items to move into original layer.";
+    return _pathBleedWithDbg("No eligible items to move into original layer. Doc gradient-fill objects: " + docGradientFillCount + ".");
   }
 
   // Second pass: duplicate from originals into cutline/bleed work layers.
   for(var n = 0; n < originalItems.length; n++) {
     var item = originalItems[n];
     if(!item) continue;
+    _pathBleedDebug('duplicate source[' + n + '] ' + _itemRef(item));
 
     if(createCutline && cutGroup) {
       try {item.duplicate(cutGroup, ElementPlacement.PLACEATEND); cutCount++;} catch(_eDupCut) { }
@@ -1667,11 +2900,12 @@ function signarama_helper_applyPathBleed(jsonStr) {
       try {item.duplicate(bleedLayer, ElementPlacement.PLACEATBEGINNING); movedCount++;} catch(_eDupBleed1) { }
     }
   }
+  _pathBleedDebug('duplicate summary | originals=' + originalCount + ' | movedToBleed=' + movedCount + ' | cutDup=' + cutCount);
 
   if(!movedCount) {
     try {doc.selection = null;} catch(_eSel0) { }
     try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide1) { }
-    return "No eligible items to offset.";
+    return _pathBleedWithDbg("No eligible items to offset. Doc gradient-fill objects: " + docGradientFillCount + ".");
   }
 
   // Hard isolate processing from originals: never restore commands onto original selection.
@@ -1679,10 +2913,27 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
   if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
-  var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer);
+  _logContainerState(bleedGroup || bleedLayer, 'pre-offset-container');
+  var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
   var offsetApplied = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
-  var gradientAdjusted = _shiftGradientBySnapshot(gradientSnapshot, offsetPt);
+  _logContainerState(bleedGroup || bleedLayer, 'after-offset-before-comp');
+  var gradientAdjusted = _shiftGradientBySnapshot(gradientSnapshot, offsetPt, bleedGroup || bleedLayer);
   if(gradientAdjusted < 1) gradientAdjusted = _shiftGradientInContainer(bleedGroup || bleedLayer, offsetPt);
+  var finalTargetAdjusted = _finalizeBleedGradientStopsByFinalItems(bleedLayer, offsetPt);
+  _pathBleedDebug('final-target gradient stop pass count=' + finalTargetAdjusted);
+  _pathBleedDebug('gradient compensation count=' + gradientAdjusted);
+  _logContainerState(bleedGroup || bleedLayer, 'after-comp');
+  var forcedGradientPassCount = 0;
+  if(forceBleedStopTest2080) {
+    forcedGradientPassCount = _forceGradientStopsInContainer(bleedGroup || bleedLayer, 20, 80);
+    _pathBleedDebug('forced gradient 20/80 post-pass count=' + forcedGradientPassCount);
+  }
+  var forcedSolidRedCount = 0;
+  if(forceBleedSolidRedTest) {
+    forcedSolidRedCount = _forceSolidRedInContainer(bleedLayer);
+    _pathBleedDebug('forced solid-red post-pass count=' + forcedSolidRedCount + ' (container=bleedLayer)');
+  }
+  _logContainerState(bleedLayer, 'final-bleed-layer');
 
   if(createCutline && cutGroup) {
     if(outlineText) _outlineTextInContainer(cutGroup);
@@ -1699,11 +2950,15 @@ function signarama_helper_applyPathBleed(jsonStr) {
   try {doc.selection = null;} catch(_eSel1) { }
 
   var msg = "Path bleed applied (grouped). Originals: " + originalCount + ", targets: " + movedCount + ", bleed paths: " + offsetCount;
+  msg += ", doc gradient-fill objects: " + docGradientFillCount;
   if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
+  if(finalTargetAdjusted > 0) msg += ", final-target gradients adjusted: " + finalTargetAdjusted;
+  if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
+  if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
   if(!offsetApplied) msg += ". Note: Offset effect fallback was limited on this selection.";
   try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide2) { }
-  return msg;
+  return _pathBleedWithDbg(msg);
 }
 
 function _srh_transform_getBounds(item, includeStroke) {

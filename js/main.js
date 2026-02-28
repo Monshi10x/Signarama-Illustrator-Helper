@@ -1580,6 +1580,20 @@
 
     const clear = $('btnClearLog');
     if(clear) clear.onclick = () => {const el = $('log'); if(el) el.textContent = ''; showToast('Console cleared.', {type: 'info', title: 'Log', duration: 2500});};
+    const setGrad1090 = $('btnSetGrad1090');
+    if(setGrad1090) {
+      setGrad1090.onclick = () => loadJSX(() => runButtonJsxOperation(
+        '((typeof signarama_helper_debugSetSelectedGradientStops1090 === "function") ? signarama_helper_debugSetSelectedGradientStops1090 : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_debugSetSelectedGradientStops1090 === "function") ? $.global.signarama_helper_debugSetSelectedGradientStops1090 : function(){return "Error: set gradient 10/90 function not loaded.";}))()',
+        {logFn: log, toastTitle: 'Set gradient 10/90'}
+      ));
+    }
+    const debugGrad = $('btnDebugGrad1090');
+    if(debugGrad) {
+      debugGrad.onclick = () => loadJSX(() => runButtonJsxOperation(
+        '((typeof signarama_helper_debugCreateGradientRect1090 === "function") ? signarama_helper_debugCreateGradientRect1090 : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_debugCreateGradientRect1090 === "function") ? $.global.signarama_helper_debugCreateGradientRect1090 : function(){return "Error: debug gradient function not loaded.";}))()',
+        {logFn: log, toastTitle: 'Debug gradient 10/90'}
+      ));
+    }
   }
 
   function wireLightbox() {
@@ -2553,7 +2567,9 @@
         '$.evalFile(f);' +
         '"OK: fit=" + (typeof signarama_helper_fitArtboardToArtwork) + ' +
         '", settingsSave=" + ((typeof signarama_helper_panelSettingsSave==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_panelSettingsSave==="function")) ? "function" : "undefined") + ' +
-        '", transform=" + ((typeof atlas_transform_makeSize==="function" || (typeof $!=="undefined" && $.global && typeof $.global.atlas_transform_makeSize==="function")) ? "function" : "undefined");' +
+        '", transform=" + ((typeof atlas_transform_makeSize==="function" || (typeof $!=="undefined" && $.global && typeof $.global.atlas_transform_makeSize==="function")) ? "function" : "undefined") + ' +
+        '", debugGrad=" + ((typeof signarama_helper_debugCreateGradientRect1090==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_debugCreateGradientRect1090==="function")) ? "function" : "undefined") + ' +
+        '", setGrad1090=" + ((typeof signarama_helper_debugSetSelectedGradientStops1090==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_debugSetSelectedGradientStops1090==="function")) ? "function" : "undefined");' +
         '}' +
         '}catch(e){ "ERR: " + e; }';
       cs.evalScript(cmd, function(res) {
