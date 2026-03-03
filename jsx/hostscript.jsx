@@ -72,9 +72,9 @@ function signarama_helper_debugCreateGradientRect1090() {
       } catch(_eDbgLay1) {dbgLayer = null; _err('createLayer', _eDbgLay1);}
     }
     if(dbgLayer) {
-      try {dbgLayer.visible = true;} catch(_eDbgLay2) { _err('layerVisible', _eDbgLay2); }
-      try {dbgLayer.locked = false;} catch(_eDbgLay3) { _err('layerUnlocked', _eDbgLay3); }
-      try {doc.activeLayer = dbgLayer;} catch(_eDbgLay5) { _err('setActiveLayer', _eDbgLay5); }
+      try {dbgLayer.visible = true;} catch(_eDbgLay2) {_err('layerVisible', _eDbgLay2);}
+      try {dbgLayer.locked = false;} catch(_eDbgLay3) {_err('layerUnlocked', _eDbgLay3);}
+      try {doc.activeLayer = dbgLayer;} catch(_eDbgLay5) {_err('setActiveLayer', _eDbgLay5);}
     }
 
     var rect = null;
@@ -88,9 +88,9 @@ function signarama_helper_debugCreateGradientRect1090() {
         ' | errors=' + errs.join(' | ');
     }
 
-    try {rect.name = 'SRH_DEBUG_GRAD_10_90';} catch(_eDbgGr3) { _err('nameRectangle', _eDbgGr3); }
-    try {rect.stroked = false;} catch(_eDbgGr4) { _err('setStrokedFalse', _eDbgGr4); }
-    try {rect.filled = true;} catch(_eDbgGr5) { _err('setFilledTrue', _eDbgGr5); }
+    try {rect.name = 'SRH_DEBUG_GRAD_10_90';} catch(_eDbgGr3) {_err('nameRectangle', _eDbgGr3);}
+    try {rect.stroked = false;} catch(_eDbgGr4) {_err('setStrokedFalse', _eDbgGr4);}
+    try {rect.filled = true;} catch(_eDbgGr5) {_err('setFilledTrue', _eDbgGr5);}
 
     var white = new RGBColor();
     white.red = 255; white.green = 255; white.blue = 255;
@@ -100,35 +100,35 @@ function signarama_helper_debugCreateGradientRect1090() {
     var g = null;
     try {g = doc.gradients.add();} catch(_eDbgGr6) {g = null; _err('createGradient', _eDbgGr6);}
     if(!g) return 'Failed to create gradient. errors=' + errs.join(' | ');
-    try {g.type = GradientType.LINEAR;} catch(_eDbgGr7) { _err('setGradientType', _eDbgGr7); }
-    try {g.name = 'SRH_DEBUG_10_90_' + new Date().getTime();} catch(_eDbgGr8) { _err('setGradientName', _eDbgGr8); }
+    try {g.type = GradientType.LINEAR;} catch(_eDbgGr7) {_err('setGradientType', _eDbgGr7);}
+    try {g.name = 'SRH_DEBUG_10_90_' + new Date().getTime();} catch(_eDbgGr8) {_err('setGradientName', _eDbgGr8);}
 
     try {
       while(g.gradientStops.length > 2) {
-        try {g.gradientStops[g.gradientStops.length - 1].remove();} catch(_eDbgGr9) { _err('trimStops', _eDbgGr9); break;}
+        try {g.gradientStops[g.gradientStops.length - 1].remove();} catch(_eDbgGr9) {_err('trimStops', _eDbgGr9); break;}
       }
       while(g.gradientStops.length < 2) g.gradientStops.add();
-    } catch(_eDbgGr10) { _err('normalizeStops', _eDbgGr10); }
-    try {g.gradientStops[0].color = white;} catch(_eDbgGr11) { _err('setStop0Color', _eDbgGr11); }
-    try {g.gradientStops[1].color = black;} catch(_eDbgGr12) { _err('setStop1Color', _eDbgGr12); }
-    try {g.gradientStops[0].rampPoint = 10;} catch(_eDbgGr13) { _err('setStop0Ramp10', _eDbgGr13); }
-    try {g.gradientStops[1].rampPoint = 90;} catch(_eDbgGr14) { _err('setStop1Ramp90', _eDbgGr14); }
+    } catch(_eDbgGr10) {_err('normalizeStops', _eDbgGr10);}
+    try {g.gradientStops[0].color = white;} catch(_eDbgGr11) {_err('setStop0Color', _eDbgGr11);}
+    try {g.gradientStops[1].color = black;} catch(_eDbgGr12) {_err('setStop1Color', _eDbgGr12);}
+    try {g.gradientStops[0].rampPoint = 10;} catch(_eDbgGr13) {_err('setStop0Ramp10', _eDbgGr13);}
+    try {g.gradientStops[1].rampPoint = 90;} catch(_eDbgGr14) {_err('setStop1Ramp90', _eDbgGr14);}
 
     var gc = null;
     try {gc = new GradientColor();} catch(_eDbgGr15) {gc = null; _err('newGradientColor', _eDbgGr15);}
     if(!gc) return 'Failed to create GradientColor. errors=' + errs.join(' | ');
-    try {gc.gradient = g;} catch(_eDbgGr16) { _err('assignGradientToColor', _eDbgGr16); }
-    try {gc.angle = 0;} catch(_eDbgGr17) { _err('setAngle', _eDbgGr17); }
-    try {gc.origin = [rectLeft, cy];} catch(_eDbgGr18) { _err('setOrigin', _eDbgGr18); }
-    try {gc.length = w;} catch(_eDbgGr19) { _err('setLength', _eDbgGr19); }
+    try {gc.gradient = g;} catch(_eDbgGr16) {_err('assignGradientToColor', _eDbgGr16);}
+    try {gc.angle = 0;} catch(_eDbgGr17) {_err('setAngle', _eDbgGr17);}
+    try {gc.origin = [rectLeft, cy];} catch(_eDbgGr18) {_err('setOrigin', _eDbgGr18);}
+    try {gc.length = w;} catch(_eDbgGr19) {_err('setLength', _eDbgGr19);}
 
     try {rect.fillColor = gc;} catch(_eDbgGr20) {
       _err('assignFillColor', _eDbgGr20);
       return 'Failed to assign gradient fill. errors=' + errs.join(' | ');
     }
 
-    try {rect.selected = true;} catch(_eDbgSel0) { _err('selectRect', _eDbgSel0); }
-    try {app.redraw();} catch(_eDbgRedraw0) { _err('redraw', _eDbgRedraw0); }
+    try {rect.selected = true;} catch(_eDbgSel0) {_err('selectRect', _eDbgSel0);}
+    try {app.redraw();} catch(_eDbgRedraw0) {_err('redraw', _eDbgRedraw0);}
 
     var readbackStops = [];
     var readbackName = '';
@@ -144,13 +144,13 @@ function signarama_helper_debugCreateGradientRect1090() {
           readbackStops.push(Math.round(rp * 1000) / 1000);
         }
       }
-    } catch(_eDbgGr22) { _err('readback', _eDbgGr22); }
+    } catch(_eDbgGr22) {_err('readback', _eDbgGr22);}
 
     var rb = null;
-    try {rb = rect.visibleBounds;} catch(_eDbgRb0) {rb = null; _err('readBounds', _eDbgRb0); }
+    try {rb = rect.visibleBounds;} catch(_eDbgRb0) {rb = null; _err('readBounds', _eDbgRb0);}
 
     return 'Debug rect created: ' + (rect.name || 'unnamed') +
-      ' | layer=' + (function() {try {return String((rect.layer && rect.layer.name) || '');} catch(_eDbgLay4) {return '';}})() +
+      ' | layer=' + (function() {try {return String((rect.layer && rect.layer.name) || '');} catch(_eDbgLay4) {return '';} })() +
       ' | center=[' + (Math.round(cx * 1000) / 1000) + ', ' + (Math.round(cy * 1000) / 1000) + ']' +
       ' | bounds=' + (rb && rb.length === 4 ? ('[' + (Math.round(rb[0] * 1000) / 1000) + ',' + (Math.round(rb[1] * 1000) / 1000) + ',' + (Math.round(rb[2] * 1000) / 1000) + ',' + (Math.round(rb[3] * 1000) / 1000) + ']') : '[n/a]') +
       ' | requestedStops=[10,90]' +
@@ -185,10 +185,10 @@ function signarama_helper_debugSetSelectedGradientStops1090() {
     if(!stops || !stops.length) return out;
     for(var i = 0; i < stops.length; i++) {
       out.push({
-        color: (function(s) {try {return s.color;} catch(_eSg2) {return null;}})(stops[i]),
-        midPoint: (function(s) {try {return Number(s.midPoint || 50);} catch(_eSg3) {return 50;}})(stops[i]),
-        opacity: (function(s) {try {return Number(s.opacity || 100);} catch(_eSg4) {return 100;}})(stops[i]),
-        rampPoint: (function(s) {try {return Number(s.rampPoint || 0);} catch(_eSg5) {return 0;}})(stops[i])
+        color: (function(s) {try {return s.color;} catch(_eSg2) {return null;} })(stops[i]),
+        midPoint: (function(s) {try {return Number(s.midPoint || 50);} catch(_eSg3) {return 50;} })(stops[i]),
+        opacity: (function(s) {try {return Number(s.opacity || 100);} catch(_eSg4) {return 100;} })(stops[i]),
+        rampPoint: (function(s) {try {return Number(s.rampPoint || 0);} catch(_eSg5) {return 0;} })(stops[i])
       });
     }
     return out;
@@ -294,7 +294,7 @@ function signarama_helper_debugSetSelectedGradientStops1090() {
     var cur = stack.pop();
     if(!cur) continue;
     var dupe = false;
-    for(var si = 0; si < seen.length; si++) {if(seen[si] === cur) {dupe = true; break;}}
+    for(var si = 0; si < seen.length; si++) {if(seen[si] === cur) {dupe = true; break;} }
     if(dupe) continue;
     seen.push(cur);
 
@@ -1578,7 +1578,8 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var forceBleedSolidRedTest = false;
   var forceBleedStopTest2080 = false;
   var forceSolidPrimeBeforeGradientAssign = false;
-  var pathBleedDebugVerbose = false;
+  var pathBleedDebugVerbose = true;
+  var drawGradientStopDebugLines = false;
   var _pathBleedLogLines = [];
   function _pathBleedWithDbg(msg) {
     if(!_pathBleedLogLines || !_pathBleedLogLines.length) return msg;
@@ -1626,7 +1627,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
             var prevSel0 = doc.selection;
             doc.selection = null;
             it.selected = true;
-            app.executeMenuCommand("OffsetPath v22");
+            _expandSelection();
             doc.selection = prevSel0;
           } catch(_eOlStroke0) { }
         }
@@ -1710,7 +1711,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   function _outlineStrokeInContainer(container) {
     if(!container) return;
     _runOnSelection(container, function() {
-      try {app.executeMenuCommand("OffsetPath v22");} catch(_eOs0) { }
+      _pathBleedDebug('outline-stroke | strategy=expand-only');
       _expandSelection();
     });
   }
@@ -1718,6 +1719,125 @@ function signarama_helper_applyPathBleed(jsonStr) {
   function _applyOffsetToContainer(container, ofst) {
     if(!container) return false;
     _pathBleedDebug('offset START | ofst=' + _fmtNum3(ofst) + ' | container=' + _itemRef(container));
+    function _safeBounds(it) {
+      var b0 = null;
+      try {b0 = it.visibleBounds;} catch(_eOb0) {b0 = null;}
+      if(!b0 || b0.length !== 4) {
+        try {b0 = it.geometricBounds;} catch(_eOb1) {b0 = null;}
+      }
+      return (b0 && b0.length === 4) ? [Number(b0[0]), Number(b0[1]), Number(b0[2]), Number(b0[3])] : null;
+    }
+    function _boundsChanged(a, b) {
+      if(!a || !b || a.length !== 4 || b.length !== 4) return false;
+      var eps = 0.25;
+      for(var iB = 0; iB < 4; iB++) {
+        if(Math.abs(Number(a[iB]) - Number(b[iB])) > eps) return true;
+      }
+      return false;
+    }
+    function _expectedOffsetBounds(b, d) {
+      if(!b || b.length !== 4) return null;
+      var dd = Number(d || 0);
+      return [Number(b[0]) - dd, Number(b[1]) + dd, Number(b[2]) + dd, Number(b[3]) - dd];
+    }
+    function _boundsDelta(a, b) {
+      if(!a || !b || a.length !== 4 || b.length !== 4) return '[n/a]';
+      return '[' +
+        _fmtNum3(Number(b[0]) - Number(a[0])) + ',' +
+        _fmtNum3(Number(b[1]) - Number(a[1])) + ',' +
+        _fmtNum3(Number(b[2]) - Number(a[2])) + ',' +
+        _fmtNum3(Number(b[3]) - Number(a[3])) + ']';
+    }
+    function _boundsErr(expected, actual) {
+      if(!expected || !actual || expected.length !== 4 || actual.length !== 4) return '[n/a]';
+      return '[' +
+        _fmtNum3(Number(actual[0]) - Number(expected[0])) + ',' +
+        _fmtNum3(Number(actual[1]) - Number(expected[1])) + ',' +
+        _fmtNum3(Number(actual[2]) - Number(expected[2])) + ',' +
+        _fmtNum3(Number(actual[3]) - Number(expected[3])) + ']';
+    }
+    function _hasCompoundAncestorLocal(it) {
+      var p = null;
+      var guard = 0;
+      try {p = it.parent;} catch(_eHcaL0) {p = null;}
+      while(p && guard < 100) {
+        guard++;
+        try {if(String(p.typename || '') === 'CompoundPathItem') return true;} catch(_eHcaL1) { }
+        try {p = p.parent;} catch(_eHcaL2) {p = null;}
+      }
+      return false;
+    }
+    function _collectOffsetTargets(root) {
+      var out = [];
+      if(!root) return out;
+      var st = [];
+      try {st.push(root);} catch(_eCot0) { }
+      while(st.length) {
+        var cur = st.pop();
+        if(!cur) continue;
+        var tn = '';
+        try {tn = String(cur.typename || '');} catch(_eCot1) {tn = '';}
+        if(tn === 'CompoundPathItem') {
+          out.push(cur);
+          continue;
+        }
+        if(tn === 'PathItem' && !_hasCompoundAncestorLocal(cur)) {
+          out.push(cur);
+        }
+        _pushGradientChildren(cur, st);
+      }
+      return out;
+    }
+    function _hasNonNativeDescendant(root) {
+      if(!root) return false;
+      var stN = [];
+      try {stN.push(root);} catch(_eNnD0) { }
+      while(stN.length) {
+        var itN = stN.pop();
+        if(!itN) continue;
+        try {if(String(itN.typename || '') === 'NonNativeItem') return true;} catch(_eNnD1) { }
+        _pushGradientChildren(itN, stN);
+      }
+      return false;
+    }
+    function _logDescendantsBounds(label, root) {
+      if(!root) return;
+      var st2 = [];
+      var idx = 0;
+      try {st2.push(root);} catch(_eObL0) { }
+      while(st2.length && idx < 60) {
+        var it2 = st2.pop();
+        if(!it2) continue;
+        idx++;
+        var t2 = '';
+        try {t2 = String(it2.typename || '');} catch(_eObL1) {t2 = '';}
+        if(t2 === 'GroupItem' || t2 === 'CompoundPathItem' || t2 === 'PathItem' || t2 === 'NonNativeItem') {
+          _pathBleedDebug('offset ' + label + ' | ' + _itemRef(it2));
+        }
+        try {
+          if(it2.pageItems && it2.pageItems.length) {
+            for(var pp = 0; pp < it2.pageItems.length; pp++) st2.push(it2.pageItems[pp]);
+          }
+        } catch(_eObL2) { }
+      }
+    }
+    var beforeBounds = _safeBounds(container);
+    var expectedBounds = _expectedOffsetBounds(beforeBounds, ofst);
+    var nativeTargets = _collectOffsetTargets(container);
+    var hasNonNative = _hasNonNativeDescendant(container);
+    var skipExpandForNonNative = hasNonNative;
+    _pathBleedDebug(
+      'offset mode | strategy=live-effect | targets=' + nativeTargets.length +
+      ' | hasNonNative=' + (hasNonNative ? 'yes' : 'no') +
+      ' | skipExpand=' + (skipExpandForNonNative ? 'yes' : 'no')
+    );
+    _pathBleedDebug(
+      'offset expect | before=' + _fmtBounds4(beforeBounds) +
+      ' | expected=' + _fmtBounds4(expectedBounds) +
+      ' | ofst=' + _fmtNum3(ofst)
+    );
+    _logDescendantsBounds('desc-before', container);
+
     var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(ofst) + ' I jntp 0 R mlim 180"/></LiveEffect>';
     var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(ofst) + ' I jntp 0"/></LiveEffect>';
     var applied = false;
@@ -1732,30 +1852,83 @@ function signarama_helper_applyPathBleed(jsonStr) {
         _pathBleedDebug('offset applyEffect fx2 on container OK');
       } catch(_eFxB) { }
     }
-    if(!applied) {
-      var kids = [];
-      try {for(var i = 0; i < container.pageItems.length; i++) kids.push(container.pageItems[i]);} catch(_eKid0) { }
-      for(var k = 0; k < kids.length; k++) {
-        var it = kids[k];
+    if(applied) {
+      if(skipExpandForNonNative) {
+        _pathBleedDebug('offset expand selection SKIP | reason=non-native-content');
+      } else {
+        _runOnSelection(container, function() {_expandSelection();});
+        _pathBleedDebug('offset expand selection OK | target=container');
+      }
+    }
+
+    var afterContainerBounds = _safeBounds(container);
+    var changedByContainer = _boundsChanged(beforeBounds, afterContainerBounds);
+    var changedAny = false;
+    if(changedByContainer) changedAny = true;
+    _pathBleedDebug(
+      'offset container-result | before=' + _fmtBounds4(beforeBounds) +
+      ' | after=' + _fmtBounds4(afterContainerBounds) +
+      ' | delta=' + _boundsDelta(beforeBounds, afterContainerBounds) +
+      ' | errVsExpected=' + _boundsErr(expectedBounds, afterContainerBounds) +
+      ' | changed=' + (changedByContainer ? 'yes' : 'no')
+    );
+    _logDescendantsBounds('desc-after-container', container);
+
+    var forcedApplied = 0;
+    if(!changedByContainer && nativeTargets.length) {
+      for(var nt = 0; nt < nativeTargets.length; nt++) {
+        var t = nativeTargets[nt];
+        if(!t) continue;
+        var tb = _safeBounds(t);
+        var used = '';
         try {
-          it.applyEffect(fx1);
-          applied = true;
-          _pathBleedDebug('offset applyEffect fx1 on child OK | ' + _itemRef(it));
-        } catch(_eFxK1) {
+          t.applyEffect(fx1);
+          used = 'fx1';
+          forcedApplied++;
+        } catch(_eFxT0) {
           try {
-            it.applyEffect(fx2);
-            applied = true;
-            _pathBleedDebug('offset applyEffect fx2 on child OK | ' + _itemRef(it));
-          } catch(_eFxK2) { }
+            t.applyEffect(fx2);
+            used = 'fx2';
+            forcedApplied++;
+          } catch(_eFxT1) { }
+        }
+        var ta = _safeBounds(t);
+        var itemChanged = _boundsChanged(tb, ta);
+        if(itemChanged) changedAny = true;
+        _pathBleedDebug(
+          'offset target-result | idx=' + nt +
+          ' | item=' + _itemRef(t) +
+          ' | effect=' + (used || 'none') +
+          ' | before=' + _fmtBounds4(tb) +
+          ' | after=' + _fmtBounds4(ta) +
+          ' | delta=' + _boundsDelta(tb, ta) +
+          ' | changed=' + (itemChanged ? 'yes' : 'no')
+        );
+      }
+      if(forcedApplied > 0) {
+        if(skipExpandForNonNative) {
+          _pathBleedDebug('offset forced expand SKIP | reason=non-native-content');
+        } else {
+          _runOnSelection(nativeTargets, function() {_expandSelection();});
+          _pathBleedDebug('offset forced expand OK | target=native-targets');
         }
       }
     }
-    if(applied) {
-      _runOnSelection(container, function() {_expandSelection();});
-      _pathBleedDebug('offset expand selection OK');
-    }
-    _pathBleedDebug('offset END | applied=' + (applied ? 'yes' : 'no'));
-    return applied;
+
+    var afterBounds = _safeBounds(container);
+    if(_boundsChanged(beforeBounds, afterBounds)) changedAny = true;
+    _pathBleedDebug(
+      'offset summary | before=' + _fmtBounds4(beforeBounds) +
+      ' | after=' + _fmtBounds4(afterBounds) +
+      ' | delta=' + _boundsDelta(beforeBounds, afterBounds) +
+      ' | errVsExpected=' + _boundsErr(expectedBounds, afterBounds) +
+      ' | applied=' + (applied ? 'yes' : 'no') +
+      ' | forcedApplied=' + forcedApplied +
+      ' | geometryChanged=' + (changedAny ? 'yes' : 'no')
+    );
+    _logDescendantsBounds('desc-after-offset', container);
+    _pathBleedDebug('offset END | applied=' + ((applied || forcedApplied > 0) ? 'yes' : 'no') + ' | geometryChanged=' + (changedAny ? 'yes' : 'no'));
+    return {applied: (applied || forcedApplied > 0), changed: changedAny};
   }
 
   function _countPathLikeItems(container) {
@@ -1779,6 +1952,40 @@ function signarama_helper_applyPathBleed(jsonStr) {
       var gt = gc.gradient && gc.gradient.type;
       return String(gt) === String(GradientType.LINEAR) || String(gt).toLowerCase().indexOf('linear') >= 0;
     } catch(_eGl0) {return false;}
+  }
+
+  function _isRadialGradient(gc) {
+    if(!_isGradientColor(gc)) return false;
+    try {
+      var gt = gc.gradient && gc.gradient.type;
+      return String(gt) === String(GradientType.RADIAL) || String(gt).toLowerCase().indexOf('radial') >= 0;
+    } catch(_eGl1) {return false;}
+  }
+
+  function _isFreeformGradient(gc) {
+    if(!gc) return false;
+    try {
+      var tn = String(gc.typename || '').toLowerCase();
+      if(tn.indexOf('freeform') >= 0) return true;
+    } catch(_eGl2) { }
+    try {
+      if(gc.gradient && typeof gc.gradient.type !== 'undefined') {
+        var gt = String(gc.gradient.type).toLowerCase();
+        if(gt.indexOf('freeform') >= 0) return true;
+      }
+    } catch(_eGl3) { }
+    return false;
+  }
+
+  function _isGradientLikeColor(gc) {
+    return _isGradientColor(gc) || _isFreeformGradient(gc);
+  }
+
+  function _getCompensatableGradientMode(gc) {
+    if(_isLinearGradient(gc)) return 'linear';
+    if(_isRadialGradient(gc)) return 'radial';
+    if(_isFreeformGradient(gc)) return 'freeform'; // Freeform follows radial compensation path.
+    return '';
   }
 
   function _pathBleedDebug(msg) {
@@ -1839,6 +2046,131 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return tn;
   }
 
+  function _hasAncestorNamed(item, ancestorName) {
+    if(!item || !ancestorName) return false;
+    var p = null;
+    try {p = item.parent;} catch(_eHan0) {p = null;}
+    var guard = 0;
+    while(p && guard < 200) {
+      guard++;
+      try {
+        if(String(p.name || '') === ancestorName) return true;
+      } catch(_eHan1) { }
+      try {p = p.parent;} catch(_eHan2) {p = null;}
+    }
+    return false;
+  }
+
+  function _itemHasFreeformLike(item) {
+    if(!item) return false;
+    var stack = [];
+    try {stack.push(item);} catch(_eFfLike0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      try {
+        if(String(cur.typename || '') === 'NonNativeItem') return true;
+      } catch(_eFfLike1) { }
+      try {
+        var gf = _getGradientColorForKind(cur, 'fill');
+        if(_isFreeformGradient(gf)) return true;
+      } catch(_eFfLike2) { }
+      try {
+        var gs = _getGradientColorForKind(cur, 'stroke');
+        if(_isFreeformGradient(gs)) return true;
+      } catch(_eFfLike3) { }
+      _pushGradientChildren(cur, stack);
+    }
+    return false;
+  }
+
+  function _selectionHasFreeformLike(selItems) {
+    if(!selItems || !selItems.length) return false;
+    for(var i = 0; i < selItems.length; i++) {
+      if(_itemHasFreeformLike(selItems[i])) return true;
+    }
+    return false;
+  }
+
+  function _countNonNativeItems(root) {
+    if(!root) return 0;
+    var count = 0;
+    var stack = [];
+    try {stack.push(root);} catch(_eCntNn0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      try {if(String(cur.typename || '') === 'NonNativeItem') count++;} catch(_eCntNn1) { }
+      _pushGradientChildren(cur, stack);
+    }
+    return count;
+  }
+
+  function _scanForNonNative(root, label) {
+    var count = 0;
+    if(!root) return count;
+    var stack = [];
+    try {stack.push(root);} catch(_eScanNn0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eScanNn1) {tn = '';}
+      if(tn === 'NonNativeItem') {
+        count++;
+        _pathBleedDebug('non-native scan ' + (label || '') + ' | found | ' + _itemRef(cur));
+      }
+      _pushGradientChildren(cur, stack);
+    }
+    _pathBleedDebug('non-native scan ' + (label || '') + ' | count=' + count);
+    return count;
+  }
+
+  function _describeGradientType(gc) {
+    if(!gc) return 'none';
+    var colorTn = '';
+    var gradTn = '';
+    var gradType = '';
+    try {colorTn = String(gc.typename || '');} catch(_eDgt0) {colorTn = '';}
+    try {if(gc.gradient) gradTn = String(gc.gradient.typename || '');} catch(_eDgt1) {gradTn = '';}
+    try {if(gc.gradient && typeof gc.gradient.type !== 'undefined') gradType = String(gc.gradient.type);} catch(_eDgt2) {gradType = '';}
+    var mode = 'unknown';
+    if(_isLinearGradient(gc)) mode = 'linear';
+    else if(_isRadialGradient(gc)) mode = 'radial';
+    else if(_isFreeformGradient(gc)) mode = 'freeform';
+    return 'mode=' + mode +
+      ' colorType=' + (colorTn || 'n/a') +
+      ' gradType=' + (gradType || 'n/a') +
+      ' gradObjType=' + (gradTn || 'n/a');
+  }
+
+  function _logSelectionGradientKinds(selItems, label) {
+    if(!pathBleedDebugVerbose) return;
+    var stack = [];
+    var seen = 0;
+    if(selItems && selItems.length) {
+      for(var i = 0; i < selItems.length; i++) stack.push(selItems[i]);
+    }
+    _pathBleedDebug('selection-gradient-kinds START ' + (label || 'selection') + ' | roots=' + (selItems ? selItems.length : 0));
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      seen++;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eLsg0) {tn = '';}
+      var fillDesc = 'none';
+      var strokeDesc = 'none';
+      try {fillDesc = _describeGradientType(_getGradientColorForKind(cur, 'fill'));} catch(_eLsg1) {fillDesc = 'error';}
+      try {strokeDesc = _describeGradientType(_getGradientColorForKind(cur, 'stroke'));} catch(_eLsg2) {strokeDesc = 'error';}
+      _pathBleedDebug('selection-gradient-kinds item | ' + _itemRef(cur) + ' | fill{' + fillDesc + '} | stroke{' + strokeDesc + '}');
+      if(tn === 'NonNativeItem') {
+        _pathBleedDebug('selection-gradient-kinds item | NonNativeItem detected');
+      }
+      _pushGradientChildren(cur, stack);
+    }
+    _pathBleedDebug('selection-gradient-kinds END ' + (label || 'selection') + ' | scanned=' + seen);
+  }
+
   function _logGradientStateForItem(it, label) {
     if(!it) return;
     function _logOne(kind) {
@@ -1892,21 +2224,355 @@ function signarama_helper_applyPathBleed(jsonStr) {
     _pathBleedDebug('container-scan END ' + (label || '') + ' | totalItems=' + total + ' | gradientItems=' + gradCount);
   }
 
+  function _auditStructure(container, label) {
+    if(!container) return;
+    var stack = [];
+    var total = 0;
+    var typeCounts = {};
+    var snapshotNamed = 0;
+    var nonNative = 0;
+    try {stack.push(container);} catch(_eAud0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      total++;
+      var tn = '';
+      var nm = '';
+      try {tn = String(cur.typename || 'Unknown');} catch(_eAud1) {tn = 'Unknown';}
+      try {nm = String(cur.name || '');} catch(_eAud2) {nm = '';}
+      try {typeCounts[tn] = (typeCounts[tn] || 0) + 1;} catch(_eAud3) { }
+      if(tn === 'NonNativeItem') nonNative++;
+      if(nm && nm.indexOf('SRH_ORIGINAL_SNAPSHOT') >= 0) snapshotNamed++;
+      _pushGradientChildren(cur, stack);
+    }
+    var parts = [];
+    for(var k in typeCounts) {
+      if(typeCounts.hasOwnProperty(k)) parts.push(k + '=' + typeCounts[k]);
+    }
+    _pathBleedDebug(
+      'structure audit ' + (label || '') +
+      ' | total=' + total +
+      ' | nonNative=' + nonNative +
+      ' | snapshotNamed=' + snapshotNamed +
+      ' | types{' + parts.join(', ') + '}'
+    );
+
+    // Show snapshot nesting chain details (why multiple SRH_ORIGINAL_SNAPSHOT groups exist).
+    var sst = [];
+    var sidx = 0;
+    try {sst.push(container);} catch(_eAudS0) { }
+    while(sst.length && sidx < 30) {
+      var si = sst.pop();
+      if(!si) continue;
+      var snm = '';
+      try {snm = String(si.name || '');} catch(_eAudS1) {snm = '';}
+      if(snm && snm.indexOf('SRH_ORIGINAL_SNAPSHOT') >= 0) {
+        _pathBleedDebug('structure snapshot ' + (label || '') + ' | ' + _itemRef(si));
+      }
+      sidx++;
+      _pushGradientChildren(si, sst);
+    }
+  }
+
+  function _collectPathMetrics(container) {
+    var out = [];
+    if(!container) return out;
+    var stack = [];
+    var idx = 0;
+    try {stack.push(container);} catch(_ePm0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_ePm1) {tn = '';}
+      if(tn === 'PathItem' || tn === 'CompoundPathItem') {
+        var b = null;
+        try {b = cur.visibleBounds;} catch(_ePm2) {b = null;}
+        if(!b || b.length !== 4) {try {b = cur.geometricBounds;} catch(_ePm3) {b = null;} }
+        if(b && b.length === 4) {
+          var w = Number(b[2]) - Number(b[0]);
+          var h = Number(b[1]) - Number(b[3]);
+          out.push({
+            key: idx + ':' + tn,
+            ref: _itemRef(cur),
+            b: [Number(b[0]), Number(b[1]), Number(b[2]), Number(b[3])],
+            w: w,
+            h: h
+          });
+          idx++;
+        }
+      }
+      _pushGradientChildren(cur, stack);
+    }
+    return out;
+  }
+
+  function _logPathMetrics(label, rows) {
+    rows = rows || [];
+    _pathBleedDebug('path-metrics ' + (label || '') + ' | count=' + rows.length);
+    for(var i = 0; i < rows.length && i < 40; i++) {
+      var r = rows[i];
+      _pathBleedDebug(
+        'path-metrics ' + (label || '') +
+        ' | ' + r.key +
+        ' | w=' + _fmtNum3(r.w) +
+        ' | h=' + _fmtNum3(r.h) +
+        ' | b=' + _fmtBounds4(r.b) +
+        ' | ' + r.ref
+      );
+    }
+  }
+
+  function _logPathMetricsDelta(beforeRows, afterRows, label) {
+    beforeRows = beforeRows || [];
+    afterRows = afterRows || [];
+    var maxN = (beforeRows.length > afterRows.length) ? beforeRows.length : afterRows.length;
+    _pathBleedDebug('path-metrics delta ' + (label || '') + ' | before=' + beforeRows.length + ' | after=' + afterRows.length);
+    for(var i = 0; i < maxN && i < 40; i++) {
+      var b = (i < beforeRows.length) ? beforeRows[i] : null;
+      var a = (i < afterRows.length) ? afterRows[i] : null;
+      if(!b || !a) {
+        _pathBleedDebug('path-metrics delta ' + (label || '') + ' | idx=' + i + ' | paired=no');
+        continue;
+      }
+      _pathBleedDebug(
+        'path-metrics delta ' + (label || '') +
+        ' | idx=' + i +
+        ' | dw=' + _fmtNum3(a.w - b.w) +
+        ' | dh=' + _fmtNum3(a.h - b.h) +
+        ' | before=' + _fmtBounds4(b.b) +
+        ' | after=' + _fmtBounds4(a.b)
+      );
+    }
+  }
+
+  function _pruneCutlineContainer(container) {
+    if(!container) return 0;
+    var removed = 0;
+
+    function _walk(it) {
+      if(!it) return;
+      var tn = '';
+      try {tn = String(it.typename || '');} catch(_ePr0) {tn = '';}
+      if(tn === 'GroupItem') {
+        var kids = [];
+        try {
+          if(it.pageItems && it.pageItems.length) {
+            for(var i = 0; i < it.pageItems.length; i++) kids.push(it.pageItems[i]);
+          }
+        } catch(_ePr1) { }
+        for(var k = 0; k < kids.length; k++) _walk(kids[k]);
+        var leftCount = 0;
+        try {leftCount = it.pageItems ? Number(it.pageItems.length || 0) : 0;} catch(_ePr2) {leftCount = 0;}
+        if(leftCount === 0) {
+          try {it.remove(); removed++;} catch(_ePr3) { }
+        }
+        return;
+      }
+      if(tn === 'PathItem' || tn === 'CompoundPathItem') {
+        return;
+      }
+      try {
+        _pathBleedDebug('cutline prune remove | ' + _itemRef(it));
+        it.remove();
+        removed++;
+      } catch(_ePr4) { }
+    }
+
+    _walk(container);
+    _pathBleedDebug('cutline prune summary | removed=' + removed);
+    return removed;
+  }
+
+  // Rebuild a container so it contains only duplicated PathItems at its root.
+  function _extractPathOnlySources(container, label) {
+    if(!container) return 0;
+    var layerRef = null;
+    try {layerRef = container.layer;} catch(_eExtP0) {layerRef = null;}
+    if(!layerRef) return 0;
+    var tmp = null;
+    try {
+      tmp = layerRef.groupItems.add();
+      tmp.name = 'SRH_PATH_ONLY_TMP__' + String(new Date().getTime());
+    } catch(_eExtP1) {tmp = null;}
+    if(!tmp) return 0;
+
+    var copied = 0;
+    var st = [];
+    try {st.push(container);} catch(_eExtP2) { }
+    while(st.length) {
+      var cur = st.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eExtP3) {tn = '';}
+      if(tn === 'PathItem') {
+        try {
+          var dup = cur.duplicate(tmp, ElementPlacement.PLACEATEND);
+          try {dup.clipping = false;} catch(_eExtP4) { }
+          copied++;
+        } catch(_eExtP5) { }
+      }
+      _pushGradientChildren(cur, st);
+    }
+
+    var removed = 0;
+    try {
+      var kids = [];
+      for(var i = 0; i < container.pageItems.length; i++) kids.push(container.pageItems[i]);
+      for(var k = 0; k < kids.length; k++) {
+        try {kids[k].remove(); removed++;} catch(_eExtP6) { }
+      }
+    } catch(_eExtP7) { }
+
+    var moved = 0;
+    try {
+      var tmpKids = [];
+      for(var t = 0; t < tmp.pageItems.length; t++) tmpKids.push(tmp.pageItems[t]);
+      for(var m = 0; m < tmpKids.length; m++) {
+        try {tmpKids[m].move(container, ElementPlacement.PLACEATEND); moved++;} catch(_eExtP8) { }
+      }
+    } catch(_eExtP9) { }
+    try {tmp.remove();} catch(_eExtP10) { }
+
+    _pathBleedDebug(
+      'path-only extract ' + (label || '') +
+      ' | copied=' + copied +
+      ' | removed=' + removed +
+      ' | moved=' + moved
+    );
+    return moved;
+  }
+
+  function _extractNativePathSources(container, label) {
+    if(!container) return 0;
+    var layerRef = null;
+    try {layerRef = container.layer;} catch(_eExt0) {layerRef = null;}
+    if(!layerRef) return 0;
+    var tmp = null;
+    try {
+      tmp = layerRef.groupItems.add();
+      tmp.name = 'SRH_NATIVE_TMP__' + String(new Date().getTime());
+    } catch(_eExt1) {tmp = null;}
+    if(!tmp) return 0;
+
+    function _hasCompoundAncestor(it) {
+      var p = null;
+      var guard = 0;
+      try {p = it.parent;} catch(_eExt2) {p = null;}
+      while(p && guard < 100) {
+        guard++;
+        try {if(String(p.typename || '') === 'CompoundPathItem') return true;} catch(_eExt3) { }
+        try {p = p.parent;} catch(_eExt4) {p = null;}
+      }
+      return false;
+    }
+
+    var copied = 0;
+    var st = [];
+    try {st.push(container);} catch(_eExt5) { }
+    while(st.length) {
+      var cur = st.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eExt6) {tn = '';}
+      if(tn === 'CompoundPathItem') {
+        try {cur.duplicate(tmp, ElementPlacement.PLACEATEND); copied++;} catch(_eExt7) { }
+      } else if(tn === 'PathItem') {
+        if(!_hasCompoundAncestor(cur)) {
+          try {cur.duplicate(tmp, ElementPlacement.PLACEATEND); copied++;} catch(_eExt8) { }
+        }
+      }
+      _pushGradientChildren(cur, st);
+    }
+
+    var removed = 0;
+    try {
+      var kids = [];
+      for(var i = 0; i < container.pageItems.length; i++) kids.push(container.pageItems[i]);
+      for(var k = 0; k < kids.length; k++) {
+        try {kids[k].remove(); removed++;} catch(_eExt9) { }
+      }
+    } catch(_eExt10) { }
+
+    var moved = 0;
+    try {
+      var tmpKids = [];
+      for(var t = 0; t < tmp.pageItems.length; t++) tmpKids.push(tmp.pageItems[t]);
+      for(var m = 0; m < tmpKids.length; m++) {
+        try {tmpKids[m].move(container, ElementPlacement.PLACEATEND); moved++;} catch(_eExt11) { }
+      }
+    } catch(_eExt12) { }
+    try {tmp.remove();} catch(_eExt13) { }
+
+    _pathBleedDebug(
+      'native extract ' + (label || '') +
+      ' | copied=' + copied +
+      ' | removed=' + removed +
+      ' | moved=' + moved
+    );
+    return moved;
+  }
+
+  function _hasCompoundAncestor(it) {
+    var p = null;
+    var guard = 0;
+    try {p = it.parent;} catch(_eHca0) {p = null;}
+    while(p && guard < 100) {
+      guard++;
+      try {if(String(p.typename || '') === 'CompoundPathItem') return true;} catch(_eHca1) { }
+      try {p = p.parent;} catch(_eHca2) {p = null;}
+    }
+    return false;
+  }
+
+  function _duplicateNativePathsFromItem(src, targetContainer, label) {
+    if(!src || !targetContainer) return 0;
+    var copied = 0;
+    var stack = [];
+    try {stack.push(src);} catch(_eDupNp0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eDupNp1) {tn = '';}
+      if(tn === 'CompoundPathItem') {
+        try {
+          cur.duplicate(targetContainer, ElementPlacement.PLACEATEND);
+          copied++;
+          _pathBleedDebug('duplicate native ' + (label || '') + ' | compound | ' + _itemRef(cur));
+        } catch(_eDupNp2) { }
+        continue; // avoid duplicating child pathItems of same compound
+      }
+      if(tn === 'PathItem') {
+        if(!_hasCompoundAncestor(cur)) {
+          try {
+            cur.duplicate(targetContainer, ElementPlacement.PLACEATEND);
+            copied++;
+            _pathBleedDebug('duplicate native ' + (label || '') + ' | path | ' + _itemRef(cur));
+          } catch(_eDupNp3) { }
+        }
+      }
+      _pushGradientChildren(cur, stack);
+    }
+    _pathBleedDebug('duplicate native ' + (label || '') + ' | copied=' + copied);
+    return copied;
+  }
+
   function _getGradientColorForKind(item, kind) {
     if(!item) return null;
     try {
       if(kind === 'fill') {
         try {
-          if(item.filled && _isGradientColor(item.fillColor)) return item.fillColor;
+          if(item.filled && _isGradientLikeColor(item.fillColor)) return item.fillColor;
         } catch(_eGcKind1) { }
         try {
-          if(item.typename === "TextFrame" && item.textRange && item.textRange.characterAttributes && _isGradientColor(item.textRange.characterAttributes.fillColor)) {
+          if(item.typename === "TextFrame" && item.textRange && item.textRange.characterAttributes && _isGradientLikeColor(item.textRange.characterAttributes.fillColor)) {
             return item.textRange.characterAttributes.fillColor;
           }
         } catch(_eGcKind2) { }
         return null;
       }
-      try {return (item.stroked && _isGradientColor(item.strokeColor)) ? item.strokeColor : null;} catch(_eGcKind3) {return null;}
+      try {return (item.stroked && _isGradientLikeColor(item.strokeColor)) ? item.strokeColor : null;} catch(_eGcKind3) {return null;}
     } catch(_eGcKind0) {return null;}
   }
 
@@ -2051,9 +2717,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
       if(!isFinite(rp)) rp = 0;
       out.push({
         rampPoint: rp,
-        color: (function(s) {try {return s.color;} catch(_eGsd2) {return null;}})(stops[i]),
-        midPoint: (function(s) {try {return Number(s.midPoint || 50);} catch(_eGsd3) {return 50;}})(stops[i]),
-        opacity: (function(s) {try {return Number(s.opacity || 100);} catch(_eGsd4) {return 100;}})(stops[i])
+        color: (function(s) {try {return s.color;} catch(_eGsd2) {return null;} })(stops[i]),
+        midPoint: (function(s) {try {return Number(s.midPoint || 50);} catch(_eGsd3) {return 50;} })(stops[i]),
+        opacity: (function(s) {try {return Number(s.opacity || 100);} catch(_eGsd4) {return 100;} })(stops[i])
       });
     }
     return out;
@@ -2104,6 +2770,41 @@ function signarama_helper_applyPathBleed(jsonStr) {
     };
   }
 
+  function _fitGradientLineToItemBounds(item, origin, angleDeg, length) {
+    if(!item || !origin || origin.length < 2) return null;
+    var b = _getItemBoundsForGradient(item);
+    if(!b || b.length !== 4) return null;
+    var len = Number(length || 0);
+    if(!(len > 0)) return null;
+
+    var ox = Number(origin[0]);
+    var oy = Number(origin[1]);
+    var rad = Number(angleDeg || 0) * Math.PI / 180.0;
+    var ux = Math.cos(rad);
+    var uy = Math.sin(rad);
+    if(!isFinite(ox) || !isFinite(oy) || !isFinite(ux) || !isFinite(uy)) return null;
+
+    var l = Number(b[0]), t = Number(b[1]), r = Number(b[2]), bt = Number(b[3]);
+    if(!isFinite(l) || !isFinite(t) || !isFinite(r) || !isFinite(bt)) return null;
+
+    var corners = [[l, t], [r, t], [r, bt], [l, bt]];
+    var minProj = Number.MAX_VALUE;
+    var maxProj = -Number.MAX_VALUE;
+    for(var i = 0; i < corners.length; i++) {
+      var p = corners[i][0] * ux + corners[i][1] * uy;
+      if(p < minProj) minProj = p;
+      if(p > maxProj) maxProj = p;
+    }
+    if(!(isFinite(minProj) && isFinite(maxProj) && maxProj > minProj)) return null;
+
+    var originProj = (ox * ux) + (oy * uy);
+    var shift = minProj - originProj;
+    var fittedOrigin = [ox + (ux * shift), oy + (uy * shift)];
+    var fittedLen = maxProj - minProj;
+    if(!(fittedLen > 0)) return null;
+    return {origin: fittedOrigin, length: fittedLen, shiftAlongAxis: shift};
+  }
+
   function _fmtLinePoints(line) {
     if(!line) return 'start=[n/a], end=[n/a]';
     return 'start=' + _fmtPoint(line.start) + ', end=' + _fmtPoint(line.end);
@@ -2115,32 +2816,113 @@ function signarama_helper_applyPathBleed(jsonStr) {
     for(var i = 0; i < stops.length; i++) {
       var n = Number(stops[i]);
       if(!isFinite(n)) n = 0;
-      parts.push(String(Math.round(n * 1000) / 1000));
+      parts.push(String(n.toFixed(8)));
     }
     return parts.join(',');
   }
 
-  function _computeInwardRampPoints(stops, baseLength, shiftPt) {
+  // Stop remap in document points:
+  // p' = (((p/100)*Lpt + dpt) / (Lpt + 2*dpt)) * 100
+  function _computeInwardRampPoints(stops, baseLengthPt, shiftPtLocal, dbgLabel, mode) {
     if(!stops || !stops.length) return [];
-    var oldLen = Number(baseLength || 0);
-    var shift = Number(shiftPt || 0);
+    var oldLen = Number(baseLengthPt || 0);
+    var shift = Number(shiftPtLocal || 0);
+    var gradMode = String(mode || 'linear');
     if(!(oldLen > 0) || !(shift > 0)) return stops.slice(0);
 
-    var newLen = oldLen + (shift * 2);
+    var newLen = (gradMode === 'radial')
+      ? (oldLen + shift)
+      : (oldLen + (shift * 2));
     if(!(newLen > 0)) return stops.slice(0);
+    if(pathBleedDebugVerbose && dbgLabel) {
+      _pathBleedDebug(
+        'formula ' + dbgLabel +
+        ' | mode=' + gradMode +
+        ' | oldLenPt=' + _fmtNum3(oldLen) +
+        ' | shiftPt=' + _fmtNum3(shift) +
+        ' | newLenPt=' + _fmtNum3(newLen)
+      );
+    }
 
     var out = [];
     for(var i = 0; i < stops.length; i++) {
       var rp = Number(stops[i]);
       if(!isFinite(rp)) rp = 0;
       var t = rp / 100.0;
-      var mapped = ((t * oldLen) + shift) / newLen * 100.0;
+      var mapped = 0;
+      if(gradMode === 'radial') {
+        // Radial compensation keeps center fixed and expands radius by +shift.
+        // So existing stop radii are scaled by oldRadius/newRadius.
+        mapped = (t * oldLen / newLen) * 100.0;
+      } else {
+        mapped = ((t * oldLen) + shift) / newLen * 100.0;
+      }
       if(!isFinite(mapped)) mapped = rp;
       if(mapped < 0) mapped = 0;
       if(mapped > 100) mapped = 100;
       out.push(mapped);
+      if(pathBleedDebugVerbose && dbgLabel) {
+        _pathBleedDebug(
+          'formula ' + dbgLabel +
+          ' | stop[' + i + ']' +
+          ' | p=' + _fmtNum3(rp) +
+          ' | t=' + _fmtNum3(t) +
+          ' | mapped=' + _fmtNum3(mapped)
+        );
+      }
     }
 
+    for(var f = 1; f < out.length; f++) {
+      if(out[f] <= out[f - 1]) out[f] = Math.min(100, out[f - 1] + 0.01);
+    }
+    for(var b = out.length - 2; b >= 0; b--) {
+      if(out[b] >= out[b + 1]) out[b] = Math.max(0, out[b + 1] - 0.01);
+    }
+    if(pathBleedDebugVerbose && dbgLabel) {
+      _pathBleedDebug('formula ' + dbgLabel + ' | result=' + _formatStops(out));
+    }
+    return out;
+  }
+
+  // Piecewise remap of ramp points from one stop axis (oldStops) to another (newStops).
+  // Useful when the gradient currently has a different stop count than the baseline snapshot.
+  function _mapStopsThroughTransform(sourceStops, oldStops, newStops) {
+    if(!sourceStops || !sourceStops.length) return [];
+    if(!oldStops || !newStops || oldStops.length < 2 || newStops.length < 2 || oldStops.length !== newStops.length) {
+      return sourceStops.slice(0);
+    }
+    var out = [];
+    var n = oldStops.length;
+    for(var i = 0; i < sourceStops.length; i++) {
+      var p = Number(sourceStops[i]);
+      if(!isFinite(p)) p = 0;
+
+      var j = -1;
+      if(p <= Number(oldStops[0])) j = 0;
+      else if(p >= Number(oldStops[n - 1])) j = n - 2;
+      else {
+        for(var k = 0; k < n - 1; k++) {
+          var a = Number(oldStops[k]);
+          var b = Number(oldStops[k + 1]);
+          if(!isFinite(a) || !isFinite(b) || b <= a) continue;
+          if(p >= a && p <= b) {j = k; break;}
+        }
+      }
+      if(j < 0) j = Math.max(0, n - 2);
+
+      var o0 = Number(oldStops[j]), o1 = Number(oldStops[j + 1]);
+      var m0 = Number(newStops[j]), m1 = Number(newStops[j + 1]);
+      var t = 0;
+      if(isFinite(o0) && isFinite(o1) && o1 > o0) t = (p - o0) / (o1 - o0);
+      if(!isFinite(t)) t = 0;
+      if(t < 0) t = 0;
+      if(t > 1) t = 1;
+      var mapped = m0 + ((m1 - m0) * t);
+      if(!isFinite(mapped)) mapped = p;
+      if(mapped < 0) mapped = 0;
+      if(mapped > 100) mapped = 100;
+      out.push(mapped);
+    }
     for(var f = 1; f < out.length; f++) {
       if(out[f] <= out[f - 1]) out[f] = Math.min(100, out[f - 1] + 0.01);
     }
@@ -2430,7 +3212,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
   function _applyGradientCompensation(item, kind, rec, shiftPt) {
     if(!item) return false;
     var gc = _getGradientColorForKind(item, kind);
-    if(!_isLinearGradient(gc)) return false;
+    var gradMode = _getCompensatableGradientMode(gc);
+    if(!gradMode) return false;
+    if(gradMode === 'freeform') return false;
 
     var itemLabel = _getGradientItemLabel(item);
     var angleDeg = 0;
@@ -2459,16 +3243,24 @@ function signarama_helper_applyPathBleed(jsonStr) {
     var sourceStops = null;
     if(rec && rec.stops && rec.stops.length) sourceStops = rec.stops.slice(0);
     else sourceStops = _readGradientStopRampPoints(gc);
-    var mappedStops = _computeInwardRampPoints(sourceStops, baseLength, shiftPt);
+    var mappedStops = _computeInwardRampPoints(sourceStops, baseLength, shiftPt, 'primary:' + _getGradientItemLabel(item), gradMode);
     var forcedStopTestMode = forceBleedStopTest2080;
     if(forcedStopTestMode) mappedStops = _forceBleedTestStops2080(sourceStops, 20, 80);
     var beforeLine = _gradientLinePoints(baseOrigin, angleDeg, baseLength);
 
-    var rad = angleDeg * Math.PI / 180.0;
-    var dx = Math.cos(rad) * shiftPt;
-    var dy = Math.sin(rad) * shiftPt;
-    var targetOrigin = [baseOrigin[0] - dx, baseOrigin[1] - dy];
-    var targetLength = (baseLength > 0) ? (baseLength + (shiftPt * 2)) : 0;
+    var targetOrigin = [baseOrigin[0], baseOrigin[1]];
+    if(gradMode === 'linear') {
+      var rad = angleDeg * Math.PI / 180.0;
+      var dx = Math.cos(rad) * shiftPt;
+      var dy = Math.sin(rad) * shiftPt;
+      targetOrigin = [baseOrigin[0] - dx, baseOrigin[1] - dy];
+    }
+    var targetLength = 0;
+    if(baseLength > 0) {
+      targetLength = (gradMode === 'radial')
+        ? (baseLength + shiftPt)
+        : (baseLength + (shiftPt * 2));
+    }
 
     var stopApply = {applied: false, usedClone: false, usedCache: false, mode: 'none', rebuiltStopCount: 0, gradientName: ''};
     var panelVisibleForTwoStop = (sourceStops && sourceStops.length <= 2);
@@ -2520,6 +3312,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
     _pathBleedDebug(
       'gradient ' + kind +
+      ' | mode=' + gradMode +
       ' | item=' + itemLabel +
       ' | angle=' + _fmtNum3(angleDeg) +
       ' | origin ' + _fmtPoint(baseOrigin) + ' -> ' + _fmtPoint(appliedOrigin) +
@@ -2537,8 +3330,8 @@ function signarama_helper_applyPathBleed(jsonStr) {
                 ? ('rebuild-debugstyle(' + stopApply.rebuiltStopCount + ' stops' + (stopApply.gradientName ? ', ' + stopApply.gradientName : '') + ')')
                 : (stopApply.mode === 'rebuild-panel-visible'
                   ? ('rebuild-panel-visible(' + stopApply.rebuiltStopCount + ' stops' + (stopApply.gradientName ? ', ' + stopApply.gradientName : '') + ')')
-                : (stopApply.usedClone ? (stopApply.usedCache ? 'clone-cache' : 'clone') : 'direct'))
-                )
+                  : (stopApply.usedClone ? (stopApply.usedCache ? 'clone-cache' : 'clone') : 'direct'))
+              )
           )
           : 'none'
       ) +
@@ -2557,7 +3350,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
       if(!cur) continue;
       function _captureOne(kind) {
         var gc = _getGradientColorForKind(cur, kind);
-        if(!_isLinearGradient(gc)) return;
+        if(!_getCompensatableGradientMode(gc)) return;
         var angle = 0;
         var length = 0;
         var origin = null;
@@ -2613,7 +3406,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
       if(!rec || !rec.item || !rec.origin) continue;
       var usedItem = rec.item;
       var gc = _getGradientColorForKind(usedItem, rec.kind);
-      if(!_isLinearGradient(gc)) {
+      if(!_getCompensatableGradientMode(gc)) {
         var liveRec = _takeLiveRecord(rec.kind);
         if(liveRec && liveRec.item) {
           usedItem = liveRec.item;
@@ -2648,7 +3441,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   function _forceGradientStopsOnItem(it, kind, startPct, endPct) {
     if(!it) return false;
     var gc = _getGradientColorForKind(it, kind);
-    if(!_isLinearGradient(gc)) return false;
+    if(!_getCompensatableGradientMode(gc)) return false;
 
     var angleDeg = 0;
     var length = 0;
@@ -2705,20 +3498,179 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return adjusted;
   }
 
+  function _applyFreeformCompensationByResize(item, shiftPt, kind) {
+    if(!item || !(shiftPt > 0)) return false;
+    var b = _getItemBoundsForGradient(item);
+    if(!b || b.length !== 4) return false;
+    var w = Math.abs(Number(b[2]) - Number(b[0]));
+    var h = Math.abs(Number(b[1]) - Number(b[3]));
+    if(!(w > 0) || !(h > 0)) return false;
+
+    var oldW = w - (2 * shiftPt);
+    var oldH = h - (2 * shiftPt);
+    if(!(oldW > 0) || !(oldH > 0)) return false;
+
+    var sx = (oldW / w) * 100.0;
+    var sy = (oldH / h) * 100.0;
+    if(!isFinite(sx) || !isFinite(sy) || sx <= 0 || sy <= 0) return false;
+    function _expandBounds(b0, d) {
+      if(!b0 || b0.length !== 4) return null;
+      var dd = Number(d || 0);
+      return [Number(b0[0]) - dd, Number(b0[1]) + dd, Number(b0[2]) + dd, Number(b0[3]) - dd];
+    }
+    function _fmtFreeformPointsFromBounds(b0, label) {
+      if(!b0 || b0.length !== 4) return label + '=[n/a]';
+      var l = Number(b0[0]), t = Number(b0[1]), r = Number(b0[2]), bt = Number(b0[3]);
+      var cy = (t + bt) / 2;
+      var s = [0, 20, 50, 80, 100];
+      var parts = [];
+      for(var i = 0; i < s.length; i++) {
+        var x = l + ((r - l) * (s[i] / 100));
+        parts.push(s[i] + '%:' + _fmtPoint([x, cy]));
+      }
+      return label + '={' + parts.join(', ') + '}';
+    }
+    var expectedOuter = _expandBounds(b, shiftPt);
+    _pathBleedDebug(
+      'freeform compensate prep ' + kind +
+      ' | item=' + _itemRef(item) +
+      ' | before=' + _fmtBounds4(b) +
+      ' | expectedOuter=' + _fmtBounds4(expectedOuter) +
+      ' | oldInnerW=' + _fmtNum3(oldW) +
+      ' | oldInnerH=' + _fmtNum3(oldH) +
+      ' | outerW=' + _fmtNum3(w) +
+      ' | outerH=' + _fmtNum3(h) +
+      ' | shift=' + _fmtNum3(shiftPt) +
+      ' | scale=(' + _fmtNum3(sx) + '%,' + _fmtNum3(sy) + '%)' +
+      ' | ' + _fmtFreeformPointsFromBounds(b, 'ptsBefore') +
+      ' | ' + _fmtFreeformPointsFromBounds(expectedOuter, 'ptsExpectedOuter')
+    );
+
+    function _resizeOne(it, label) {
+      var bb = _getItemBoundsForGradient(it);
+      try {
+        // For freeform payloads, resize the object itself (including geometry/pattern/gradient),
+        // while keeping center anchor, so clipping path geometry can remain unchanged.
+        it.resize(sx, sy, true, true, true, true, 100, Transformation.CENTER);
+        var aa = _getItemBoundsForGradient(it);
+        _pathBleedDebug(
+          'freeform compensate ' + kind +
+          ' | target=' + label +
+          ' | item=' + _itemRef(it) +
+          ' | before=' + _fmtBounds4(bb) +
+          ' | after=' + _fmtBounds4(aa) +
+          ' | shift=' + _fmtNum3(shiftPt) +
+          ' | scale=(' + _fmtNum3(sx) + '%,' + _fmtNum3(sy) + '%)' +
+          ' | ' + _fmtFreeformPointsFromBounds(bb, 'ptsTargetBefore') +
+          ' | ' + _fmtFreeformPointsFromBounds(aa, 'ptsTargetAfter')
+        );
+        return true;
+      } catch(_eFfR0) {return false;}
+    }
+
+    // Prefer direct NonNativeItem children where freeform data usually lives.
+    var adjustedAny = false;
+    try {
+      if(item.pageItems && item.pageItems.length) {
+        for(var i = 0; i < item.pageItems.length; i++) {
+          var k = item.pageItems[i];
+          if(!k) continue;
+          var kt = '';
+          try {kt = String(k.typename || '');} catch(_eFfK0) {kt = '';}
+          if(kt === 'NonNativeItem') {
+            if(_resizeOne(k, 'NonNativeItem')) adjustedAny = true;
+          }
+        }
+      }
+    } catch(_eFfR1) { }
+
+    if(adjustedAny) return true;
+
+    try {
+      // Fallback when no direct NonNativeItem could be resized.
+      var bBefore = _getItemBoundsForGradient(item);
+      item.resize(sx, sy, true, true, true, true, 100, Transformation.CENTER);
+      var bAfter = _getItemBoundsForGradient(item);
+      _pathBleedDebug(
+        'freeform compensate ' + kind +
+        ' | item=' + _itemRef(item) +
+        ' | before=' + _fmtBounds4(bBefore) +
+        ' | after=' + _fmtBounds4(bAfter) +
+        ' | shift=' + _fmtNum3(shiftPt) +
+        ' | scale=(' + _fmtNum3(sx) + '%,' + _fmtNum3(sy) + '%)'
+      );
+      return true;
+    } catch(_eFf0) {
+      _pathBleedDebug('freeform compensate ' + kind + ' | FAILED resize | item=' + _itemRef(item));
+      return false;
+    }
+  }
+
+  function _hasDirectNonNativeChild(item) {
+    if(!item) return false;
+    var kids = null;
+    try {kids = item.pageItems;} catch(_eNn0) {kids = null;}
+    if(!kids || !kids.length) return false;
+    for(var i = 0; i < kids.length; i++) {
+      var k = kids[i];
+      if(!k) continue;
+      try {
+        if(String(k.typename || '') === 'NonNativeItem') return true;
+      } catch(_eNn1) { }
+    }
+    return false;
+  }
+
   // Final-target pass: adjust stops on the actual post-offset bleed objects.
   // This handles cases where expand/offset creates a new target path that does
   // not preserve the earlier compensated gradient object reference.
-  function _finalizeBleedGradientStopsByFinalItems(container, shiftPt) {
+  function _finalizeBleedGradientStopsByFinalItems(container, shiftPt, baselineSnapshot, geometryChanged) {
     if(!container || !(shiftPt > 0)) return 0;
     var adjusted = 0;
+    var geomChanged = !!geometryChanged;
+    var scanned = 0;
+    var skippedOriginalBranch = 0;
+    var skippedNoGradient = 0;
+    var skippedNonLinear = 0;
+    var skippedNoStops = 0;
+    var skippedNoOriginOrLength = 0;
+    var skippedNoMapped = 0;
+    var freeformGroupAdjusted = 0;
     var stack = [];
     try {stack.push(container);} catch(_eFgFin0) { }
     while(stack.length) {
       var cur = stack.pop();
       if(!cur) continue;
+      scanned++;
+      // Freeform compensation is intentionally disabled to avoid appearance expansion/transforms.
       function _one(kind) {
+        // Only target final geometry created for this run.
+        if(!_hasAncestorNamed(cur, _pbBleedGroupName)) {
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=not-in-this-run-bleed-group | item=' + _itemRef(cur));
+          return;
+        }
+        // Skip the preserved source-copy subtree; only final bleed geometry should be compensated here.
+        if(_hasAncestorNamed(cur, _pbOriginalGroupName)) {
+          skippedOriginalBranch++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=inside-original-snapshot | item=' + _itemRef(cur));
+          return;
+        }
         var gc = _getGradientColorForKind(cur, kind);
-        if(!_isLinearGradient(gc)) return;
+        if(!gc) {
+          skippedNoGradient++;
+          return;
+        }
+        var gradMode = _getCompensatableGradientMode(gc);
+        if(!gradMode) {
+          skippedNonLinear++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=unsupported-gradient | item=' + _itemRef(cur));
+          return;
+        }
+        if(!geomChanged) {
+          skippedNoMapped++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=offset-geometry-unchanged | mode=' + gradMode + ' | item=' + _itemRef(cur));
+          return;
+        }
         var len = 0;
         var ang = 0;
         var org = null;
@@ -2726,21 +3678,143 @@ function signarama_helper_applyPathBleed(jsonStr) {
         try {ang = Number(gc.angle || 0);} catch(_eFgFin2) {ang = 0;}
         try {if(gc.origin && gc.origin.length >= 2) org = [Number(gc.origin[0]), Number(gc.origin[1])];} catch(_eFgFin3) {org = null;}
         if(!(len > 0)) len = _estimateGradientLengthFromItem(cur, ang);
-        if(!(len > 0)) return;
+        if(!(len > 0)) {
+          skippedNoOriginOrLength++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=no-length | item=' + _itemRef(cur));
+          return;
+        }
         var sourceStops = _readGradientStopRampPoints(gc);
-        if(!sourceStops || !sourceStops.length) return;
-        // Only re-target simple endpoint gradients on final output items.
-        // This avoids re-adjusting already-compensated multi-stop gradients.
-        if(sourceStops.length > 2) return;
+        if(!sourceStops || !sourceStops.length) {
+          skippedNoStops++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=no-stops | item=' + _itemRef(cur));
+          return;
+        }
         if(!org) {
           var bb = _getItemBoundsForGradient(cur);
           if(bb && bb.length === 4) org = [Number(bb[0]), (Number(bb[1]) + Number(bb[3])) / 2];
         }
-        if(!org) return;
+        if(!org) {
+          skippedNoOriginOrLength++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=no-origin | item=' + _itemRef(cur));
+          return;
+        }
+        if(gradMode === 'linear') {
+          var fitFinal = _fitGradientLineToItemBounds(cur, org, ang, len);
+          if(fitFinal && fitFinal.origin && fitFinal.origin.length >= 2 && fitFinal.length > 0) {
+            _pathBleedDebug(
+              'final-target bounds-fit ' + kind +
+              ' | item=' + _itemRef(cur) +
+              ' | shiftAlongAxis=' + _fmtNum3(fitFinal.shiftAlongAxis) +
+              ' | origin ' + _fmtPoint(org) + ' -> ' + _fmtPoint(fitFinal.origin) +
+              ' | length ' + _fmtNum3(len) + ' -> ' + _fmtNum3(fitFinal.length)
+            );
+            org = fitFinal.origin;
+            len = fitFinal.length;
+          }
+        }
 
-        var mapped = _computeInwardRampPoints(sourceStops, len, shiftPt);
-        if(!mapped || !mapped.length) return;
-        var rebuilt = _rebuildGradientColorWithNewGradient(gc, mapped, ang, org, len, {panelVisibleStops: true});
+        var origLenPtFromFinal = (gradMode === 'radial')
+          ? (len - shiftPt)
+          : (len - (2 * shiftPt));
+        if(!(origLenPtFromFinal > 0)) origLenPtFromFinal = len;
+
+        var baselineStops = sourceStops;
+        var baselineLenPt = origLenPtFromFinal;
+        var baselineRec = null;
+        if(baselineSnapshot && baselineSnapshot.length) {
+          var targetBaseLenPt = (gradMode === 'radial')
+            ? (len - shiftPt)
+            : (len - (2 * shiftPt));
+          if(!(targetBaseLenPt > 0)) targetBaseLenPt = len;
+          var bestDiff = Number.MAX_VALUE;
+          for(var bi = 0; bi < baselineSnapshot.length; bi++) {
+            var rec = baselineSnapshot[bi];
+            if(!rec || rec.kind !== kind) continue;
+            var rLenPt = Number(rec.length || 0);
+            var diff = Math.abs(rLenPt - targetBaseLenPt);
+            if(diff < bestDiff) {bestDiff = diff; baselineRec = rec;}
+          }
+        }
+        if(baselineRec && baselineRec.stops && baselineRec.stops.length) baselineStops = baselineRec.stops.slice(0);
+        if(baselineRec && isFinite(baselineRec.length) && Number(baselineRec.length) > 0) baselineLenPt = Number(baselineRec.length);
+
+        _pathBleedDebug(
+          'final-target baseline ' + kind +
+          ' | item=' + _itemRef(cur) +
+          ' | finalLenPt=' + _fmtNum3(len) +
+          ' | origLenPtFromFinal=' + _fmtNum3(origLenPtFromFinal) +
+          ' | chosenBaselineLenPt=' + _fmtNum3(baselineLenPt) +
+          ' | baselineStops=' + _formatStops(baselineStops)
+        );
+
+        var mappedBaseline = _computeInwardRampPoints(baselineStops, baselineLenPt, shiftPt, 'final-target:' + _getGradientItemLabel(cur), gradMode);
+        if(!mappedBaseline || !mappedBaseline.length) {
+          skippedNoMapped++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=empty-mapped-baseline | item=' + _itemRef(cur));
+          return;
+        }
+
+        var mapped = null;
+        var panelVisibleStops = false;
+        var branch = '';
+        if(baselineStops.length <= 2) {
+          // Keep 2-stop behavior stable even when current gradient has panel-expanded duplicate endpoints.
+          panelVisibleStops = true;
+          branch = (sourceStops.length <= 2) ? 'two-stop-direct' : 'two-stop-expanded-source';
+          if(sourceStops.length <= 2) {
+            mapped = mappedBaseline.slice(0);
+          } else {
+            var leftNew = Number(mappedBaseline[0]);
+            var rightNew = Number(mappedBaseline[mappedBaseline.length - 1]);
+            if(!isFinite(leftNew)) leftNew = 0;
+            if(!isFinite(rightNew)) rightNew = 100;
+            if(rightNew < leftNew) {var _tmpLR = leftNew; leftNew = rightNew; rightNew = _tmpLR;}
+
+            var leftOld = Number(sourceStops[1]);
+            var rightOld = Number(sourceStops[sourceStops.length - 2]);
+            if(!isFinite(leftOld)) leftOld = 0;
+            if(!isFinite(rightOld)) rightOld = 100;
+            if(!(rightOld > leftOld)) {leftOld = 0; rightOld = 100;}
+
+            mapped = [];
+            var lastIdx = sourceStops.length - 1;
+            for(var si = 0; si < sourceStops.length; si++) {
+              if(si === 0) {mapped.push(0); continue;}
+              if(si === lastIdx) {mapped.push(100); continue;}
+              var rpOld = Number(sourceStops[si]);
+              if(!isFinite(rpOld)) rpOld = leftOld;
+              var tt = (rpOld - leftOld) / (rightOld - leftOld);
+              if(!isFinite(tt)) tt = 0;
+              if(tt < 0) tt = 0;
+              if(tt > 1) tt = 1;
+              mapped.push(leftNew + ((rightNew - leftNew) * tt));
+            }
+          }
+        } else {
+          // Multi-stop baseline: preserve full stop structure and remap all stops.
+          panelVisibleStops = false;
+          branch = (sourceStops.length === baselineStops.length) ? 'multi-stop-direct' : 'multi-stop-piecewise';
+          if(sourceStops.length === baselineStops.length) mapped = mappedBaseline.slice(0);
+          else mapped = _mapStopsThroughTransform(sourceStops, baselineStops, mappedBaseline);
+        }
+
+        if(!mapped || !mapped.length) {
+          skippedNoMapped++;
+          _pathBleedDebug('final-target skip | kind=' + kind + ' | reason=empty-mapped | branch=' + branch + ' | item=' + _itemRef(cur));
+          return;
+        }
+        _pathBleedDebug(
+          'final-target remap ' + kind +
+          ' | mode=' + gradMode +
+          ' | branch=' + branch +
+          ' | panelVisible=' + (panelVisibleStops ? 'yes' : 'no') +
+          ' | item=' + _itemRef(cur) +
+          ' | sourceStops=' + _formatStops(sourceStops) +
+          ' | baselineStops=' + _formatStops(baselineStops) +
+          ' | mappedBaseline=' + _formatStops(mappedBaseline) +
+          ' | mapped=' + _formatStops(mapped)
+        );
+        var rebuilt = _rebuildGradientColorWithNewGradient(gc, mapped, ang, org, len, {panelVisibleStops: panelVisibleStops});
         var ok = false;
         if(rebuilt.ok && rebuilt.color) ok = _setGradientColorForKind(cur, kind, rebuilt.color);
         if(ok) {
@@ -2760,6 +3834,17 @@ function signarama_helper_applyPathBleed(jsonStr) {
       _one('stroke');
       _pushGradientChildren(cur, stack);
     }
+    _pathBleedDebug(
+      'final-target summary | scanned=' + scanned +
+      ' | adjusted=' + adjusted +
+      ' | skipOriginalBranch=' + skippedOriginalBranch +
+      ' | skipNoGradient=' + skippedNoGradient +
+      ' | skipNonLinear=' + skippedNonLinear +
+      ' | skipNoStops=' + skippedNoStops +
+      ' | skipNoOriginOrLength=' + skippedNoOriginOrLength +
+      ' | skipNoMapped=' + skippedNoMapped +
+      ' | freeformGroupAdjusted=' + freeformGroupAdjusted
+    );
     if(container) _captureGradientSnapshot(container, 'post-final-target-pass');
     return adjusted;
   }
@@ -2804,6 +3889,117 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return changed;
   }
 
+  function _drawGradientStopDebugLines(originalSnapshot, finalContainer) {
+    var out = {original: 0, bleed: 0, total: 0};
+
+    var debugGroup = null;
+    try {
+      var gItems = bleedLayer.groupItems;
+      for(var gi = gItems.length - 1; gi >= 0; gi--) {
+        try {
+          if(String(gItems[gi].name || '') === 'SRH_GRAD_DEBUG_LINES') gItems[gi].remove();
+        } catch(_eGdl0) { }
+      }
+      debugGroup = bleedLayer.groupItems.add();
+      debugGroup.name = 'SRH_GRAD_DEBUG_LINES';
+    } catch(_eGdl1) {debugGroup = null;}
+    if(!debugGroup) return out;
+
+    var abRect = null;
+    try {
+      var ai = doc.artboards.getActiveArtboardIndex();
+      abRect = doc.artboards[ai].artboardRect;
+    } catch(_eGdl2) {abRect = null;}
+    if(!abRect || abRect.length !== 4) return out;
+    var yTop = Number(abRect[1]);
+    var yBottom = Number(abRect[3]);
+    if(!isFinite(yTop) || !isFinite(yBottom)) return out;
+
+    var cOrigEnd = new RGBColor(); cOrigEnd.red = 0; cOrigEnd.green = 180; cOrigEnd.blue = 0;
+    var cOrigMid = new RGBColor(); cOrigMid.red = 120; cOrigMid.green = 220; cOrigMid.blue = 120;
+    var cFinalEnd = new RGBColor(); cFinalEnd.red = 255; cFinalEnd.green = 0; cFinalEnd.blue = 0;
+    var cFinalMid = new RGBColor(); cFinalMid.red = 0; cFinalMid.green = 170; cFinalMid.blue = 255;
+
+    function _addLine(x, isEndpoint, isOriginal) {
+      try {
+        var p = debugGroup.pathItems.add();
+        p.setEntirePath([[x, yTop], [x, yBottom]]);
+        p.stroked = true;
+        p.filled = false;
+        p.strokeWidth = _srh_pxStrokeDoc(isOriginal ? 1.6 : 1);
+        p.strokeColor = isOriginal
+          ? (isEndpoint ? cOrigEnd : cOrigMid)
+          : (isEndpoint ? cFinalEnd : cFinalMid);
+        return true;
+      } catch(_eGdl3) {return false;}
+    }
+
+    function _drawFromLine(origin, angle, len, stops, isOriginal) {
+      if(!origin || origin.length < 2 || !(len > 0) || !stops || !stops.length) return 0;
+      var rad = Number(angle || 0) * Math.PI / 180.0;
+      var dx = Math.cos(rad) * len;
+      var count = 0;
+      for(var i = 0; i < stops.length; i++) {
+        var rp = Number(stops[i]);
+        if(!isFinite(rp)) continue;
+        var x = Number(origin[0]) + (dx * (rp / 100.0));
+        if(!isFinite(x)) continue;
+        if(_addLine(x, (i === 0 || i === stops.length - 1), isOriginal)) count++;
+      }
+      return count;
+    }
+
+    // Draw final bleed lines first, then original lines so originals remain visible on top when overlapping.
+    if(finalContainer) {
+      var stack = [];
+      try {stack.push(finalContainer);} catch(_eGdl4) { }
+      while(stack.length) {
+        var cur = stack.pop();
+        if(!cur) continue;
+        function _drawFinalKind(kind) {
+          var gc = _getGradientColorForKind(cur, kind);
+          if(!_getCompensatableGradientMode(gc)) return;
+          var stops = _readGradientStopRampPoints(gc);
+          if(!stops || !stops.length) return;
+          var angle = 0, len = 0, origin = null;
+          try {angle = Number(gc.angle || 0);} catch(_eGdl5) {angle = 0;}
+          try {len = Number(gc.length || 0);} catch(_eGdl6) {len = 0;}
+          try {if(gc.origin && gc.origin.length >= 2) origin = [Number(gc.origin[0]), Number(gc.origin[1])];} catch(_eGdl7) {origin = null;}
+          if(!(len > 0)) len = _estimateGradientLengthFromItem(cur, angle);
+          if(!origin || !(len > 0)) return;
+          var fit = _fitGradientLineToItemBounds(cur, origin, angle, len);
+          if(fit && fit.origin && fit.origin.length >= 2 && fit.length > 0) {
+            origin = fit.origin;
+            len = fit.length;
+          }
+          out.bleed += _drawFromLine(origin, angle, len, stops, false);
+        }
+        _drawFinalKind('fill');
+        _drawFinalKind('stroke');
+        _pushGradientChildren(cur, stack);
+      }
+    }
+
+    if(originalSnapshot && originalSnapshot.length) {
+      for(var os = 0; os < originalSnapshot.length; os++) {
+        var rec = originalSnapshot[os];
+        if(!rec || !rec.origin || !rec.stops || !rec.stops.length) continue;
+        var o = [Number(rec.origin[0]), Number(rec.origin[1])];
+        var a = Number(rec.angle || 0);
+        var l = Number(rec.length || 0);
+        var fitO = _fitGradientLineToItemBounds(rec.item, o, a, l);
+        if(fitO && fitO.origin && fitO.origin.length >= 2 && fitO.length > 0) {
+          o = fitO.origin;
+          l = fitO.length;
+        }
+        out.original += _drawFromLine(o, a, l, rec.stops, true);
+      }
+    }
+
+    out.total = out.original + out.bleed;
+    return out;
+  }
+
   // Back-compat shims for older cached JSX paths that may still call the
   // previous snapshot-based gradient helpers.
   function _collectGradientItems(container) {
@@ -2823,11 +4019,24 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return !!ok;
   }
 
+  var preSel = [];
+  for(var ps = 0; ps < doc.selection.length; ps++) preSel.push(doc.selection[ps]);
+  _logSelectionGradientKinds(preSel, 'pre-guard-selection');
+  var freeformFallbackMode = _selectionHasFreeformLike(preSel);
+  if(freeformFallbackMode) {
+    _pathBleedDebug('freeform detect | selection contains NonNative/freeform | mode=offset-only');
+  }
+
   var bleedLayer = _srh_getOrCreateLayer(doc, "bleed");
   var originalLayer = _srh_getOrCreateLayer(doc, "original");
   var cutLayer = createCutline ? _srh_getOrCreateLayer(doc, "cutline") : _srh_getLayerByName(doc, "cutline");
+  var _pbRunId = String(new Date().getTime());
+  var _pbBleedGroupName = 'SRH_BLEED_WORK__' + _pbRunId;
+  var _pbOriginalGroupName = 'SRH_ORIGINAL_SNAPSHOT__' + _pbRunId;
+  var _pbCutGroupName = 'SRH_CUTLINE_WORK__' + _pbRunId;
   _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer);
   try {originalLayer.visible = true; originalLayer.locked = false;} catch(_eOlShow0) { }
+  try {if(cutLayer) {cutLayer.visible = true; cutLayer.locked = false;} } catch(_eCutShow0) { }
 
   // Snapshot selection because we'll move items to layers.
   var sel = [];
@@ -2840,16 +4049,17 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var cutGroup = null;
   try {
     bleedGroup = bleedLayer.groupItems.add();
-    bleedGroup.name = 'SRH_BLEED_WORK';
+    bleedGroup.name = _pbBleedGroupName;
   } catch(_eG0) { }
   try {
     originalGroup = originalLayer.groupItems.add();
-    originalGroup.name = 'SRH_ORIGINAL_SNAPSHOT';
+    originalGroup.name = _pbOriginalGroupName;
   } catch(_eG1) {originalGroup = originalLayer;}
   if(createCutline && cutLayer) {
+    try {cutLayer.visible = true; cutLayer.locked = false;} catch(_eCutShow1) { }
     try {
       cutGroup = cutLayer.groupItems.add();
-      cutGroup.name = 'SRH_CUTLINE_WORK';
+      cutGroup.name = _pbCutGroupName;
     } catch(_eG2) {cutGroup = cutLayer;}
   }
 
@@ -2891,21 +4101,39 @@ function signarama_helper_applyPathBleed(jsonStr) {
     _pathBleedDebug('duplicate source[' + n + '] ' + _itemRef(item));
 
     if(createCutline && cutGroup) {
-      try {item.duplicate(cutGroup, ElementPlacement.PLACEATEND); cutCount++;} catch(_eDupCut) { }
+      try {cutCount += _duplicateNativePathsFromItem(item, cutGroup, 'cut');} catch(_eDupCut) { }
     }
 
     if(bleedGroup) {
-      try {item.duplicate(bleedGroup, ElementPlacement.PLACEATEND); movedCount++;} catch(_eDupBleed0) { }
+      try {movedCount += _duplicateNativePathsFromItem(item, bleedGroup, 'bleed');} catch(_eDupBleed0) { }
     } else {
-      try {item.duplicate(bleedLayer, ElementPlacement.PLACEATBEGINNING); movedCount++;} catch(_eDupBleed1) { }
+      try {movedCount += _duplicateNativePathsFromItem(item, bleedLayer, 'bleed-layer');} catch(_eDupBleed1) { }
     }
   }
   _pathBleedDebug('duplicate summary | originals=' + originalCount + ' | movedToBleed=' + movedCount + ' | cutDup=' + cutCount);
+  var bleedContainerRef = bleedGroup || bleedLayer;
+  var _bleedPathOnlyCount = _extractPathOnlySources(bleedContainerRef, 'bleed-after-duplicate');
+  if(_bleedPathOnlyCount > 0) movedCount = _bleedPathOnlyCount;
+  _pathBleedDebug('bleed path-only summary | pathCount=' + _bleedPathOnlyCount + ' | movedToBleed=' + movedCount);
+  _auditStructure(bleedGroup || bleedLayer, 'bleed-after-duplicate');
+  if(createCutline && cutGroup) _auditStructure(cutGroup, 'cut-after-duplicate');
 
   if(!movedCount) {
     try {doc.selection = null;} catch(_eSel0) { }
     try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide1) { }
     return _pathBleedWithDbg("No eligible items to offset. Doc gradient-fill objects: " + docGradientFillCount + ".");
+  }
+
+  // Secondary guard: some freeform payloads are only detectable after duplication into bleed group.
+  var _postDupFreeformLike = false;
+  var _postDupNonNativeCount = 0;
+  try {_postDupFreeformLike = !!(bleedGroup && _itemHasFreeformLike(bleedGroup));} catch(_eFfGuardPd0) {_postDupFreeformLike = false;}
+  try {_postDupNonNativeCount = bleedGroup ? _countNonNativeItems(bleedGroup) : 0;} catch(_eFfGuardPd1) {_postDupNonNativeCount = 0;}
+  _pathBleedDebug('post-duplicate guard | freeformLike=' + (_postDupFreeformLike ? 'yes' : 'no') + ' | nonNativeCount=' + _postDupNonNativeCount);
+  if(bleedGroup && (_postDupFreeformLike || _postDupNonNativeCount > 0)) {
+    _logSelectionGradientKinds([bleedGroup], 'post-duplicate-bleed-group');
+    _pathBleedDebug('freeform detect | duplicated bleed content contains NonNative/freeform | mode=offset-only');
+    freeformFallbackMode = true;
   }
 
   // Hard isolate processing from originals: never restore commands onto original selection.
@@ -2914,13 +4142,36 @@ function signarama_helper_applyPathBleed(jsonStr) {
   if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
   if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
   _logContainerState(bleedGroup || bleedLayer, 'pre-offset-container');
+  var _preOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
+  _logPathMetrics('pre-offset', _preOffsetPathMetrics);
+  var _preOffsetNonNativeCount = _scanForNonNative(bleedGroup || bleedLayer, 'pre-offset');
+  if(_preOffsetNonNativeCount > 0) {
+    _pathBleedDebug('freeform detect | pre-offset container contains NonNativeItem | mode=offset-only');
+    freeformFallbackMode = true;
+  }
   var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
-  var offsetApplied = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var _postOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
+  _logPathMetrics('post-offset', _postOffsetPathMetrics);
+  _logPathMetricsDelta(_preOffsetPathMetrics, _postOffsetPathMetrics, 'offset');
+  var offsetApplied = false;
+  var offsetGeometryChanged = false;
+  if(typeof _offsetResult === 'boolean') {
+    offsetApplied = _offsetResult;
+    offsetGeometryChanged = _offsetResult;
+  } else {
+    try {offsetApplied = !!_offsetResult.applied;} catch(_eOr0) {offsetApplied = false;}
+    try {offsetGeometryChanged = !!_offsetResult.changed;} catch(_eOr1) {offsetGeometryChanged = false;}
+  }
   _logContainerState(bleedGroup || bleedLayer, 'after-offset-before-comp');
-  var gradientAdjusted = _shiftGradientBySnapshot(gradientSnapshot, offsetPt, bleedGroup || bleedLayer);
-  if(gradientAdjusted < 1) gradientAdjusted = _shiftGradientInContainer(bleedGroup || bleedLayer, offsetPt);
-  var finalTargetAdjusted = _finalizeBleedGradientStopsByFinalItems(bleedLayer, offsetPt);
-  _pathBleedDebug('final-target gradient stop pass count=' + finalTargetAdjusted);
+  var gradientAdjusted = 0;
+  if(offsetGeometryChanged) {
+    gradientAdjusted = _shiftGradientBySnapshot(gradientSnapshot, offsetPt, bleedGroup || bleedLayer);
+    if(gradientAdjusted < 1) gradientAdjusted = _shiftGradientInContainer(bleedGroup || bleedLayer, offsetPt);
+  } else {
+    _pathBleedDebug('skip compensation | reason=offset-geometry-unchanged');
+  }
+  var finalTargetAdjusted = 0;
   _pathBleedDebug('gradient compensation count=' + gradientAdjusted);
   _logContainerState(bleedGroup || bleedLayer, 'after-comp');
   var forcedGradientPassCount = 0;
@@ -2935,16 +4186,54 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
   _logContainerState(bleedLayer, 'final-bleed-layer');
 
+  var gradientDebugLineCount = 0;
+  var gradientDebugLineOriginalCount = 0;
+  var gradientDebugLineFinalCount = 0;
+  if(drawGradientStopDebugLines) {
+    var dbgLines = _drawGradientStopDebugLines(gradientSnapshot, bleedLayer);
+    if(dbgLines) {
+      gradientDebugLineCount = Number(dbgLines.total || 0);
+      gradientDebugLineOriginalCount = Number(dbgLines.original || 0);
+      gradientDebugLineFinalCount = Number(dbgLines.bleed || 0);
+    }
+  } else {
+    try {
+      var _dbgGroups = bleedLayer.groupItems;
+      for(var _dgi = _dbgGroups.length - 1; _dgi >= 0; _dgi--) {
+        try {
+          if(String(_dbgGroups[_dgi].name || '') === 'SRH_GRAD_DEBUG_LINES') _dbgGroups[_dgi].remove();
+        } catch(_eDbgRm1) { }
+      }
+    } catch(_eDbgRm0) { }
+  }
+
   if(createCutline && cutGroup) {
+    var _cutPathOnlyCount = _extractPathOnlySources(cutGroup, 'cut-before-style');
+    if(_cutPathOnlyCount > 0) cutCount = _cutPathOnlyCount;
+    _pathBleedDebug('cutline path-only summary | pathCount=' + _cutPathOnlyCount + ' | cutDup=' + cutCount);
     if(outlineText) _outlineTextInContainer(cutGroup);
     if(outlineStroke) _outlineStrokeInContainer(cutGroup);
     _setCutlineStyleOnItem(cutGroup, {outlineText: outlineText, outlineStroke: false});
+    _pruneCutlineContainer(cutGroup);
+    _auditStructure(cutGroup, 'cut-after-style');
     if(autoWeld) {
       _uniteContainer(cutGroup);
       // Re-apply style to welded result in cutline container only (never selection-based).
       _setCutlineStyleOnItem(cutGroup, {outlineText: false, outlineStroke: false});
+      _pruneCutlineContainer(cutGroup);
+      _auditStructure(cutGroup, 'cut-after-weld');
     }
+    _extractPathOnlySources(cutGroup, 'cut-after-weld-path-only');
+    _pruneCutlineContainer(cutGroup);
+    _auditStructure(cutGroup, 'cut-final-path-only');
   }
+
+  // Run final-target compensation after offset output is fully materialized on bleed layer.
+  try {app.redraw();} catch(_ePbRt0) { }
+  _pathBleedDebug('final-target precheck | offsetGeometryChanged=' + (offsetGeometryChanged ? 'yes' : 'no'));
+  finalTargetAdjusted = _finalizeBleedGradientStopsByFinalItems(bleedLayer, offsetPt, gradientSnapshot, offsetGeometryChanged);
+  _pathBleedDebug('final-target gradient stop pass count=' + finalTargetAdjusted);
+  _logContainerState(bleedLayer, 'after-final-target-pass');
 
   var offsetCount = _countPathLikeItems(bleedGroup || bleedLayer);
   try {doc.selection = null;} catch(_eSel1) { }
@@ -2956,7 +4245,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
   if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
   if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
+  if(drawGradientStopDebugLines) msg += ", gradient debug lines: " + gradientDebugLineCount + " (original: " + gradientDebugLineOriginalCount + ", bleed: " + gradientDebugLineFinalCount + ")";
   if(!offsetApplied) msg += ". Note: Offset effect fallback was limited on this selection.";
+  _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer);
   try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHide2) { }
   return _pathBleedWithDbg(msg);
 }
@@ -3674,8 +4965,8 @@ function signarama_helper_corebridge_flashGetState() {
 }
 try {this.signarama_helper_corebridge_flashGetState = signarama_helper_corebridge_flashGetState;} catch(_eFlashStateBind) { }
 function signarama_helper_corebridge_flashTickTaskRunner() {
-  try { return signarama_helper_corebridge_flashTickTask(); }
-  catch(_eFlashTaskRunner) { return 'ERROR|' + (_eFlashTaskRunner && _eFlashTaskRunner.message ? _eFlashTaskRunner.message : _eFlashTaskRunner); }
+  try {return signarama_helper_corebridge_flashTickTask();}
+  catch(_eFlashTaskRunner) {return 'ERROR|' + (_eFlashTaskRunner && _eFlashTaskRunner.message ? _eFlashTaskRunner.message : _eFlashTaskRunner);}
 }
 try {this.signarama_helper_corebridge_flashTickTaskRunner = signarama_helper_corebridge_flashTickTaskRunner;} catch(_eFlashTaskRunnerBind) { }
 
