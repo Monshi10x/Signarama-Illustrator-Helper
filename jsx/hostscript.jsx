@@ -4012,9 +4012,45 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   function _uniteContainer(container) {
     if(!container) return false;
-    var ok = _runOnSelection(container, function() {
+    function _collectUniteTargets(root) {
+      var out = [];
+      var seen = [];
+      function _alreadySeen(it) {
+        for(var si = 0; si < seen.length; si++) {
+          if(seen[si] === it) return true;
+        }
+        return false;
+      }
+      function _pushIfValid(it) {
+        if(!it || _alreadySeen(it)) return;
+        var tn = '';
+        try {tn = String(it.typename || '');} catch(_eUT0) {tn = '';}
+        if(tn !== 'PathItem' && tn !== 'CompoundPathItem') return;
+        if(tn === 'PathItem') {
+          try {
+            if(it.parent && String(it.parent.typename || '') === 'CompoundPathItem') return;
+          } catch(_eUT1) { }
+        }
+        try {if(it.guides) return;} catch(_eUT2) { }
+        try {if(it.clipping) return;} catch(_eUT3) { }
+        seen.push(it);
+        out.push(it);
+      }
+      try {
+        var items = root.pageItems;
+        for(var i = 0; i < items.length; i++) _pushIfValid(items[i]);
+      } catch(_eUT4) {
+        _pushIfValid(root);
+      }
+      return out;
+    }
+    var targets = _collectUniteTargets(container);
+    if(!targets || targets.length < 2) return false;
+    var ok = _runOnSelection(targets, function() {
+      try {app.executeMenuCommand('group');} catch(_eUGrp) { }
       try {app.executeMenuCommand('Live Pathfinder Add');} catch(_eU0) { }
-      _expandSelection();
+      try {app.executeMenuCommand('expandStyle');} catch(_eUEx0) { }
+      try {app.executeMenuCommand('ungroup');} catch(_eUUng0) { }
     });
     return !!ok;
   }
@@ -4688,14 +4724,32 @@ function signarama_helper_corebridge_updatePageNumbers() {
     var doc = app.activeDocument;
     var total = doc.artboards.length;
     if(!total) return 'No artboards.';
+    var proofFolderPath = '';
+    try {
+      if(doc.fullName) {
+        var _folderRef = doc.fullName.parent;
+        if(_folderRef && _folderRef.fsName) proofFolderPath = String(_folderRef.fsName);
+      }
+    } catch(_ePfLive) { proofFolderPath = ''; }
 
     var frames = doc.textFrames;
     var updated = 0;
+    var pathUpdated = 0;
     for(var i = 0; i < frames.length; i++) {
       var tf = frames[i];
       var name = '';
       try {name = String(tf.name || '');} catch(_eNm) {name = '';}
-      if(_trim(name).toLowerCase() !== 'page number') continue;
+      var normName = _trim(name).toLowerCase();
+      if(normName === 'file path text') {
+        try {
+          var curPath = String(tf.contents == null ? '' : tf.contents);
+          if(curPath !== proofFolderPath) {
+            tf.contents = proofFolderPath;
+            pathUpdated++;
+          }
+        } catch(_eSetPath) { }
+      }
+      if(normName !== 'page number') continue;
 
       var gb = tf.geometricBounds; // [L,T,R,B]
       var x = (Number(gb[0]) + Number(gb[2])) / 2;
@@ -4725,7 +4779,7 @@ function signarama_helper_corebridge_updatePageNumbers() {
         }
       } catch(_eSetPg) { }
     }
-    return 'Updated page numbers: ' + updated + ' / ' + frames.length + ' text frames scanned.';
+    return 'Updated page numbers: ' + updated + ' / ' + frames.length + ' text frames scanned. Updated file paths: ' + pathUpdated + '.';
   } catch(e) {
     return 'Error: ' + e.message;
   }
@@ -4797,6 +4851,19 @@ function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
     } catch(_eArrowLayerCreate) {layer = null;}
   }
   return layer;
+}
+function _srh_corebridge_finalizeArrowLayer(doc) {
+  if(!doc) return;
+  var layer = _srh_corebridge_getArrowLayer(doc, false);
+  if(!layer) return;
+  var hasItems = false;
+  try {hasItems = !!(layer.pageItems && layer.pageItems.length > 0);} catch(_eArrowHasItems2) {hasItems = true;}
+  if(!hasItems) {
+    try {layer.locked = false;} catch(_eArrowUnlockDel) { }
+    try {layer.remove();} catch(_eArrowDel) { }
+    return;
+  }
+  try {layer.locked = true;} catch(_eArrowLockKeep) { }
 }
 function _srh_corebridge_removeArrow(entry) {
   if(!entry || !entry.arrowGroup) return;
@@ -4875,15 +4942,7 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
     }
   }
   if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
-    var arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);
-    if(arrowLayer) {
-      try {
-        var hasItems = false;
-        try {hasItems = arrowLayer.pageItems && arrowLayer.pageItems.length > 0;} catch(_eArrowHasItems) {hasItems = true;}
-        if(!hasItems) arrowLayer.visible = false;
-      } catch(_eArrowLayerHide) { }
-      try {arrowLayer.locked = true;} catch(_eArrowLayerLock) { }
-    }
+    _srh_corebridge_finalizeArrowLayer(_srhCorebridgeFlashState.doc);
   }
   _srhCorebridgeFlashState = null;
 }
@@ -4895,9 +4954,7 @@ function _srh_corebridge_flashTick() {
     return false;
   }
   var entries = _srhCorebridgeFlashState.entries;
-  var nextColorIsRed = !_srhCorebridgeFlashState.isRed;
-  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | nextColor=' + (nextColorIsRed ? 'RED' : 'BLACK'));
-  var red = _srh_corebridge_makeRgb(255, 0, 0);
+  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | mode=state-check');
   var black = _srh_corebridge_makeRgb(0, 0, 0);
   for(var i = entries.length - 1; i >= 0; i--) {
     var entry = entries[i];
@@ -4928,11 +4985,9 @@ function _srh_corebridge_flashTick() {
       entries.splice(i, 1);
       continue;
     }
-    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' toggling field "' + frameName + '" to ' + (nextColorIsRed ? 'RED' : 'BLACK') + '. value="' + currentValue + '"');
-    try {_srh_corebridge_setTextFrameColor(entry.frame, nextColorIsRed ? red : black);} catch(_eFlashColor) { }
   }
-  _srhCorebridgeFlashState.isRed = nextColorIsRed;
-  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=' + (_srhCorebridgeFlashState.isRed ? 'RED' : 'BLACK'));
+  _srhCorebridgeFlashState.isRed = true;
+  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=RED');
   if(!entries.length) _srh_corebridge_stopFlashing(false);
   return !!(entries && entries.length);
 }
@@ -5005,9 +5060,11 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   _srhCorebridgeFlashState = {
     doc: doc,
     entries: entries,
-    isRed: false
+    isRed: true
   };
+  var red = _srh_corebridge_makeRgb(255, 0, 0);
   for(var e = 0; e < entries.length; e++) {
+    try {_srh_corebridge_setTextFrameColor(entries[e].frame, red);} catch(_eFlashInitRed) { }
     entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame);
   }
   _srh_corebridge_flashTick();
