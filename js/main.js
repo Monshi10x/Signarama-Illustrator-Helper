@@ -25,15 +25,18 @@
     style.id = 'srhToastStyles';
     style.textContent = [
       '#srhToastRoot{position:fixed;top:14px;right:14px;left:auto;z-index:2147483000;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none;}',
-      '.srh-toast{min-width:250px;max-width:420px;background:#141414;color:#f2f2f2;border:1px solid #3a3a3a;border-radius:12px;box-shadow:inset 0px 1px 2px rgba(255,255,255,0.12),5px 8px 10px rgba(0,0,0,0.45),0 0px 1px rgba(0,0,0,0.6);overflow:hidden;pointer-events:auto;opacity:0;transform:translateY(-6px);transition:opacity .14s ease,transform .14s ease;}',
+      '.srh-toast{min-width:250px;max-width:420px;min-height:68px;background:#141414;color:#f2f2f2;border:1px solid #3a3a3a;border-radius:12px;box-shadow:inset 0px 1px 2px rgba(255,255,255,0.12),5px 8px 10px rgba(0,0,0,0.45),0 0px 1px rgba(0,0,0,0.6);overflow:hidden;pointer-events:auto;opacity:0;transform:translateY(-6px);transition:opacity .14s ease,transform .14s ease;}',
       '.srh-toast.in{opacity:1;transform:translateY(0);}',
-      '.srh-toast-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 4px 10px;font-size:12px;font-weight:800;}',
+      '.srh-toast-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px 6px 12px;font-size:12px;font-weight:800;line-height:1.25;}',
+      '.srh-toast-headMain{display:flex;align-items:center;gap:8px;min-width:0;}',
       '.srh-toast-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '.srh-toast-spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,0.28);border-top-color:#fff;border-radius:50%;animation:srhToastSpin .7s linear infinite;flex:0 0 auto;}',
       '.srh-toast-close{appearance:none;border:1px solid #4b4b4b;background:#1f1f1f;color:#d9d9d9;border-radius:8px;width:20px;height:20px;line-height:16px;cursor:pointer;padding:0;}',
       '.srh-toast-close:hover{background:#2a2a2a;}',
-      '.srh-toast-body{padding:0 10px 9px 10px;font-size:12px;line-height:1.35;word-break:break-word;}',
+      '.srh-toast-body{padding:0 12px 10px 12px;min-height:18px;font-size:12px;line-height:1.4;word-break:break-word;}',
       '.srh-toast-progressWrap{height:4px;background:#222;}',
       '.srh-toast-progress{height:100%;width:100%;transform-origin:left center;background:#5a5a5a;}',
+      '@keyframes srhToastSpin{to{transform:rotate(360deg);}}',
       '.srh-toast.info{border-left:3px solid #3b82f6;}',
       '.srh-toast.success{border-left:3px solid #22c55e;}',
       '.srh-toast.warn{border-left:3px solid #f59e0b;}',
@@ -49,15 +52,20 @@
     ensureToastUi();
     const opts = options || {};
     const type = opts.type || 'info';
+    const isPersistent = !!opts.persistent;
     const duration = typeof opts.duration === 'number' ? Math.max(400, opts.duration) : 5000;
     const title = opts.title || (type === 'error' ? 'Operation failed' : 'Operation finished');
     const root = $('srhToastRoot');
-    if(!root) return;
+    if(!root) return null;
 
     const toast = document.createElement('div');
     toast.className = 'srh-toast ' + type;
     const head = document.createElement('div');
     head.className = 'srh-toast-head';
+    const headMain = document.createElement('div');
+    headMain.className = 'srh-toast-headMain';
+    const spinner = document.createElement('span');
+    spinner.className = 'srh-toast-spinner';
     const titleEl = document.createElement('div');
     titleEl.className = 'srh-toast-title';
     titleEl.textContent = title;
@@ -73,12 +81,14 @@
     const pBar = document.createElement('div');
     pBar.className = 'srh-toast-progress';
 
-    head.appendChild(titleEl);
+    if(opts.spinner) headMain.appendChild(spinner);
+    headMain.appendChild(titleEl);
+    head.appendChild(headMain);
     head.appendChild(close);
     pWrap.appendChild(pBar);
     toast.appendChild(head);
     toast.appendChild(body);
-    toast.appendChild(pWrap);
+    if(!isPersistent) toast.appendChild(pWrap);
     root.prepend(toast);
 
     let raf = null;
@@ -93,6 +103,7 @@
     }
     function tick(now) {
       if(closed) return;
+      if(isPersistent) return;
       const elapsed = now - start;
       const frac = Math.min(1, elapsed / duration);
       pBar.style.transform = 'scaleX(' + (1 - frac) + ')';
@@ -105,8 +116,9 @@
     close.addEventListener('click', (e) => {e.stopPropagation(); finish();});
     requestAnimationFrame(() => {
       toast.classList.add('in');
-      raf = requestAnimationFrame(tick);
+      if(!isPersistent) raf = requestAnimationFrame(tick);
     });
+    return {close: finish};
   }
   function notifyOperationResult(res, options) {
     const opts = options || {};
@@ -157,6 +169,7 @@
   let persistSettingsTimer = null;
   let isApplyingPanelSettings = false;
   let schedulePanelSettingsSave = null;
+  let scheduleDimensionSelectionHintRefresh = null;
 
   function jsxEscapeDoubleQuoted(text) {
     return String(text)
@@ -264,7 +277,9 @@
       measureIncludeStroke: !!($('measureIncludeStroke') && $('measureIncludeStroke').checked),
       measureClippedContent: !!($('measureClippedContent') && $('measureClippedContent').checked),
       arrowheadSizePt: num(($('arrowheadSizePt') && $('arrowheadSizePt').value) || 0),
+      areaApproximationStep: num(($('areaApproximationStep') && $('areaApproximationStep').value) || 10),
       includeArrowhead: !!($('includeArrowhead') && $('includeArrowhead').checked),
+      showAreaApproximation: !!($('showAreaApproximation') && $('showAreaApproximation').checked),
       textColor: ($('textColor') && $('textColor').value) || '#000000',
       lineColor: ($('lineColor') && $('lineColor').value) || '#000000',
       scaleAppearance: num(($('scaleAppearance') && $('scaleAppearance').value) || 100) / 100
@@ -319,6 +334,9 @@
       }
       if(tabId === 'tab-lightbox' && typeof refreshLightboxArtboardScaleNotice === 'function') {
         refreshLightboxArtboardScaleNotice();
+      }
+      if(tabId === 'tab-dimensions' && typeof scheduleDimensionSelectionHintRefresh === 'function') {
+        scheduleDimensionSelectionHintRefresh();
       }
     }
     activateTabFn = activate;
@@ -2302,10 +2320,41 @@
 
   function wireDimensions() {
     const dimClear = $('btnDimClear');
-    if(dimClear) dimClear.onclick = () => runButtonJsxOperation('atlas_dimensions_clear()', {logFn: logDim, toastTitle: 'Clear dimensions'});
     const dimSelectionHint = $('dimSelectionHint');
     const textColorInput = $('textColor');
     const lineColorInput = $('lineColor');
+    let refreshDimensionSelectionHintTimer = null;
+
+    function runDimensionOperation(fnCall, options) {
+      const opts = options || {};
+      const loadingToast = showToast(opts.loadingMessage || 'Working...', {
+        type: 'info',
+        title: opts.loadingTitle || 'Dimensions',
+        persistent: true,
+        spinner: true
+      });
+      const userOnResult = opts.onResult;
+      const runOpts = {};
+      Object.keys(opts).forEach((k) => {runOpts[k] = opts[k];});
+      runOpts.onResult = function(res) {
+        try {if(loadingToast && loadingToast.close) loadingToast.close();} catch(_eToastClose) { }
+        if(userOnResult) userOnResult(res);
+      };
+      runButtonJsxOperation(fnCall, runOpts);
+    }
+
+    if(dimClear) {
+      dimClear.onclick = () => runDimensionOperation('atlas_dimensions_clear()', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished clearing dimensions.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Clearing dimensions...',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
 
     function refreshDimensionSelectionHint() {
       if(!dimSelectionHint) return;
@@ -2321,11 +2370,14 @@
       const payload = buildDimensionPayload();
       payload.sides = sides;
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      runButtonJsxOperation('atlas_dimensions_runMulti("' + json + '")', {
+      runDimensionOperation('atlas_dimensions_runMulti("' + json + '")', {
         logFn: logDim,
-        toastTitle: 'Add dimensions',
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished adding dimensions.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Adding dimensions...',
         onResult: function() {
-          refreshDimensionSelectionHint();
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
         }
       });
     }
@@ -2333,14 +2385,83 @@
     function runLineMeasure() {
       const payload = buildDimensionPayload();
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      runButtonJsxOperation('atlas_dimensions_runLine("' + json + '")', {
+      runDimensionOperation('atlas_dimensions_runLine("' + json + '")', {
         logFn: logDim,
-        toastTitle: 'Measure line/path',
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished measuring line/path.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Measuring line/path...',
         onResult: function() {
-          refreshDimensionSelectionHint();
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
         }
       });
     }
+    function runLineMeasureReplace() {
+      const payload = buildDimensionPayload();
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runDimensionOperation('atlas_dimensions_runLineReplace("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished measuring and replacing line/path.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Measuring and replacing line/path...',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
+    function runInnerAngles() {
+      const payload = buildDimensionPayload();
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runDimensionOperation('atlas_dimensions_runAnglesInner("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished measuring inner angles.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Measuring inner angles...',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
+    function runOuterAngles() {
+      const payload = buildDimensionPayload();
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runDimensionOperation('atlas_dimensions_runAnglesOuter("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished measuring outer angles.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Measuring outer angles...',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
+    function runAreaMeasure() {
+      const payload = buildDimensionPayload();
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runDimensionOperation('atlas_dimensions_runArea("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        toastMessage: 'Finished measuring area.',
+        loadingTitle: 'Dimensions',
+        loadingMessage: 'Measuring area...',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
+
+    function scheduleRefreshDimensionSelectionHint() {
+      if(refreshDimensionSelectionHintTimer) clearTimeout(refreshDimensionSelectionHintTimer);
+      refreshDimensionSelectionHintTimer = setTimeout(function() {
+        refreshDimensionSelectionHintTimer = null;
+        log('Dimensions refresh tick.');
+        refreshDimensionSelectionHint();
+      }, 180);
+    }
+    scheduleDimensionSelectionHintRefresh = scheduleRefreshDimensionSelectionHint;
 
     const map = {
       btnTL: () => runSides(['TOP', 'LEFT']),
@@ -2352,7 +2473,11 @@
       btnBL: () => runSides(['BOTTOM', 'LEFT']),
       btnB: () => runSides(['BOTTOM']),
       btnRB: () => runSides(['RIGHT', 'BOTTOM']),
-      btnLineMeasure: () => runLineMeasure()
+      btnLineMeasure: () => runLineMeasure(),
+      btnLineMeasureReplace: () => runLineMeasureReplace(),
+      btnAngleInner: () => runInnerAngles(),
+      btnAngleOuter: () => runOuterAngles(),
+      btnAreaMeasure: () => runAreaMeasure()
     };
 
     Object.keys(map).forEach(id => {
@@ -2372,8 +2497,13 @@
       });
     });
 
+    document.addEventListener('visibilitychange', () => {
+      if(!document.hidden) scheduleRefreshDimensionSelectionHint();
+    });
+    window.addEventListener('focus', () => {
+      scheduleRefreshDimensionSelectionHint();
+    });
     refreshDimensionSelectionHint();
-    setInterval(refreshDimensionSelectionHint, 1500);
   }
 
   function wireTransform() {

@@ -6754,7 +6754,412 @@ function _dim_run(opts) {
   return msg;
 }
 
+function _dim_normalizeAngleRad(angleRad) {
+  var a = angleRad;
+  var twoPi = Math.PI * 2;
+  while(a <= -Math.PI) a += twoPi;
+  while(a > Math.PI) a -= twoPi;
+  return a;
+}
+
+function _dim_makeArc(group, cx, cy, radius, startRad, deltaRad, strokePt, lineColor) {
+  if(!(radius > 0)) return null;
+  var segs = Math.max(8, Math.ceil(Math.abs(deltaRad) / (Math.PI / 18)));
+  var pts = [];
+  for(var i = 0; i <= segs; i++) {
+    var t = i / segs;
+    var a = startRad + (deltaRad * t);
+    pts.push([cx + Math.cos(a) * radius, cy + Math.sin(a) * radius]);
+  }
+  var p = group.pathItems.add();
+  p.setEntirePath(pts);
+  p.closed = false;
+  p.stroked = true;
+  var sw = (typeof strokePt === 'number' && isFinite(strokePt)) ? strokePt : 1;
+  p.strokeWidth = Math.max(sw, 0.1);
+  try {if(lineColor) p.strokeColor = lineColor;} catch(_eArcC) { }
+  p.filled = false;
+  p.opacity = 100;
+  p.blendingMode = BlendModes.NORMAL;
+  return p;
+}
+
+function _dim_collectPathsFromItem(item, out) {
+  if(!item || !out) return;
+  try {
+    if(item.locked || item.hidden) return;
+  } catch(_eLk) { }
+  try {
+    if(item.typename === "PathItem") {
+      try {if(item.guides) return;} catch(_eGuides) { }
+      try {if(item.clipping) return;} catch(_eClipP) { }
+      out.push(item);
+      return;
+    }
+    if(item.typename === "CompoundPathItem" && item.pathItems && item.pathItems.length) {
+      for(var cp = 0; cp < item.pathItems.length; cp++) {
+        var cpi = item.pathItems[cp];
+        if(!cpi) continue;
+        try {if(cpi.clipping) continue;} catch(_eCpClip) { }
+        out.push(cpi);
+      }
+      return;
+    }
+    if(item.typename === "GroupItem" && item.pageItems && item.pageItems.length) {
+      for(var gi = 0; gi < item.pageItems.length; gi++) {
+        _dim_collectPathsFromItem(item.pageItems[gi], out);
+      }
+    }
+  } catch(_eCollect) { }
+}
+
+function _dim_runAngles(opts, mode) {
+  opts = opts || {};
+  var doc = app.activeDocument;
+  if(!doc) return "No document open.";
+
+  var originalSel = _dim_captureSelection();
+  if(!originalSel || !originalSel.length) return "Nothing selected.";
+
+  var scaleFactor = _srh_getScaleFactor();
+  var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
+  var strokePt = _dim_ptDoc(opts.strokePt || 1, scaleFactor);
+  var baseRadiusPt = _dim_mm2ptDoc(opts.offsetMm || 10, scaleFactor);
+  var textOffsetPt = _dim_mm2ptDoc(opts.labelGapMm || 0, scaleFactor);
+  var decimals = opts.decimals | 0;
+  var scaleAppearance = opts.scaleAppearance || 1;
+
+  var lineColor = _dim_hexToRGB(opts.lineColor) || _dim_parseHexColorToRGBColor(opts.lineColor) || _dim_hexToRGB('#000000');
+  var textColor = opts.textColor;
+  var lyr = _dim_ensureLayer('Dimensions');
+
+  var paths = [];
+  for(var s = 0; s < originalSel.length; s++) {
+    _dim_collectPathsFromItem(originalSel[s], paths);
+  }
+  if(!paths.length) return 'No measurable paths in selection.';
+
+  var added = 0;
+  var pathCount = 0;
+  var twoPi = Math.PI * 2;
+  var isOuter = String(mode || '').toUpperCase() === 'OUTER';
+
+  function _addAngleAtVertex(prev, cur, next) {
+    var v1x = prev[0] - cur[0];
+    var v1y = prev[1] - cur[1];
+    var v2x = next[0] - cur[0];
+    var v2y = next[1] - cur[1];
+    var l1 = Math.sqrt(v1x * v1x + v1y * v1y);
+    var l2 = Math.sqrt(v2x * v2x + v2y * v2y);
+    if(!(l1 > 0) || !(l2 > 0)) return 0;
+
+    var a1 = Math.atan2(v1y, v1x);
+    var a2 = Math.atan2(v2y, v2x);
+    var innerDelta = _dim_normalizeAngleRad(a2 - a1);
+    if(Math.abs(innerDelta) < 0.000001) return 0;
+    var outerDelta = (innerDelta > 0) ? (innerDelta - twoPi) : (innerDelta + twoPi);
+    var sweep = isOuter ? outerDelta : innerDelta;
+    var deg = Math.abs(sweep) * 180 / Math.PI;
+    if(!(deg > 0.01)) return 0;
+
+    var radius = Math.max(baseRadiusPt * (isOuter ? 1.35 : 1.0) * scaleAppearance, strokePt * scaleAppearance * 2);
+    var g = lyr.groupItems.add();
+    _dim_makeArc(g, cur[0], cur[1], radius, a1, sweep, strokePt * scaleAppearance, lineColor);
+
+    var mid = a1 + (sweep * 0.5);
+    var labelRadius = radius + (textOffsetPt * scaleAppearance) + (textPt * scaleAppearance * 0.5);
+    var label = deg.toFixed(decimals) + String.fromCharCode(176);
+    var tx = cur[0] + Math.cos(mid) * labelRadius;
+    var ty = cur[1] + Math.sin(mid) * labelRadius;
+    var txt = _dim_createAnchoredText(label, "C", tx, ty, {size: textPt * scaleAppearance, textColor: textColor}, lyr);
+    if(txt) {
+      try {txt.move(g, ElementPlacement.PLACEATEND);} catch(_eMvAng) { }
+    }
+    return 1;
+  }
+
+  for(var p = 0; p < paths.length; p++) {
+    var path = paths[p];
+    if(!path) continue;
+    var pts = null;
+    try {pts = path.pathPoints;} catch(_ePts) {pts = null;}
+    if(!pts || pts.length < 3) continue;
+
+    pathCount++;
+    var n = pts.length;
+    var closed = false;
+    try {closed = !!path.closed;} catch(_eCl) {closed = false;}
+
+    if(closed) {
+      for(var i = 0; i < n; i++) {
+        try {
+          var prev = pts[(i - 1 + n) % n].anchor;
+          var cur = pts[i].anchor;
+          var next = pts[(i + 1) % n].anchor;
+          added += _addAngleAtVertex(prev, cur, next);
+        } catch(_eVA0) { }
+      }
+    } else {
+      for(var j = 1; j < n - 1; j++) {
+        try {
+          var prev2 = pts[j - 1].anchor;
+          var cur2 = pts[j].anchor;
+          var next2 = pts[j + 1].anchor;
+          added += _addAngleAtVertex(prev2, cur2, next2);
+        } catch(_eVA1) { }
+      }
+    }
+  }
+
+  if(!added) return 'No measurable angles in selection.';
+  var modeLabel = isOuter ? 'outer' : 'inner';
+  return 'Added ' + added + ' ' + modeLabel + ' angle measure' + (added === 1 ? '' : 's') +
+    ' on ' + pathCount + ' path' + (pathCount === 1 ? '' : 's') + '.';
+}
+
+function _dim_pt2mm2(pt2) {
+  var k = 25.4 / 72.0;
+  return (pt2 || 0) * k * k;
+}
+
+function _dim_dist2(a, b) {
+  if(!a || !b) return 0;
+  var dx = (a[0] || 0) - (b[0] || 0);
+  var dy = (a[1] || 0) - (b[1] || 0);
+  return dx * dx + dy * dy;
+}
+
+function _dim_cubicPoint(a0, r0, l1, a1, t) {
+  var u = 1 - t;
+  var uu = u * u;
+  var tt = t * t;
+  var uuu = uu * u;
+  var ttt = tt * t;
+  return {
+    x: uuu * a0[0] + 3 * uu * t * r0[0] + 3 * u * tt * l1[0] + ttt * a1[0],
+    y: uuu * a0[1] + 3 * uu * t * r0[1] + 3 * u * tt * l1[1] + ttt * a1[1]
+  };
+}
+
+function _dim_estimateCubicLength(a0, r0, l1, a1) {
+  var prev = {x: a0[0], y: a0[1]};
+  var total = 0;
+  var segs = 12;
+  for(var i = 1; i <= segs; i++) {
+    var t = i / segs;
+    var p = _dim_cubicPoint(a0, r0, l1, a1, t);
+    var dx = p.x - prev.x;
+    var dy = p.y - prev.y;
+    total += Math.sqrt(dx * dx + dy * dy);
+    prev = p;
+  }
+  return total;
+}
+
+function _dim_pathToPolygonPoints(path, options) {
+  if(!path) return [];
+  var opts = options || {};
+  var stepPt = Number(opts.stepPt);
+  if(!(stepPt > 0)) stepPt = _dim_mm2pt(10);
+
+  var pts = null;
+  try {pts = path.pathPoints;} catch(_ePts) {pts = null;}
+  if(!pts || pts.length < 2) return [];
+
+  var isClosed = false;
+  try {isClosed = !!path.closed;} catch(_eCl) {isClosed = false;}
+  var segCount = isClosed ? pts.length : (pts.length - 1);
+  if(segCount < 1) return [];
+
+  var out = [];
+  for(var i = 0; i < segCount; i++) {
+    var p0 = pts[i];
+    var p1 = pts[(i + 1) % pts.length];
+    if(!p0 || !p1) continue;
+    var a0 = p0.anchor;
+    var r0 = p0.rightDirection;
+    var l1 = p1.leftDirection;
+    var a1 = p1.anchor;
+
+    var isCurve = (_dim_dist2(a0, r0) > 0.0001) || (_dim_dist2(a1, l1) > 0.0001);
+    var segLen = 0;
+    if(isCurve) {
+      segLen = _dim_estimateCubicLength(a0, r0, l1, a1);
+    } else {
+      var dx = a1[0] - a0[0];
+      var dy = a1[1] - a0[1];
+      segLen = Math.sqrt(dx * dx + dy * dy);
+    }
+    var steps = Math.max(1, Math.ceil(segLen / stepPt));
+
+    for(var s = 0; s < steps; s++) {
+      var t = s / steps;
+      out.push(_dim_cubicPoint(a0, r0, l1, a1, t));
+    }
+  }
+
+  if(isClosed && pts.length) {
+    try {
+      var first = pts[0].anchor;
+      out.push({x: first[0], y: first[1]});
+    } catch(_eFirst) { }
+  } else if(!isClosed && pts.length) {
+    try {
+      var last = pts[pts.length - 1].anchor;
+      out.push({x: last[0], y: last[1]});
+    } catch(_eLast) { }
+  }
+  return out;
+}
+
+function _dim_polygonAreaSigned(points) {
+  if(!points || points.length < 3) return 0;
+  var total = 0;
+  for(var i = 0, l = points.length; i < l; i++) {
+    var p0 = points[i];
+    var p1 = points[(i + 1) % l];
+    total += (p0.x * p1.y) - (p1.x * p0.y);
+  }
+  return total * 0.5;
+}
+
+function _dim_drawAreaApproxPolygon(layer, points, strokePt) {
+  if(!layer || !points || points.length < 3) return null;
+  var path = null;
+  try {
+    path = layer.pathItems.add();
+    var arr = [];
+    for(var i = 0; i < points.length; i++) {
+      arr.push([points[i].x, points[i].y]);
+    }
+    path.setEntirePath(arr);
+    path.closed = true;
+    path.filled = false;
+    path.stroked = true;
+    path.strokeWidth = Math.max((strokePt > 0 ? strokePt : 1), 0.1);
+    try {
+      var c = new RGBColor();
+      c.red = 255; c.green = 0; c.blue = 0;
+      path.strokeColor = c;
+    } catch(_eRed) { }
+    return path;
+  } catch(_eApprox) {
+    try {if(path) path.remove();} catch(_eRmApprox) { }
+    return null;
+  }
+}
+
+function _dim_collectAreaPaths(item, out) {
+  if(!item || !out) return;
+  try {
+    if(item.locked || item.hidden) return;
+  } catch(_eLocked) { }
+
+  try {
+    if(item.typename === "PathItem") {
+      try {if(item.guides) return;} catch(_eGuides) { }
+      try {if(item.clipping) return;} catch(_eClip) { }
+      out.push(item);
+      return;
+    }
+    if(item.typename === "CompoundPathItem" && item.pathItems && item.pathItems.length) {
+      for(var c = 0; c < item.pathItems.length; c++) {
+        var cp = item.pathItems[c];
+        if(!cp) continue;
+        try {if(cp.clipping) continue;} catch(_eCpClip) { }
+        out.push(cp);
+      }
+      return;
+    }
+    if(item.typename === "GroupItem" && item.pageItems && item.pageItems.length) {
+      for(var g = 0; g < item.pageItems.length; g++) {
+        _dim_collectAreaPaths(item.pageItems[g], out);
+      }
+    }
+  } catch(_eCollect) { }
+}
+
+function _dim_runArea(opts) {
+  opts = opts || {};
+  var doc = app.activeDocument;
+  if(!doc) return "No document open.";
+
+  var originalSel = _dim_captureSelection();
+  if(!originalSel || !originalSel.length) return "Nothing selected.";
+
+  var scaleFactor = _srh_getScaleFactor();
+  var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
+  var decimals = Math.max(3, opts.decimals | 0);
+  var textColor = opts.textColor;
+  var scaleAppearance = opts.scaleAppearance || 1;
+  var areaApproximationStepMm = Number(opts.areaApproximationStep);
+  if(!(areaApproximationStepMm > 0)) areaApproximationStepMm = 10;
+  var stepPt = _dim_mm2ptDoc(areaApproximationStepMm, scaleFactor);
+  var includeStroke = !!opts.measureIncludeStroke;
+  var showAreaApproximation = !!opts.showAreaApproximation;
+  var approxStrokePt = _dim_ptDoc(opts.strokePt || 1, scaleFactor) * scaleAppearance;
+
+  var lyr = _dim_ensureLayer('Dimensions');
+  var objectsProcessed = 0;
+  var labelsAdded = 0;
+
+  for(var i = 0; i < originalSel.length; i++) {
+    var item = originalSel[i];
+    if(!item) continue;
+
+    var paths = [];
+    _dim_collectAreaPaths(item, paths);
+    if(!paths.length) continue;
+
+    var totalSignedPt2 = 0;
+    for(var p = 0; p < paths.length; p++) {
+      var path = paths[p];
+      if(!path) continue;
+      var isClosed = false;
+      try {isClosed = !!path.closed;} catch(_eClosedPath) {isClosed = false;}
+      if(!isClosed) continue;
+
+      var poly = null;
+      var aSigned = 0;
+      poly = _dim_pathToPolygonPoints(path, {stepPt: stepPt});
+      if(!poly || poly.length < 3) continue;
+      aSigned = _dim_polygonAreaSigned(poly);
+      try {
+        if(path.polarity === PolarityValues.NEGATIVE) aSigned = -Math.abs(aSigned);
+      } catch(_ePol) { }
+      if(showAreaApproximation && poly && poly.length >= 3) {
+        _dim_drawAreaApproxPolygon(lyr, poly, approxStrokePt);
+      }
+      totalSignedPt2 += aSigned;
+    }
+
+    var areaPt2 = Math.abs(totalSignedPt2);
+    if(!(areaPt2 > 0.000001)) continue;
+
+    var areaMm2 = _dim_pt2mm2(areaPt2 * scaleFactor * scaleFactor);
+    var areaM2 = areaMm2 / 1000000.0;
+    var label = areaM2.toFixed(decimals) + ' m' + String.fromCharCode(178);
+
+    var b = null;
+    try {b = _dim_getMetricsFor(item, false, includeStroke);} catch(_eBounds) {b = null;}
+    if(!b) continue;
+    var cx = b.left + ((b.right - b.left) * 0.5);
+    var cy = b.bottom + ((b.top - b.bottom) * 0.5);
+
+    var txt = _dim_createAnchoredText(label, "C", cx, cy, {size: textPt * scaleAppearance, textColor: textColor}, lyr);
+    if(txt) {
+      labelsAdded++;
+      objectsProcessed++;
+    }
+  }
+
+  if(!labelsAdded) return 'No measurable closed shapes in selection.';
+  return 'Added ' + labelsAdded + ' area label' + (labelsAdded === 1 ? '' : 's') +
+    ' on ' + objectsProcessed + ' object' + (objectsProcessed === 1 ? '' : 's') + '.';
+}
+
 function _dim_runLine(opts) {
+  opts = opts || {};
   var doc = app.activeDocument;
   if(!doc) return "No document open.";
 
@@ -6773,6 +7178,7 @@ function _dim_runLine(opts) {
 
   var lineColor = _dim_hexToRGB(opts.lineColor) || _dim_parseHexColorToRGBColor(opts.lineColor) || _dim_hexToRGB('#000000');
   var textColor = opts.textColor;
+  var replaceOriginal = !!opts.replaceOriginal;
 
   var lyr = _dim_ensureLayer('Dimensions');
 
@@ -6804,6 +7210,7 @@ function _dim_runLine(opts) {
   }
 
   var added = 0;
+  var replaced = 0;
   for(var s = 0; s < originalSel.length; s++) {
     var item = originalSel[s];
     var path = _getPathFromItem(item);
@@ -6822,7 +7229,7 @@ function _dim_runLine(opts) {
       var ny = dx / len;
       var lineOff = lineOffsetPt * scaleAppearance;
       var textOff = textOffsetPt * scaleAppearance;
-      var off = lineOff;
+      var off = replaceOriginal ? 0 : lineOff;
 
       var sx = a0[0] + nx * off;
       var sy = a0[1] + ny * off;
@@ -6865,9 +7272,26 @@ function _dim_runLine(opts) {
         added += _addSegmentMeasure(pts[pts.length - 1].anchor, pts[0].anchor);
       }
     } catch(_eClosed) { }
+
+    if(replaceOriginal) {
+      try {
+        if(item && (item.typename === "PathItem" || item.typename === "CompoundPathItem")) {
+          item.remove();
+          replaced++;
+        } else if(path && path.typename === "PathItem") {
+          path.remove();
+          replaced++;
+        }
+      } catch(_eReplace) { }
+    }
   }
 
-  return added ? ('Added ' + added + ' line measure' + (added === 1 ? '' : 's') + '.') : 'No measurable paths in selection.';
+  if(!added) return 'No measurable paths in selection.';
+  if(replaceOriginal) {
+    return 'Added ' + added + ' line measure' + (added === 1 ? '' : 's') +
+      ' and replaced ' + replaced + ' source path' + (replaced === 1 ? '' : 's') + '.';
+  }
+  return 'Added ' + added + ' line measure' + (added === 1 ? '' : 's') + '.';
 }
 
 this.atlas_dimensions_run = function(json) {
@@ -7037,6 +7461,69 @@ this.atlas_dimensions_runLine = function(json) {
       opts = json;
     }
     return _dim_runLine(opts);
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+};
+
+this.atlas_dimensions_runLineReplace = function(json) {
+  try {
+    var opts;
+    if(typeof json === 'string') {
+      try {opts = JSON.parse(json);}
+      catch(_) {opts = eval('(' + json + ')');}
+    } else {
+      opts = json;
+    }
+    opts = opts || {};
+    opts.replaceOriginal = true;
+    opts.offsetMm = 0;
+    return _dim_runLine(opts);
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+};
+
+this.atlas_dimensions_runAnglesInner = function(json) {
+  try {
+    var opts;
+    if(typeof json === 'string') {
+      try {opts = JSON.parse(json);}
+      catch(_) {opts = eval('(' + json + ')');}
+    } else {
+      opts = json;
+    }
+    return _dim_runAngles(opts, 'INNER');
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+};
+
+this.atlas_dimensions_runAnglesOuter = function(json) {
+  try {
+    var opts;
+    if(typeof json === 'string') {
+      try {opts = JSON.parse(json);}
+      catch(_) {opts = eval('(' + json + ')');}
+    } else {
+      opts = json;
+    }
+    return _dim_runAngles(opts, 'OUTER');
+  } catch(e) {
+    return 'Error: ' + e.message;
+  }
+};
+
+this.atlas_dimensions_runArea = function(json) {
+  try {
+    var opts;
+    if(typeof json === 'string') {
+      try {opts = JSON.parse(json);}
+      catch(_) {opts = eval('(' + json + ')');}
+    } else {
+      opts = json;
+    }
+    return _dim_runArea(opts);
   } catch(e) {
     return 'Error: ' + e.message;
   }
