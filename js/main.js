@@ -466,12 +466,14 @@
         const outlineText = !!(($('pathBleedOutlineText') && $('pathBleedOutlineText').checked));
         const outlineStroke = !!(($('pathBleedOutlineStroke') && $('pathBleedOutlineStroke').checked));
         const autoWeld = !!(($('pathBleedAutoWeld') && $('pathBleedAutoWeld').checked));
+        const autoCloseOpenPaths = !!(($('pathBleedAutoCloseOpen') && $('pathBleedAutoCloseOpen').checked));
         const payload = JSON.stringify({
           offsetMm: amt,
           createCutline: cut,
           outlineText: outlineText,
           outlineStroke: outlineStroke,
-          autoWeld: autoWeld
+          autoWeld: autoWeld,
+          autoCloseOpenPaths: autoCloseOpenPaths
         });
         const safe = payload.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         runButtonJsxOperation("signarama_helper_applyPathBleed('" + safe + "')", {logFn: log, toastTitle: 'Apply path bleed'});

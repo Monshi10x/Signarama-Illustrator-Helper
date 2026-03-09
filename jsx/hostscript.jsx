@@ -1567,7 +1567,7 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
  * Apply Offset Path bleed to selected items (paths/letters/shapes).
  * - Moves target items into layer "bleed"
  * - Optionally duplicates original into top layer "cutline" with no fill and 'Cut Contour' spot stroke
- * Args: JSON string {"offsetMm":number, "createCutline":boolean, "outlineText":boolean, "outlineStroke":boolean, "autoWeld":boolean}
+ * Args: JSON string {"offsetMm":number, "createCutline":boolean, "outlineText":boolean, "outlineStroke":boolean, "autoWeld":boolean, "autoCloseOpenPaths":boolean}
  */
 function signarama_helper_applyPathBleed(jsonStr) {
   var doc = app.activeDocument;
@@ -1581,6 +1581,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var outlineText = (typeof args.outlineText === 'undefined') ? true : !!args.outlineText;
   var outlineStroke = (typeof args.outlineStroke === 'undefined') ? true : !!args.outlineStroke;
   var autoWeld = (typeof args.autoWeld === 'undefined') ? true : !!args.autoWeld;
+  var autoCloseOpenPaths = (typeof args.autoCloseOpenPaths === 'undefined') ? true : !!args.autoCloseOpenPaths;
 
   var offsetPt = _srh_mm2ptDoc(offsetMm);
   if(!(offsetPt > 0)) {return "Offset amount must be > 0 mm.";}
@@ -1723,6 +1724,33 @@ function signarama_helper_applyPathBleed(jsonStr) {
       _pathBleedDebug('outline-stroke | strategy=expand-only');
       _expandSelection();
     });
+  }
+
+  function _closeOpenPathsInContainer(container, label) {
+    if(!container) return 0;
+    var changed = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eCp0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eCp1) {tn = '';}
+      if(tn === 'PathItem') {
+        var isClosed = true;
+        try {isClosed = !!cur.closed;} catch(_eCp2) {isClosed = true;}
+        if(!isClosed) {
+          try {cur.closed = true; changed++;} catch(_eCp3) { }
+        }
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eCp4) { }
+    }
+    if(changed > 0) _pathBleedDebug('auto-close open paths | ' + (label || 'container') + ' | closed=' + changed);
+    return changed;
   }
 
   // For bleed output we only want outer expansion. Remove inner (negative)
@@ -4272,6 +4300,10 @@ function signarama_helper_applyPathBleed(jsonStr) {
   // Keep bleed geometry based on the original native path copy.
   // Do not outline/expand bleed work items before offset, otherwise the bleed
   // can become derived from expanded stroke/cutline geometry instead of source paths.
+  var closedOpenPathCount = 0;
+  if(autoCloseOpenPaths) {
+    closedOpenPathCount = _closeOpenPathsInContainer(bleedGroup || bleedLayer, 'bleed-pre-offset');
+  }
   _logContainerState(bleedGroup || bleedLayer, 'pre-offset-container');
   var _preOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('pre-offset', _preOffsetPathMetrics);
@@ -4375,6 +4407,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
   if(finalTargetAdjusted > 0) msg += ", final-target gradients adjusted: " + finalTargetAdjusted;
   if(removedInnerContours > 0) msg += ", inner contours removed: " + removedInnerContours;
+  if(closedOpenPathCount > 0) msg += ", open paths auto-closed: " + closedOpenPathCount;
   if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
   if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
