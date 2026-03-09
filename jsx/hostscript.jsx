@@ -1725,6 +1725,66 @@ function signarama_helper_applyPathBleed(jsonStr) {
     });
   }
 
+  // For bleed output we only want outer expansion. Remove inner (negative)
+  // contours introduced by Offset Path on compound geometry so interior fill
+  // remains intact.
+  function _removeNegativeContoursInCompounds(container) {
+    if(!container) return 0;
+    var removed = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eRc0) { }
+
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eRc1) {tn = '';}
+
+      if(tn === 'CompoundPathItem') {
+        var toRemove = [];
+        try {
+          for(var ci = 0; ci < cur.pathItems.length; ci++) {
+            var cp = cur.pathItems[ci];
+            if(!cp) continue;
+            var isNegative = false;
+            try {isNegative = (cp.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol0) {isNegative = false;}
+            if(isNegative) toRemove.push(cp);
+          }
+        } catch(_eRc2) { }
+
+        // Only strip negatives when at least one positive contour remains.
+        var keepSafe = false;
+        try {
+          var posCount = 0;
+          for(var pi = 0; pi < cur.pathItems.length; pi++) {
+            var pIt = cur.pathItems[pi];
+            if(!pIt) continue;
+            var neg = false;
+            try {neg = (pIt.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol1) {neg = false;}
+            if(!neg) posCount++;
+          }
+          keepSafe = posCount > 0;
+        } catch(_eRc3) {keepSafe = false;}
+
+        if(keepSafe && toRemove.length) {
+          for(var rr = 0; rr < toRemove.length; rr++) {
+            try {toRemove[rr].remove(); removed++;} catch(_eRc4) { }
+          }
+        }
+      }
+
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var gi = 0; gi < cur.pageItems.length; gi++) stack.push(cur.pageItems[gi]);
+        }
+      } catch(_eRc5) { }
+    }
+
+    if(removed > 0) _pathBleedDebug('outer-only cleanup | removed negative contours=' + removed);
+    return removed;
+  }
+
   function _applyOffsetToContainer(container, ofst) {
     if(!container) return false;
     _pathBleedDebug('offset START | ofst=' + _fmtNum3(ofst) + ' | container=' + _itemRef(container));
@@ -4197,6 +4257,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
   var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
   var _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var removedInnerContours = _removeNegativeContoursInCompounds(bleedGroup || bleedLayer);
   var _postOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('post-offset', _postOffsetPathMetrics);
   _logPathMetricsDelta(_preOffsetPathMetrics, _postOffsetPathMetrics, 'offset');
@@ -4288,6 +4349,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   msg += ", doc gradient-fill objects: " + docGradientFillCount;
   if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
   if(finalTargetAdjusted > 0) msg += ", final-target gradients adjusted: " + finalTargetAdjusted;
+  if(removedInnerContours > 0) msg += ", inner contours removed: " + removedInnerContours;
   if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
   if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
