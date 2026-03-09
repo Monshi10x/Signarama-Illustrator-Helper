@@ -13,7 +13,7 @@ if(!JSON.stringify) {
  * - Ignores selection.
  * - Skips locked/hidden items and guides.
  */
-function signarama_helper_fitArtboardToArtwork() {
+function signarama_helper_fitArtboardToArtwork(marginMm) {
   if(!app.documents.length) return 'No open document.';
 
   var doc = app.activeDocument;
@@ -21,10 +21,20 @@ function signarama_helper_fitArtboardToArtwork() {
   var b = _srh_getDocumentArtworkBounds(doc);
   if(!b) return 'No eligible artwork found (all items locked/hidden/guides).';
 
-  var idx = doc.artboards.getActiveArtboardIndex();
-  doc.artboards[idx].artboardRect = [b.left, b.top, b.right, b.bottom];
+  var marginPt = _srh_mm2ptDoc(Number(marginMm) || 0);
+  if(!(marginPt >= 0)) marginPt = 0;
 
-  return 'Artboard fitted to artwork bounds: ' + _srh_fmtBounds(b);
+  var fitted = {
+    left: b.left - marginPt,
+    top: b.top + marginPt,
+    right: b.right + marginPt,
+    bottom: b.bottom - marginPt
+  };
+
+  var idx = doc.artboards.getActiveArtboardIndex();
+  doc.artboards[idx].artboardRect = [fitted.left, fitted.top, fitted.right, fitted.bottom];
+
+  return 'Artboard fitted to artwork bounds (margin ' + (Math.round((Number(marginMm) || 0) * 1000) / 1000) + 'mm): ' + _srh_fmtBounds(fitted);
 }
 
 /**
@@ -938,8 +948,8 @@ function signarama_helper_createArtboardsFromSelection() {
 }
 
 /**
- * Duplicates selection, then scales DOWN
- * so the duplicate fits within 297×210mm (A4 landscape) by either dimension.
+ * Duplicates selection, then scales to fit 297×210mm (A4 landscape)
+ * by either dimension (scales down OR up as needed).
  * Keeps artwork live (no outlining). Workflow: scale geometry first, then scale strokes.
  */
 function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
@@ -1052,7 +1062,7 @@ function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
     return scaled;
   }
 
-  // Scale down to fit within 297x210mm.
+  // Scale to fit within 297x210mm.
   // Large artboards use a document scale factor, so convert the A4 target into doc-space points.
   var targetW = _srh_mm2ptDoc(297);
   var targetH = _srh_mm2ptDoc(210);
@@ -1067,9 +1077,8 @@ function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
   if(w <= 0 || h <= 0) return 'Copy created, but bounds were empty.';
 
   var factor = Math.min(targetW / w, targetH / h);
-  if(factor > 1) factor = 1; // scale DOWN only
 
-  if(factor < 0.999) {
+  if(Math.abs(factor - 1) > 0.001) {
     var pct = factor * 100;
     try {grp.resize(pct, pct, true, true, true, true, 100, Transformation.CENTER);} catch(_e6) { }
     var strokeCount = _srh_scaleAllStrokesInContainer(grp, factor);
@@ -1144,7 +1153,7 @@ function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
     return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + ').';
   }
 
-  return 'Duplicate created. No scaling needed (already within 297×210mm).';
+  return 'Duplicate created. No scaling needed (already at 297×210mm fit).';
 }
 
 /**
@@ -1714,6 +1723,66 @@ function signarama_helper_applyPathBleed(jsonStr) {
       _pathBleedDebug('outline-stroke | strategy=expand-only');
       _expandSelection();
     });
+  }
+
+  // For bleed output we only want outer expansion. Remove inner (negative)
+  // contours introduced by Offset Path on compound geometry so interior fill
+  // remains intact.
+  function _removeNegativeContoursInCompounds(container) {
+    if(!container) return 0;
+    var removed = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eRc0) { }
+
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eRc1) {tn = '';}
+
+      if(tn === 'CompoundPathItem') {
+        var toRemove = [];
+        try {
+          for(var ci = 0; ci < cur.pathItems.length; ci++) {
+            var cp = cur.pathItems[ci];
+            if(!cp) continue;
+            var isNegative = false;
+            try {isNegative = (cp.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol0) {isNegative = false;}
+            if(isNegative) toRemove.push(cp);
+          }
+        } catch(_eRc2) { }
+
+        // Only strip negatives when at least one positive contour remains.
+        var keepSafe = false;
+        try {
+          var posCount = 0;
+          for(var pi = 0; pi < cur.pathItems.length; pi++) {
+            var pIt = cur.pathItems[pi];
+            if(!pIt) continue;
+            var neg = false;
+            try {neg = (pIt.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol1) {neg = false;}
+            if(!neg) posCount++;
+          }
+          keepSafe = posCount > 0;
+        } catch(_eRc3) {keepSafe = false;}
+
+        if(keepSafe && toRemove.length) {
+          for(var rr = 0; rr < toRemove.length; rr++) {
+            try {toRemove[rr].remove(); removed++;} catch(_eRc4) { }
+          }
+        }
+      }
+
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var gi = 0; gi < cur.pageItems.length; gi++) stack.push(cur.pageItems[gi]);
+        }
+      } catch(_eRc5) { }
+    }
+
+    if(removed > 0) _pathBleedDebug('outer-only cleanup | removed negative contours=' + removed);
+    return removed;
   }
 
   function _applyOffsetToContainer(container, ofst) {
@@ -4175,8 +4244,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
   // Hard isolate processing from originals: never restore commands onto original selection.
   try {doc.selection = null;} catch(_eSelIso0) { }
 
-  if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
-  if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
+  // Keep bleed geometry based on the original native path copy.
+  // Do not outline/expand bleed work items before offset, otherwise the bleed
+  // can become derived from expanded stroke/cutline geometry instead of source paths.
   _logContainerState(bleedGroup || bleedLayer, 'pre-offset-container');
   var _preOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('pre-offset', _preOffsetPathMetrics);
@@ -4187,6 +4257,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
   var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
   var _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var removedInnerContours = _removeNegativeContoursInCompounds(bleedGroup || bleedLayer);
   var _postOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('post-offset', _postOffsetPathMetrics);
   _logPathMetricsDelta(_preOffsetPathMetrics, _postOffsetPathMetrics, 'offset');
@@ -4278,6 +4349,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   msg += ", doc gradient-fill objects: " + docGradientFillCount;
   if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
   if(finalTargetAdjusted > 0) msg += ", final-target gradients adjusted: " + finalTargetAdjusted;
+  if(removedInnerContours > 0) msg += ", inner contours removed: " + removedInnerContours;
   if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
   if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
