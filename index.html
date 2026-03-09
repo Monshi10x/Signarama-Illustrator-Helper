@@ -397,7 +397,13 @@
     <section id="tab-buttons" class="wrap" role="tabpanel">
       <button class="btn" id="btnFitArtboard" type="button">
         <span class="btnText">Fit artboard to artwork</span>
-        <span class="info" data-tip="Fits the active artboard to the document items bounding box (no selection required).">i</span>
+        <span class="btnMeta">
+          <label class="btnOpt" for="fitArtboardMarginMm">
+            <span>Margin (mm)</span>
+            <input id="fitArtboardMarginMm" type="number" step="0.1" value="0" style="width:68px; padding:4px 6px; font-size:12px; border-radius:8px;">
+          </label>
+          <span class="info" data-tip="Fits the active artboard to the document items bounding box (no selection required). Margin expands the fitted artboard on all sides.">i</span>
+        </span>
       </button>
 
       <button class="btn" id="btnArtboardPerItem" type="button">
