@@ -4068,12 +4068,10 @@ function signarama_helper_applyPathBleed(jsonStr) {
         if(!it || _alreadySeen(it)) return;
         var tn = '';
         try {tn = String(it.typename || '');} catch(_eUT0) {tn = '';}
-        if(tn !== 'PathItem' && tn !== 'CompoundPathItem') return;
-        if(tn === 'PathItem') {
-          try {
-            if(it.parent && String(it.parent.typename || '') === 'CompoundPathItem') return;
-          } catch(_eUT1) { }
-        }
+        if(tn !== 'PathItem') return;
+        try {
+          if(it.parent && String(it.parent.typename || '') === 'CompoundPathItem') return;
+        } catch(_eUT1) { }
         try {if(it.guides) return;} catch(_eUT2) { }
         try {if(it.clipping) return;} catch(_eUT3) { }
         seen.push(it);
@@ -4293,9 +4291,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
 
   if(createCutline && cutGroup) {
-    var _cutPathOnlyCount = _extractPathOnlySources(cutGroup, 'cut-before-style');
-    if(_cutPathOnlyCount > 0) cutCount = _cutPathOnlyCount;
-    _pathBleedDebug('cutline path-only summary | pathCount=' + _cutPathOnlyCount + ' | cutDup=' + cutCount);
+    var _cutPathCountBefore = _countPathLikeItems(cutGroup);
+    if(_cutPathCountBefore > 0) cutCount = _cutPathCountBefore;
+    _pathBleedDebug('cutline path summary | pathCount=' + _cutPathCountBefore + ' | cutDup=' + cutCount);
     if(outlineText) _outlineTextInContainer(cutGroup);
     if(outlineStroke) _outlineStrokeInContainer(cutGroup);
     _setCutlineStyleOnItem(cutGroup, {outlineText: outlineText, outlineStroke: false});
@@ -4308,9 +4306,10 @@ function signarama_helper_applyPathBleed(jsonStr) {
       _pruneCutlineContainer(cutGroup);
       _auditStructure(cutGroup, 'cut-after-weld');
     }
-    _extractPathOnlySources(cutGroup, 'cut-after-weld-path-only');
+    var _cutPathCountAfter = _countPathLikeItems(cutGroup);
+    if(_cutPathCountAfter > 0) cutCount = _cutPathCountAfter;
     _pruneCutlineContainer(cutGroup);
-    _auditStructure(cutGroup, 'cut-final-path-only');
+    _auditStructure(cutGroup, 'cut-final');
   }
 
   // Run final-target compensation after offset output is fully materialized on bleed layer.
