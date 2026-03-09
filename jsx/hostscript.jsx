@@ -1753,89 +1753,10 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return changed;
   }
 
-  // For bleed output we only want outer expansion. Remove inner (negative)
-  // contours introduced by Offset Path on compound geometry so interior fill
-  // remains intact.
+  // Preserve inner subpaths for compound paths (do not delete holes).
+  // Retained as a no-op for compatibility with prior call sites/log parsing.
   function _removeNegativeContoursInCompounds(container) {
-    if(!container) return 0;
-    var removed = 0;
-    var stack = [];
-    try {stack.push(container);} catch(_eRc0) { }
-
-    function _absPathAreaEstimate(pathItem) {
-      if(!pathItem) return 0;
-      try {
-        var pts = pathItem.pathPoints;
-        if(!pts || pts.length < 3) return 0;
-        var area = 0;
-        for(var i = 0; i < pts.length; i++) {
-          var a = pts[i].anchor;
-          var b = pts[(i + 1) % pts.length].anchor;
-          if(!a || !b || a.length < 2 || b.length < 2) continue;
-          area += (Number(a[0]) * Number(b[1])) - (Number(b[0]) * Number(a[1]));
-        }
-        return Math.abs(area * 0.5);
-      } catch(_eRcArea0) {
-        return 0;
-      }
-    }
-
-    while(stack.length) {
-      var cur = stack.pop();
-      if(!cur) continue;
-
-      var tn = '';
-      try {tn = String(cur.typename || '');} catch(_eRc1) {tn = '';}
-
-      if(tn === 'CompoundPathItem') {
-        var toRemove = [];
-        var allPaths = [];
-        try {
-          for(var ci = 0; ci < cur.pathItems.length; ci++) {
-            var cp = cur.pathItems[ci];
-            if(!cp) continue;
-            allPaths.push(cp);
-            var isNegative = false;
-            try {isNegative = (cp.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol0) {isNegative = false;}
-            if(isNegative) toRemove.push(cp);
-          }
-        } catch(_eRc2) { }
-
-        // Primary: remove explicitly-negative contours.
-        if(toRemove.length) {
-          for(var rr = 0; rr < toRemove.length; rr++) {
-            try {toRemove[rr].remove(); removed++;} catch(_eRc4) { }
-          }
-        } else if(allPaths.length > 1) {
-          // Fallback for cases where Illustrator does not mark polarity reliably:
-          // keep only the largest contour from each compound (outer boundary),
-          // remove inner contours that would hollow the bleed fill.
-          var keep = null;
-          var keepArea = -1;
-          for(var ap = 0; ap < allPaths.length; ap++) {
-            var pa = _absPathAreaEstimate(allPaths[ap]);
-            if(pa > keepArea) {
-              keepArea = pa;
-              keep = allPaths[ap];
-            }
-          }
-          for(var rm = 0; rm < allPaths.length; rm++) {
-            var candidate = allPaths[rm];
-            if(candidate === keep) continue;
-            try {candidate.remove(); removed++;} catch(_eRcRmFallback) { }
-          }
-        }
-      }
-
-      try {
-        if(cur.pageItems && cur.pageItems.length) {
-          for(var gi = 0; gi < cur.pageItems.length; gi++) stack.push(cur.pageItems[gi]);
-        }
-      } catch(_eRc5) { }
-    }
-
-    if(removed > 0) _pathBleedDebug('outer-only cleanup | removed inner contours=' + removed);
-    return removed;
+    return 0;
   }
 
   function _applyOffsetToContainer(container, ofst) {
@@ -4314,7 +4235,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
   var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
   var _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
-  var removedInnerContours = _removeNegativeContoursInCompounds(bleedGroup || bleedLayer);
+  var removedInnerContours = 0;
   var _postOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('post-offset', _postOffsetPathMetrics);
   _logPathMetricsDelta(_preOffsetPathMetrics, _postOffsetPathMetrics, 'offset');
@@ -4406,7 +4327,6 @@ function signarama_helper_applyPathBleed(jsonStr) {
   msg += ", doc gradient-fill objects: " + docGradientFillCount;
   if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
   if(finalTargetAdjusted > 0) msg += ", final-target gradients adjusted: " + finalTargetAdjusted;
-  if(removedInnerContours > 0) msg += ", inner contours removed: " + removedInnerContours;
   if(closedOpenPathCount > 0) msg += ", open paths auto-closed: " + closedOpenPathCount;
   if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
   if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
