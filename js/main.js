@@ -363,7 +363,25 @@
 
   function wireActions() {
     const fit = $('btnFitArtboard');
-    if(fit) fit.onclick = () => runButtonJsxOperation('signarama_helper_fitArtboardToArtwork()', {logFn: log, toastTitle: 'Fit artboard'});
+    const fitArtboardMarginMm = $('fitArtboardMarginMm');
+    if(fitArtboardMarginMm) {
+      const fitMarginLabel = fitArtboardMarginMm.closest('label');
+      if(fitMarginLabel) {
+        fitMarginLabel.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
+      fitArtboardMarginMm.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      fitArtboardMarginMm.addEventListener('change', (e) => {
+        e.stopPropagation();
+      });
+    }
+    if(fit) fit.onclick = () => {
+      const marginMm = num((fitArtboardMarginMm && fitArtboardMarginMm.value) ? fitArtboardMarginMm.value : 0);
+      runButtonJsxOperation('signarama_helper_fitArtboardToArtwork(' + marginMm + ')', {logFn: log, toastTitle: 'Fit artboard'});
+    };
 
     const ab = $('btnArtboardPerItem');
     if(ab) ab.onclick = () => runButtonJsxOperation('signarama_helper_createArtboardsFromSelection()', {logFn: log, toastTitle: 'Artboard per selection'});
@@ -448,12 +466,14 @@
         const outlineText = !!(($('pathBleedOutlineText') && $('pathBleedOutlineText').checked));
         const outlineStroke = !!(($('pathBleedOutlineStroke') && $('pathBleedOutlineStroke').checked));
         const autoWeld = !!(($('pathBleedAutoWeld') && $('pathBleedAutoWeld').checked));
+        const autoCloseOpenPaths = !!(($('pathBleedAutoCloseOpen') && $('pathBleedAutoCloseOpen').checked));
         const payload = JSON.stringify({
           offsetMm: amt,
           createCutline: cut,
           outlineText: outlineText,
           outlineStroke: outlineStroke,
-          autoWeld: autoWeld
+          autoWeld: autoWeld,
+          autoCloseOpenPaths: autoCloseOpenPaths
         });
         const safe = payload.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         runButtonJsxOperation("signarama_helper_applyPathBleed('" + safe + "')", {logFn: log, toastTitle: 'Apply path bleed'});
