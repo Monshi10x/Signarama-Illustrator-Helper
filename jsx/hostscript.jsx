@@ -13,7 +13,7 @@ if(!JSON.stringify) {
  * - Ignores selection.
  * - Skips locked/hidden items and guides.
  */
-function signarama_helper_fitArtboardToArtwork() {
+function signarama_helper_fitArtboardToArtwork(marginMm) {
   if(!app.documents.length) return 'No open document.';
 
   var doc = app.activeDocument;
@@ -21,10 +21,20 @@ function signarama_helper_fitArtboardToArtwork() {
   var b = _srh_getDocumentArtworkBounds(doc);
   if(!b) return 'No eligible artwork found (all items locked/hidden/guides).';
 
-  var idx = doc.artboards.getActiveArtboardIndex();
-  doc.artboards[idx].artboardRect = [b.left, b.top, b.right, b.bottom];
+  var marginPt = _srh_mm2ptDoc(Number(marginMm) || 0);
+  if(!(marginPt >= 0)) marginPt = 0;
 
-  return 'Artboard fitted to artwork bounds: ' + _srh_fmtBounds(b);
+  var fitted = {
+    left: b.left - marginPt,
+    top: b.top + marginPt,
+    right: b.right + marginPt,
+    bottom: b.bottom - marginPt
+  };
+
+  var idx = doc.artboards.getActiveArtboardIndex();
+  doc.artboards[idx].artboardRect = [fitted.left, fitted.top, fitted.right, fitted.bottom];
+
+  return 'Artboard fitted to artwork bounds (margin ' + (Math.round((Number(marginMm) || 0) * 1000) / 1000) + 'mm): ' + _srh_fmtBounds(fitted);
 }
 
 /**
@@ -938,8 +948,8 @@ function signarama_helper_createArtboardsFromSelection() {
 }
 
 /**
- * Duplicates selection, then scales DOWN
- * so the duplicate fits within 297×210mm (A4 landscape) by either dimension.
+ * Duplicates selection, then scales to fit 297×210mm (A4 landscape)
+ * by either dimension (scales down OR up as needed).
  * Keeps artwork live (no outlining). Workflow: scale geometry first, then scale strokes.
  */
 function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
@@ -1052,7 +1062,7 @@ function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
     return scaled;
   }
 
-  // Scale down to fit within 297x210mm.
+  // Scale to fit within 297x210mm.
   // Large artboards use a document scale factor, so convert the A4 target into doc-space points.
   var targetW = _srh_mm2ptDoc(297);
   var targetH = _srh_mm2ptDoc(210);
@@ -1067,9 +1077,8 @@ function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
   if(w <= 0 || h <= 0) return 'Copy created, but bounds were empty.';
 
   var factor = Math.min(targetW / w, targetH / h);
-  if(factor > 1) factor = 1; // scale DOWN only
 
-  if(factor < 0.999) {
+  if(Math.abs(factor - 1) > 0.001) {
     var pct = factor * 100;
     try {grp.resize(pct, pct, true, true, true, true, 100, Transformation.CENTER);} catch(_e6) { }
     var strokeCount = _srh_scaleAllStrokesInContainer(grp, factor);
@@ -1144,7 +1153,7 @@ function signarama_helper_duplicateOutlineScaleA4(jsonStr) {
     return 'Duplicate scaled to fit within 297×210mm (scale ' + (Math.round(pct * 100) / 100) + '%, strokes scaled: ' + strokeCount + ').';
   }
 
-  return 'Duplicate created. No scaling needed (already within 297×210mm).';
+  return 'Duplicate created. No scaling needed (already at 297×210mm fit).';
 }
 
 /**
@@ -1558,7 +1567,7 @@ function signarama_helper_applyBleed(topMm, leftMm, bottomMm, rightMm, excludeCl
  * Apply Offset Path bleed to selected items (paths/letters/shapes).
  * - Moves target items into layer "bleed"
  * - Optionally duplicates original into top layer "cutline" with no fill and 'Cut Contour' spot stroke
- * Args: JSON string {"offsetMm":number, "createCutline":boolean, "outlineText":boolean, "outlineStroke":boolean, "autoWeld":boolean}
+ * Args: JSON string {"offsetMm":number, "createCutline":boolean, "outlineText":boolean, "outlineStroke":boolean, "autoWeld":boolean, "autoCloseOpenPaths":boolean}
  */
 function signarama_helper_applyPathBleed(jsonStr) {
   var doc = app.activeDocument;
@@ -1572,6 +1581,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var outlineText = (typeof args.outlineText === 'undefined') ? true : !!args.outlineText;
   var outlineStroke = (typeof args.outlineStroke === 'undefined') ? true : !!args.outlineStroke;
   var autoWeld = (typeof args.autoWeld === 'undefined') ? true : !!args.autoWeld;
+  var autoCloseOpenPaths = (typeof args.autoCloseOpenPaths === 'undefined') ? true : !!args.autoCloseOpenPaths;
 
   var offsetPt = _srh_mm2ptDoc(offsetMm);
   if(!(offsetPt > 0)) {return "Offset amount must be > 0 mm.";}
@@ -1714,6 +1724,39 @@ function signarama_helper_applyPathBleed(jsonStr) {
       _pathBleedDebug('outline-stroke | strategy=expand-only');
       _expandSelection();
     });
+  }
+
+  function _closeOpenPathsInContainer(container, label) {
+    if(!container) return 0;
+    var changed = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eCp0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eCp1) {tn = '';}
+      if(tn === 'PathItem') {
+        var isClosed = true;
+        try {isClosed = !!cur.closed;} catch(_eCp2) {isClosed = true;}
+        if(!isClosed) {
+          try {cur.closed = true; changed++;} catch(_eCp3) { }
+        }
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eCp4) { }
+    }
+    if(changed > 0) _pathBleedDebug('auto-close open paths | ' + (label || 'container') + ' | closed=' + changed);
+    return changed;
+  }
+
+  // Preserve inner subpaths for compound paths (do not delete holes).
+  // Retained as a no-op for compatibility with prior call sites/log parsing.
+  function _removeNegativeContoursInCompounds(container) {
+    return 0;
   }
 
   function _applyOffsetToContainer(container, ofst) {
@@ -4175,8 +4218,13 @@ function signarama_helper_applyPathBleed(jsonStr) {
   // Hard isolate processing from originals: never restore commands onto original selection.
   try {doc.selection = null;} catch(_eSelIso0) { }
 
-  if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
-  if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
+  // Keep bleed geometry based on the original native path copy.
+  // Do not outline/expand bleed work items before offset, otherwise the bleed
+  // can become derived from expanded stroke/cutline geometry instead of source paths.
+  var closedOpenPathCount = 0;
+  if(autoCloseOpenPaths) {
+    closedOpenPathCount = _closeOpenPathsInContainer(bleedGroup || bleedLayer, 'bleed-pre-offset');
+  }
   _logContainerState(bleedGroup || bleedLayer, 'pre-offset-container');
   var _preOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('pre-offset', _preOffsetPathMetrics);
@@ -4187,6 +4235,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
   var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
   var _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var removedInnerContours = 0;
   var _postOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('post-offset', _postOffsetPathMetrics);
   _logPathMetricsDelta(_preOffsetPathMetrics, _postOffsetPathMetrics, 'offset');
@@ -4278,6 +4327,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
   msg += ", doc gradient-fill objects: " + docGradientFillCount;
   if(gradientAdjusted > 0) msg += ", gradients compensated: " + gradientAdjusted;
   if(finalTargetAdjusted > 0) msg += ", final-target gradients adjusted: " + finalTargetAdjusted;
+  if(closedOpenPathCount > 0) msg += ", open paths auto-closed: " + closedOpenPathCount;
   if(forceBleedStopTest2080) msg += ", forced-gradient-20/80 pass: " + forcedGradientPassCount;
   if(forceBleedSolidRedTest) msg += ", forced-solid-red pass: " + forcedSolidRedCount;
   if(createCutline) msg += ", cutlines created: " + cutCount + (autoWeld ? " (auto-weld on)" : " (auto-weld off)");
