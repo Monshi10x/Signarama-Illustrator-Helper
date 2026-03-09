@@ -4184,8 +4184,9 @@ function signarama_helper_applyPathBleed(jsonStr) {
   // Hard isolate processing from originals: never restore commands onto original selection.
   try {doc.selection = null;} catch(_eSelIso0) { }
 
-  if(outlineText) _outlineTextInContainer(bleedGroup || bleedLayer);
-  if(outlineStroke) _outlineStrokeInContainer(bleedGroup || bleedLayer);
+  // Keep bleed geometry based on the original native path copy.
+  // Do not outline/expand bleed work items before offset, otherwise the bleed
+  // can become derived from expanded stroke/cutline geometry instead of source paths.
   _logContainerState(bleedGroup || bleedLayer, 'pre-offset-container');
   var _preOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('pre-offset', _preOffsetPathMetrics);
