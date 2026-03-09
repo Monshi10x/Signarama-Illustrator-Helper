@@ -4053,6 +4053,16 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return _shiftGradientBySnapshot(snapshot, offsetPt);
   }
 
+  function _uniteContainerPathfinderAdd(container) {
+    if(!container) return false;
+    return _runOnSelection(container, function() {
+      try {app.executeMenuCommand('group');} catch(_eUpaG0) { }
+      try {app.executeMenuCommand('Live Pathfinder Add');} catch(_eUpa0) { }
+      try {app.executeMenuCommand('expandStyle');} catch(_eUpa1) { }
+      try {app.executeMenuCommand('ungroup');} catch(_eUpa2) { }
+    });
+  }
+
   function _uniteContainer(container) {
     if(!container) return false;
     function _collectUniteTargets(root) {
@@ -4300,7 +4310,8 @@ function signarama_helper_applyPathBleed(jsonStr) {
     _pruneCutlineContainer(cutGroup);
     _auditStructure(cutGroup, 'cut-after-style');
     if(autoWeld) {
-      _uniteContainer(cutGroup);
+      var welded = _uniteContainerPathfinderAdd(cutGroup);
+      if(!welded) welded = _uniteContainer(cutGroup);
       // Re-apply style to welded result in cutline container only (never selection-based).
       _setCutlineStyleOnItem(cutGroup, {outlineText: false, outlineStroke: false});
       _pruneCutlineContainer(cutGroup);
