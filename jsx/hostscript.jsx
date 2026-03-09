@@ -1734,6 +1734,24 @@ function signarama_helper_applyPathBleed(jsonStr) {
     var stack = [];
     try {stack.push(container);} catch(_eRc0) { }
 
+    function _absPathAreaEstimate(pathItem) {
+      if(!pathItem) return 0;
+      try {
+        var pts = pathItem.pathPoints;
+        if(!pts || pts.length < 3) return 0;
+        var area = 0;
+        for(var i = 0; i < pts.length; i++) {
+          var a = pts[i].anchor;
+          var b = pts[(i + 1) % pts.length].anchor;
+          if(!a || !b || a.length < 2 || b.length < 2) continue;
+          area += (Number(a[0]) * Number(b[1])) - (Number(b[0]) * Number(a[1]));
+        }
+        return Math.abs(area * 0.5);
+      } catch(_eRcArea0) {
+        return 0;
+      }
+    }
+
     while(stack.length) {
       var cur = stack.pop();
       if(!cur) continue;
@@ -1743,33 +1761,40 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
       if(tn === 'CompoundPathItem') {
         var toRemove = [];
+        var allPaths = [];
         try {
           for(var ci = 0; ci < cur.pathItems.length; ci++) {
             var cp = cur.pathItems[ci];
             if(!cp) continue;
+            allPaths.push(cp);
             var isNegative = false;
             try {isNegative = (cp.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol0) {isNegative = false;}
             if(isNegative) toRemove.push(cp);
           }
         } catch(_eRc2) { }
 
-        // Only strip negatives when at least one positive contour remains.
-        var keepSafe = false;
-        try {
-          var posCount = 0;
-          for(var pi = 0; pi < cur.pathItems.length; pi++) {
-            var pIt = cur.pathItems[pi];
-            if(!pIt) continue;
-            var neg = false;
-            try {neg = (pIt.polarity === PolarityValues.NEGATIVE);} catch(_eRcPol1) {neg = false;}
-            if(!neg) posCount++;
-          }
-          keepSafe = posCount > 0;
-        } catch(_eRc3) {keepSafe = false;}
-
-        if(keepSafe && toRemove.length) {
+        // Primary: remove explicitly-negative contours.
+        if(toRemove.length) {
           for(var rr = 0; rr < toRemove.length; rr++) {
             try {toRemove[rr].remove(); removed++;} catch(_eRc4) { }
+          }
+        } else if(allPaths.length > 1) {
+          // Fallback for cases where Illustrator does not mark polarity reliably:
+          // keep only the largest contour from each compound (outer boundary),
+          // remove inner contours that would hollow the bleed fill.
+          var keep = null;
+          var keepArea = -1;
+          for(var ap = 0; ap < allPaths.length; ap++) {
+            var pa = _absPathAreaEstimate(allPaths[ap]);
+            if(pa > keepArea) {
+              keepArea = pa;
+              keep = allPaths[ap];
+            }
+          }
+          for(var rm = 0; rm < allPaths.length; rm++) {
+            var candidate = allPaths[rm];
+            if(candidate === keep) continue;
+            try {candidate.remove(); removed++;} catch(_eRcRmFallback) { }
           }
         }
       }
@@ -1781,7 +1806,7 @@ function signarama_helper_applyPathBleed(jsonStr) {
       } catch(_eRc5) { }
     }
 
-    if(removed > 0) _pathBleedDebug('outer-only cleanup | removed negative contours=' + removed);
+    if(removed > 0) _pathBleedDebug('outer-only cleanup | removed inner contours=' + removed);
     return removed;
   }
 
