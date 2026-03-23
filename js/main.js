@@ -13,7 +13,7 @@
   }
   function setStatus(txt) {
     const el = $('status');
-    if(el) el.textContent = txt || '';
+    if(el) el.setAttribute('data-host-status', txt || '');
   }
   function num(v) {
     var n = parseFloat(v);
@@ -183,6 +183,7 @@
     const settings = {};
     $all('input[id], select[id], textarea[id]').forEach((el) => {
       if(!el || !el.id) return;
+      if(el.id === 'dimensionThemeProfileSelect') return;
       const type = (el.type || '').toLowerCase();
       if(type === 'checkbox' || type === 'radio') settings[el.id] = !!el.checked;
       else settings[el.id] = el.value;
@@ -198,6 +199,7 @@
     try {
       Object.keys(settings).forEach((key) => {
         if(key === '__activeTab') return;
+        if(key === 'dimensionThemeProfileSelect') return;
         const el = $(key);
         if(!el) return;
         const type = (el.type || '').toLowerCase();
@@ -476,7 +478,12 @@
           autoCloseOpenPaths: autoCloseOpenPaths
         });
         const safe = payload.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        runButtonJsxOperation("signarama_helper_applyPathBleed('" + safe + "')", {logFn: log, toastTitle: 'Apply path bleed'});
+        runButtonJsxOperation("signarama_helper_applyPathBleed('" + safe + "')", {
+          logFn: log,
+          toastTitle: 'Apply path bleed',
+          toastMessage: 'Bleed Successfully Added',
+          toastDuration: 2000
+        });
       };
     }
 
@@ -1614,6 +1621,7 @@
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
+    wireLetterLayout();
     wireColours();
 
     const clear = $('btnClearLog');
@@ -1640,23 +1648,24 @@
         const sf = Number(sfRawDoc);
         const sfText = isFinite(sf) && sf > 0 ? sf : 1;
         const invScale = 1 / sfText;
-        const large = sfText >= 10;
+        const large = sfText > 1.0001;
+        const chipLabel = Math.abs(sfText - 10) < 0.0001 ? 'x10!' : ('x' + String(Math.round(sfText * 1000) / 1000));
         isLargeArtboard = large;
         if(typeof window !== 'undefined') window.isLargeArtboard = large;
-        const notice = $('lightboxArtboardScaleNotice');
-        const icon = $('lightboxArtboardScaleIcon');
-        const text = $('lightboxArtboardScaleText');
-        if(!notice || !icon || !text) return;
+        const chip = $('artboardScaleButton');
+        const tooltip = $('artboardScaleTooltip');
+        if(!chip || !tooltip) return;
         log('app.activeDocument.scaleFactor: ' + sfText);
         if(large) {
-          notice.classList.add('large');
-          icon.textContent = '!';
-          text.textContent = 'Large artboard detected (scaleFactor=' + sfText + '). Dimension/lightbox geometry uses x' + invScale.toFixed(4) + ' (1/' + sfText + ').';
+          chip.classList.add('large');
+          chip.textContent = chipLabel;
+          tooltip.textContent = 'Large artboard detected (scaleFactor=' + sfText + '). Dimension/lightbox geometry uses x' + invScale.toFixed(4) + ' (1/' + sfText + ').';
         } else {
-          notice.classList.remove('large');
-          icon.textContent = 'OK';
-          text.textContent = 'Standard artboard scale detected (scaleFactor=1). Dimension/lightbox geometry uses x1.0000.';
+          chip.classList.remove('large');
+          chip.textContent = 'x1';
+          tooltip.textContent = 'Standard artboard scale detected (scaleFactor=1). Dimension/lightbox geometry uses x1.0000.';
         }
+        chip.setAttribute('aria-label', tooltip.textContent);
       });
     }
 
@@ -1731,6 +1740,7 @@
     refreshLightboxArtboardScaleNotice = refreshArtboardScaleNotice;
     updateSupportSpacingInfo();
     refreshArtboardScaleNotice();
+    window.addEventListener('focus', refreshArtboardScaleNotice);
 
     const createBtn = $('btnCreateLightbox');
     if(!createBtn) return;
@@ -1878,6 +1888,60 @@
     if(h) h.addEventListener('input', update);
     if(flip) flip.addEventListener('change', update);
     update();
+
+    const letterW = $('letterLedWidthMm');
+    const letterH = $('letterLedHeightMm');
+    const letterRect = $('letterLedDepictionRect');
+    const letterLine = $('letterLedDepictionLine');
+    const letterText = $('letterLedDepictionText');
+    function updateLetter() {
+      const width = num((letterW && letterW.value) || 0) || 0;
+      const height = num((letterH && letterH.value) || 0) || 0;
+      if(letterRect) {
+        const maxW = 100;
+        const maxH = 40;
+        let scale = 1;
+        if(width > 0 && height > 0) {
+          scale = Math.min(maxW / width, maxH / height, 1);
+        }
+        letterRect.style.width = Math.max(10, width * scale) + 'px';
+        letterRect.style.height = Math.max(6, height * scale) + 'px';
+      }
+      if(letterLine) {
+        letterLine.style.left = '0';
+        letterLine.style.right = '0';
+        letterLine.style.top = '50%';
+        letterLine.style.bottom = 'auto';
+        letterLine.style.width = '100%';
+        letterLine.style.height = '1px';
+      }
+      if(letterText) {
+        letterText.textContent = 'LED ' + width + 'mm Ã— ' + height + 'mm';
+      }
+    }
+    if(letterW) letterW.addEventListener('input', updateLetter);
+    if(letterH) letterH.addEventListener('input', updateLetter);
+    updateLetter();
+  }
+
+  function wireLetterLayout() {
+    const btn = $('btnCreateLetterLayout');
+    if(!btn) return;
+    btn.onclick = () => {
+      const payload = {
+        ledWatt: num(($('letterLedWatt') && $('letterLedWatt').value) || 0),
+        ledWidthMm: num(($('letterLedWidthMm') && $('letterLedWidthMm').value) || 0),
+        ledHeightMm: num(($('letterLedHeightMm') && $('letterLedHeightMm').value) || 0),
+        centerSpacingMm: num(($('letterAllowanceBetweenCentersMm') && $('letterAllowanceBetweenCentersMm').value) || 0),
+        initialOffsetMm: num(($('letterInitialOffsetMm') && $('letterInitialOffsetMm').value) || 0),
+        subsequentOffsetMm: num(($('letterSubsequentOffsetMm') && $('letterSubsequentOffsetMm').value) || 0),
+        maxLedsInSeries: parseInt((($('letterMaxLedsInSeries') && $('letterMaxLedsInSeries').value) || 0), 10) || 50,
+        rotationDeg: num(($('letterRotationDeg') && $('letterRotationDeg').value) || 0),
+        isLargeArtboard: isLargeArtboard
+      };
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runButtonJsxOperation('signarama_helper_drawLetterLayout("' + json + '")', {logFn: log, toastTitle: 'Create letter layout'});
+    };
   }
 
   function wireColours() {
@@ -2343,7 +2407,223 @@
     const dimSelectionHint = $('dimSelectionHint');
     const textColorInput = $('textColor');
     const lineColorInput = $('lineColor');
+    const profileSelect = $('dimensionThemeProfileSelect');
+    const profilesField = $('dimensionThemeProfilesJson');
+    const saveProfileBtn = $('btnDimensionThemeSave');
+    const deleteProfileBtn = $('btnDimensionThemeDelete');
+    const themeGrid = $('dimensionThemeGrid');
     let refreshDimensionSelectionHintTimer = null;
+    let customProfiles = [];
+
+    function sanitizeHex(hex, fallback) {
+      const raw = String(hex || '').trim();
+      if(/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+      return String(fallback || '#000000').toLowerCase();
+    }
+
+    function buildBuiltinProfiles() {
+      return [
+        {id: 'builtin:0', name: 'Black / Black', textColor: '#000000', lineColor: '#000000', builtin: true},
+        {id: 'builtin:1', name: 'Pink / Pink', textColor: '#ff00ff', lineColor: '#ff00ff', builtin: true},
+        {id: 'builtin:2', name: 'Red / Red', textColor: '#ff0000', lineColor: '#ff0000', builtin: true},
+        {id: 'builtin:3', name: 'Red / Black', textColor: '#ff0000', lineColor: '#000000', builtin: true},
+        {id: 'builtin:4', name: 'White / White', textColor: '#ffffff', lineColor: '#ffffff', builtin: true}
+      ];
+    }
+
+    function parseCustomProfiles() {
+      if(!profilesField) return [];
+      const raw = String(profilesField.value || '').trim();
+      if(!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        if(!Array.isArray(parsed)) return [];
+        return parsed
+          .map((entry, idx) => {
+            const name = String((entry && entry.name) || '').trim();
+            if(!name) return null;
+            return {
+              id: 'custom:' + name.toLowerCase(),
+              name: name,
+              textColor: sanitizeHex(entry.textColor, '#000000'),
+              lineColor: sanitizeHex(entry.lineColor, '#000000'),
+              builtin: false,
+              order: idx
+            };
+          })
+          .filter(Boolean);
+      } catch(_eParseProfiles) {
+        return [];
+      }
+    }
+
+    function persistCustomProfiles(nextProfiles) {
+      customProfiles = (nextProfiles || []).slice(0);
+      if(!profilesField) return;
+      profilesField.value = JSON.stringify(customProfiles.map((entry) => ({
+        name: entry.name,
+        textColor: entry.textColor,
+        lineColor: entry.lineColor
+      })));
+      try {profilesField.dispatchEvent(new Event('input', {bubbles: true}));} catch(_eProfInp) { }
+      try {profilesField.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eProfChg) { }
+    }
+
+    function getAllProfiles() {
+      return buildBuiltinProfiles().concat(customProfiles);
+    }
+
+    function updateDeleteButtonState() {
+      if(!deleteProfileBtn) return;
+      const selectedId = profileSelect ? String(profileSelect.value || '') : '';
+      deleteProfileBtn.disabled = !/^custom:/i.test(selectedId);
+    }
+
+    function syncProfileSelectionToCurrentColours() {
+      if(!profileSelect || !textColorInput || !lineColorInput) return;
+      const textHex = sanitizeHex(textColorInput.value, '#000000');
+      const lineHex = sanitizeHex(lineColorInput.value, '#000000');
+      const match = getAllProfiles().find((entry) => entry.textColor === textHex && entry.lineColor === lineHex);
+      profileSelect.value = match ? match.id : '';
+      updateDeleteButtonState();
+    }
+
+    function renderProfileOptions(preferredId) {
+      if(!profileSelect) return;
+      const currentId = String(preferredId || profileSelect.value || '');
+      const allProfiles = getAllProfiles();
+      profileSelect.innerHTML = '';
+
+      const currentOption = document.createElement('option');
+      currentOption.value = '';
+      currentOption.textContent = 'Current colours';
+      profileSelect.appendChild(currentOption);
+
+      const builtins = allProfiles.filter((entry) => entry.builtin);
+      const customs = allProfiles.filter((entry) => !entry.builtin);
+      if(builtins.length) {
+        const builtinsGroup = document.createElement('optgroup');
+        builtinsGroup.label = 'Built-in';
+        builtins.forEach((entry) => {
+          const opt = document.createElement('option');
+          opt.value = entry.id;
+          opt.textContent = entry.name;
+          builtinsGroup.appendChild(opt);
+        });
+        profileSelect.appendChild(builtinsGroup);
+      }
+      if(customs.length) {
+        const customGroup = document.createElement('optgroup');
+        customGroup.label = 'Custom';
+        customs.forEach((entry) => {
+          const opt = document.createElement('option');
+          opt.value = entry.id;
+          opt.textContent = entry.name;
+          customGroup.appendChild(opt);
+        });
+        profileSelect.appendChild(customGroup);
+      }
+
+      const hasPreferred = currentId && allProfiles.some((entry) => entry.id === currentId);
+      if(hasPreferred) profileSelect.value = currentId;
+      else syncProfileSelectionToCurrentColours();
+      updateDeleteButtonState();
+    }
+
+    function applyProfileSelection(profileId) {
+      if(!profileId || !textColorInput || !lineColorInput) {
+        updateDeleteButtonState();
+        return;
+      }
+      const profile = getAllProfiles().find((entry) => entry.id === profileId);
+      if(!profile) {
+        syncProfileSelectionToCurrentColours();
+        return;
+      }
+      textColorInput.value = profile.textColor;
+      lineColorInput.value = profile.lineColor;
+      try {textColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eDimTc) { }
+      try {lineColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eDimLc) { }
+      profileSelect.value = profile.id;
+      updateDeleteButtonState();
+      if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+    }
+
+    function deleteCustomProfile(profileId) {
+      if(!/^custom:/i.test(String(profileId || ''))) {
+        showToast('Only custom colour profiles can be deleted.', {type: 'warn', title: 'Dimensions'});
+        updateDeleteButtonState();
+        return;
+      }
+      const selectedProfile = customProfiles.find((entry) => entry.id === profileId);
+      if(!selectedProfile) {
+        updateDeleteButtonState();
+        return;
+      }
+      persistCustomProfiles(customProfiles.filter((entry) => entry.id !== profileId));
+      renderProfileOptions('');
+      renderQuickThemeTiles();
+      syncProfileSelectionToCurrentColours();
+      showToast('Deleted dimension colour profile "' + selectedProfile.name + '".', {type: 'success', title: 'Dimensions'});
+    }
+
+    function renderQuickThemeTiles() {
+      if(!themeGrid) return;
+      themeGrid.innerHTML = '';
+      getAllProfiles().forEach((profile) => {
+        const tile = document.createElement('button');
+        tile.className = 'theme-tile';
+        tile.type = 'button';
+        tile.title = profile.name;
+        tile.setAttribute('data-profile-id', profile.id);
+        tile.setAttribute('data-text-color', profile.textColor);
+        tile.setAttribute('data-line-color', profile.lineColor);
+
+        const inner = document.createElement('span');
+        inner.className = 'theme-tile-inner';
+        const textHalf = document.createElement('span');
+        textHalf.className = 'theme-half';
+        textHalf.style.background = profile.textColor;
+        const lineHalf = document.createElement('span');
+        lineHalf.className = 'theme-half';
+        lineHalf.style.background = profile.lineColor;
+        inner.appendChild(textHalf);
+        inner.appendChild(lineHalf);
+
+        const label = document.createElement('div');
+        label.className = 'theme-tile-label';
+        label.textContent = profile.name;
+
+        tile.appendChild(inner);
+        tile.appendChild(label);
+        tile.addEventListener('click', () => {
+          if(textColorInput) textColorInput.value = profile.textColor;
+          if(lineColorInput) lineColorInput.value = profile.lineColor;
+          try {if(textColorInput) textColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eTC) { }
+          try {if(lineColorInput) lineColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eLC) { }
+          if(profileSelect) profileSelect.value = profile.id;
+          syncProfileSelectionToCurrentColours();
+          if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+        });
+
+        if(!profile.builtin) {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'theme-tile-delete';
+          deleteBtn.title = 'Delete "' + profile.name + '"';
+          deleteBtn.setAttribute('aria-label', 'Delete ' + profile.name);
+          deleteBtn.textContent = 'x';
+          deleteBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteCustomProfile(profile.id);
+          });
+          tile.appendChild(deleteBtn);
+        }
+
+        themeGrid.appendChild(tile);
+      });
+    }
 
     function runDimensionOperation(fnCall, options) {
       const opts = options || {};
@@ -2505,17 +2785,76 @@
       if(el) el.onclick = map[id];
     });
 
-    $all('.theme-tile[data-text-color][data-line-color]').forEach(tile => {
-      tile.addEventListener('click', () => {
-        const textHex = tile.getAttribute('data-text-color') || '';
-        const lineHex = tile.getAttribute('data-line-color') || '';
-        if(textColorInput && textHex) textColorInput.value = textHex;
-        if(lineColorInput && lineHex) lineColorInput.value = lineHex;
-        try {if(textColorInput) textColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eTC) { }
-        try {if(lineColorInput) lineColorInput.dispatchEvent(new Event('change', {bubbles: true}));} catch(_eLC) { }
-        if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+    customProfiles = parseCustomProfiles();
+    renderProfileOptions();
+    renderQuickThemeTiles();
+
+    if(profilesField) {
+      const refreshProfilesFromField = () => {
+        customProfiles = parseCustomProfiles();
+        renderProfileOptions();
+        renderQuickThemeTiles();
+      };
+      profilesField.addEventListener('input', refreshProfilesFromField);
+      profilesField.addEventListener('change', refreshProfilesFromField);
+    }
+
+    if(profileSelect) {
+      profileSelect.addEventListener('change', () => {
+        applyProfileSelection(String(profileSelect.value || ''));
       });
-    });
+    }
+
+    function handleColourInputChanged() {
+      syncProfileSelectionToCurrentColours();
+      if(schedulePanelSettingsSave) schedulePanelSettingsSave();
+    }
+    if(textColorInput) {
+      textColorInput.addEventListener('input', handleColourInputChanged);
+      textColorInput.addEventListener('change', handleColourInputChanged);
+    }
+    if(lineColorInput) {
+      lineColorInput.addEventListener('input', handleColourInputChanged);
+      lineColorInput.addEventListener('change', handleColourInputChanged);
+    }
+
+    if(saveProfileBtn) {
+      saveProfileBtn.addEventListener('click', () => {
+        const selectedId = profileSelect ? String(profileSelect.value || '') : '';
+        const existingProfile = getAllProfiles().find((entry) => entry.id === selectedId);
+        const defaultName = existingProfile ? existingProfile.name : 'New profile';
+        const rawName = window.prompt('Save current colours as profile name:', defaultName);
+        const name = String(rawName || '').trim();
+        if(!name) return;
+        const normalizedId = 'custom:' + name.toLowerCase();
+        const nextEntry = {
+          id: normalizedId,
+          name: name,
+          textColor: sanitizeHex(textColorInput && textColorInput.value, '#000000'),
+          lineColor: sanitizeHex(lineColorInput && lineColorInput.value, '#000000'),
+          builtin: false
+        };
+        const nextProfiles = customProfiles.slice(0);
+        const existingIdx = nextProfiles.findIndex((entry) => entry.id === normalizedId);
+        if(existingIdx >= 0) nextProfiles[existingIdx] = nextEntry;
+        else nextProfiles.push(nextEntry);
+        persistCustomProfiles(nextProfiles);
+        renderProfileOptions(nextEntry.id);
+        renderQuickThemeTiles();
+        if(profileSelect) profileSelect.value = nextEntry.id;
+        updateDeleteButtonState();
+        showToast('Saved dimension colour profile "' + name + '".', {type: 'success', title: 'Dimensions'});
+      });
+    }
+
+    if(deleteProfileBtn) {
+      deleteProfileBtn.addEventListener('click', () => {
+        const selectedId = profileSelect ? String(profileSelect.value || '') : '';
+        deleteCustomProfile(selectedId);
+      });
+    }
+
+    syncProfileSelectionToCurrentColours();
 
     document.addEventListener('visibilitychange', () => {
       if(!document.hidden) scheduleRefreshDimensionSelectionHint();

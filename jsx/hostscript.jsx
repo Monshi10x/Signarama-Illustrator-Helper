@@ -889,8 +889,12 @@ function _srh_bringLayerToFront(layer) {
   try {layer.zOrder(ZOrderMethod.BRINGTOFRONT);} catch(e) { }
 }
 
+function _srh_sendLayerToBack(layer) {
+  try {layer.zOrder(ZOrderMethod.SENDTOBACK);} catch(e) { }
+}
+
 function _srh_setBleedLayerOrder(cutLayer, originalLayer, bleedLayer) {
-  if(bleedLayer) _srh_bringLayerToFront(bleedLayer);
+  if(bleedLayer) _srh_sendLayerToBack(bleedLayer);
   if(originalLayer) _srh_bringLayerToFront(originalLayer);
   if(cutLayer) _srh_bringLayerToFront(cutLayer);
 }
@@ -1720,10 +1724,164 @@ function signarama_helper_applyPathBleed(jsonStr) {
 
   function _outlineStrokeInContainer(container) {
     if(!container) return;
-    _runOnSelection(container, function() {
-      _pathBleedDebug('outline-stroke | strategy=expand-only');
+    var targets = [];
+    var stack = [];
+    try {stack.push(container);} catch(_eOs0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eOs1) {tn = '';}
+      if(tn === 'PathItem') {
+        var hasStroke = false;
+        try {hasStroke = !!cur.stroked && Number(cur.strokeWidth || 0) > 0;} catch(_eOs2) {hasStroke = false;}
+        if(hasStroke) targets.push(cur);
+        continue;
+      }
+      if(tn === 'CompoundPathItem') {
+        var compoundHasStroke = false;
+        try {
+          if(cur.pathItems && cur.pathItems.length) {
+            for(var cpi = 0; cpi < cur.pathItems.length; cpi++) {
+              var cp = cur.pathItems[cpi];
+              if(cp && cp.stroked && Number(cp.strokeWidth || 0) > 0) {
+                compoundHasStroke = true;
+                break;
+              }
+            }
+          }
+        } catch(_eOs3) {compoundHasStroke = false;}
+        if(compoundHasStroke) {
+          targets.push(cur);
+          continue;
+        }
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eOs4) { }
+    }
+    _pathBleedDebug('outline-stroke | strategy=expand-stroked-targets | count=' + targets.length);
+    if(!targets.length) return;
+    _runOnSelection(targets, function() {
+      try {
+        app.executeMenuCommand('Outline Stroke');
+        _pathBleedDebug('outline-stroke | command=Outline Stroke | result=OK');
+      } catch(_eOsCmd1) {
+        _pathBleedDebug('outline-stroke | command=Outline Stroke | result=FAILED');
+      }
       _expandSelection();
     });
+  }
+
+  function _getMaxStrokeWidthInContainer(container) {
+    if(!container) return 0;
+    var maxStroke = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eGms0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eGms1) {tn = '';}
+      if(tn === 'PathItem') {
+        try {
+          if(cur.stroked) {
+            var sw = Number(cur.strokeWidth || 0);
+            if(sw > maxStroke) maxStroke = sw;
+          }
+        } catch(_eGms2) { }
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eGms3) { }
+    }
+    return maxStroke;
+  }
+
+  function _collectNativePathRoots(container) {
+    var out = [];
+    if(!container) return out;
+    var stack = [];
+    try {stack.push(container);} catch(_eCnpr0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eCnpr1) {tn = ''; }
+      if(tn === 'CompoundPathItem') {
+        out.push(cur);
+        continue;
+      }
+      if(tn === 'PathItem') {
+        var hasCompound = false;
+        try {
+          var p = cur.parent;
+          var guard = 0;
+          while(p && guard < 100) {
+            guard++;
+            if(String(p.typename || '') === 'CompoundPathItem') {hasCompound = true; break;}
+            p = p.parent;
+          }
+        } catch(_eCnpr2) {hasCompound = false; }
+        if(!hasCompound) out.push(cur);
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eCnpr3) { }
+    }
+    return out;
+  }
+
+  function _getOffsetJoinInfoFromItem(item) {
+    var info = {joinType: 2, joinName: 'miter', miterLimit: 180};
+    if(!item) return info;
+    try {
+      var sj = item.strokeJoin;
+      var sjText = String(sj || '').toLowerCase();
+      if(sjText.indexOf('round') >= 0) {
+        info.joinType = 1;
+        info.joinName = 'round';
+      } else if(sjText.indexOf('bevel') >= 0) {
+        info.joinType = 0;
+        info.joinName = 'bevel';
+      } else {
+        info.joinType = 2;
+        info.joinName = 'miter';
+      }
+    } catch(_eGoji0) { }
+    try {
+      var ml = Number(item.strokeMiterLimit || 0);
+      if(ml > 0) info.miterLimit = ml;
+    } catch(_eGoji1) { }
+    return info;
+  }
+
+  function _replaceContainerWithItems(container, items, label) {
+    if(!container || !items || !items.length) return 0;
+    var moved = 0;
+    try {
+      var existing = [];
+      for(var i = 0; i < container.pageItems.length; i++) existing.push(container.pageItems[i]);
+      for(var e = 0; e < existing.length; e++) {
+        try {existing[e].remove();} catch(_eRci0) { }
+      }
+    } catch(_eRci1) { }
+    for(var j = 0; j < items.length; j++) {
+      var it = items[j];
+      if(!it || it === container) continue;
+      try {
+        it.move(container, ElementPlacement.PLACEATEND);
+        moved++;
+      } catch(_eRci2) { }
+    }
+    _pathBleedDebug('replace container ' + (label || '') + ' | moved=' + moved);
+    return moved;
   }
 
   function _closeOpenPathsInContainer(container, label) {
@@ -1759,8 +1917,11 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return 0;
   }
 
-  function _applyOffsetToContainer(container, ofst) {
+  function _applyOffsetToContainer(container, ofst, opts) {
     if(!container) return false;
+    opts = opts || {};
+    var offsetJoinType = (typeof opts.joinType === 'number') ? opts.joinType : 0;
+    var offsetMiterLimit = (typeof opts.miterLimit === 'number' && opts.miterLimit > 0) ? opts.miterLimit : 180;
     _pathBleedDebug('offset START | ofst=' + _fmtNum3(ofst) + ' | container=' + _itemRef(container));
     function _safeBounds(it) {
       var b0 = null;
@@ -1881,8 +2042,8 @@ function signarama_helper_applyPathBleed(jsonStr) {
     );
     _logDescendantsBounds('desc-before', container);
 
-    var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(ofst) + ' I jntp 0 R mlim 180"/></LiveEffect>';
-    var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(ofst) + ' I jntp 0"/></LiveEffect>';
+    var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(ofst) + ' I jntp ' + Number(offsetJoinType) + ' R mlim ' + Number(offsetMiterLimit) + '"/></LiveEffect>';
+    var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim ' + Number(offsetMiterLimit) + ' R ofst ' + Number(ofst) + ' I jntp ' + Number(offsetJoinType) + '"/></LiveEffect>';
     var applied = false;
     try {
       container.applyEffect(fx1);
@@ -2568,8 +2729,10 @@ function signarama_helper_applyPathBleed(jsonStr) {
     return false;
   }
 
-  function _duplicateNativePathsFromItem(src, targetContainer, label) {
+  function _duplicateNativePathsFromItem(src, targetContainer, label, opts) {
     if(!src || !targetContainer) return 0;
+    opts = opts || {};
+    var doOutlineText = (typeof opts.outlineText === 'undefined') ? false : !!opts.outlineText;
     var copied = 0;
     var stack = [];
     try {stack.push(src);} catch(_eDupNp0) { }
@@ -2593,6 +2756,20 @@ function signarama_helper_applyPathBleed(jsonStr) {
             copied++;
             _pathBleedDebug('duplicate native ' + (label || '') + ' | path | ' + _itemRef(cur));
           } catch(_eDupNp3) { }
+        }
+      } else if(tn === 'TextFrame') {
+        if(doOutlineText) {
+          try {
+            var dupText = cur.duplicate(targetContainer, ElementPlacement.PLACEATEND);
+            var outlinedDup = dupText.createOutline();
+            try {dupText.remove();} catch(_eDupNpTxtRm0) { }
+            if(outlinedDup) {
+              copied += _countPathLikeItems(outlinedDup);
+              _pathBleedDebug('duplicate native ' + (label || '') + ' | text->outline | ' + _itemRef(cur));
+            }
+          } catch(_eDupNpTxt0) {
+            _pathBleedDebug('duplicate native ' + (label || '') + ' | text->outline FAILED | ' + _itemRef(cur));
+          }
         }
       }
       _pushGradientChildren(cur, stack);
@@ -4131,6 +4308,45 @@ function signarama_helper_applyPathBleed(jsonStr) {
   _pathBleedDebug('selection snapshot count=' + sel.length);
   for(var ss = 0; ss < sel.length; ss++) _pathBleedDebug('selection[' + ss + '] ' + _itemRef(sel[ss]));
 
+  function _scanBleedSelectionEligibility(items) {
+    var out = {nativeCount: 0, textFrameCount: 0};
+    var stack = [];
+    for(var i = 0; i < items.length; i++) {
+      try {stack.push(items[i]);} catch(_eSbse0) { }
+    }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eSbse1) {tn = '';}
+      if(tn === 'TextFrame') {
+        out.textFrameCount++;
+        if(outlineText) out.nativeCount++;
+      } else if(tn === 'CompoundPathItem') {
+        out.nativeCount++;
+        continue;
+      } else if(tn === 'PathItem') {
+        if(!_hasCompoundAncestor(cur)) out.nativeCount++;
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var j = 0; j < cur.pageItems.length; j++) stack.push(cur.pageItems[j]);
+        }
+      } catch(_eSbse2) { }
+    }
+    return out;
+  }
+
+  var _selectionEligibility = _scanBleedSelectionEligibility(sel);
+  if(!_selectionEligibility.nativeCount) {
+    try {doc.selection = null;} catch(_eSelElig0) { }
+    try {if(originalLayer) originalLayer.visible = false;} catch(_eOlHideElig0) { }
+    if(_selectionEligibility.textFrameCount > 0) {
+      return _pathBleedWithDbg('Text must be outlined before using Bleed + Cutline.');
+    }
+    return _pathBleedWithDbg("No eligible items to offset. Doc gradient-fill objects: " + _countDocumentGradientFillObjects(doc) + ".");
+  }
+
   var bleedGroup = null;
   var originalGroup = null;
   var cutGroup = null;
@@ -4188,20 +4404,75 @@ function signarama_helper_applyPathBleed(jsonStr) {
     _pathBleedDebug('duplicate source[' + n + '] ' + _itemRef(item));
 
     if(createCutline && cutGroup) {
-      try {cutCount += _duplicateNativePathsFromItem(item, cutGroup, 'cut');} catch(_eDupCut) { }
+      try {cutCount += _duplicateNativePathsFromItem(item, cutGroup, 'cut', {outlineText: outlineText});} catch(_eDupCut) { }
     }
 
     if(bleedGroup) {
-      try {movedCount += _duplicateNativePathsFromItem(item, bleedGroup, 'bleed');} catch(_eDupBleed0) { }
+      try {movedCount += _duplicateNativePathsFromItem(item, bleedGroup, 'bleed', {outlineText: outlineText});} catch(_eDupBleed0) { }
     } else {
-      try {movedCount += _duplicateNativePathsFromItem(item, bleedLayer, 'bleed-layer');} catch(_eDupBleed1) { }
+      try {movedCount += _duplicateNativePathsFromItem(item, bleedLayer, 'bleed-layer', {outlineText: outlineText});} catch(_eDupBleed1) { }
     }
+  }
+
+  function _logCutlineGeometry(container, label) {
+    if(!pathBleedDebugVerbose || !container) return;
+    var stack = [];
+    var idx = 0;
+    try {stack.push(container);} catch(_eLcg0) { }
+    _pathBleedDebug('cutline-geom START ' + (label || '') + ' | root=' + _itemRef(container));
+    while(stack.length && idx < 80) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      idx++;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eLcg1) {tn = ''; }
+      if(tn === 'PathItem' || tn === 'CompoundPathItem' || tn === 'GroupItem') {
+        var vb = null;
+        var gb = null;
+        var filled = 'n/a';
+        var stroked = 'n/a';
+        var strokeWidth = 'n/a';
+        var strokeColor = 'n/a';
+        var fillColor = 'n/a';
+        try {vb = cur.visibleBounds;} catch(_eLcg2) {vb = null; }
+        try {gb = cur.geometricBounds;} catch(_eLcg3) {gb = null; }
+        try {filled = (typeof cur.filled === 'undefined') ? 'n/a' : String(!!cur.filled);} catch(_eLcg4) { }
+        try {stroked = (typeof cur.stroked === 'undefined') ? 'n/a' : String(!!cur.stroked);} catch(_eLcg5) { }
+        try {strokeWidth = (typeof cur.strokeWidth === 'undefined') ? 'n/a' : _fmtNum3(Number(cur.strokeWidth || 0));} catch(_eLcg6) { }
+        try {
+          if(cur.strokeColor) strokeColor = String(cur.strokeColor.typename || '');
+          if(cur.strokeColor && cur.strokeColor.spot) strokeColor += ':' + String(cur.strokeColor.spot.name || '');
+        } catch(_eLcg7) { }
+        try {
+          if(cur.fillColor) fillColor = String(cur.fillColor.typename || '');
+          if(cur.fillColor && cur.fillColor.spot) fillColor += ':' + String(cur.fillColor.spot.name || '');
+        } catch(_eLcg8) { }
+        _pathBleedDebug(
+          'cutline-geom item | idx=' + idx +
+          ' | type=' + tn +
+          ' | vb=' + _fmtBounds4(vb) +
+          ' | gb=' + _fmtBounds4(gb) +
+          ' | filled=' + filled +
+          ' | stroked=' + stroked +
+          ' | strokeWidth=' + strokeWidth +
+          ' | strokeColor=' + strokeColor +
+          ' | fillColor=' + fillColor +
+          ' | ref=' + _itemRef(cur)
+        );
+      }
+      try {
+        if(cur.pageItems && cur.pageItems.length) {
+          for(var i = 0; i < cur.pageItems.length; i++) stack.push(cur.pageItems[i]);
+        }
+      } catch(_eLcg9) { }
+    }
+    _pathBleedDebug('cutline-geom END ' + (label || '') + ' | scanned=' + idx);
   }
   _pathBleedDebug('duplicate summary | originals=' + originalCount + ' | movedToBleed=' + movedCount + ' | cutDup=' + cutCount);
   var bleedContainerRef = bleedGroup || bleedLayer;
-  var _bleedPathOnlyCount = _extractPathOnlySources(bleedContainerRef, 'bleed-after-duplicate');
-  if(_bleedPathOnlyCount > 0) movedCount = _bleedPathOnlyCount;
-  _pathBleedDebug('bleed path-only summary | pathCount=' + _bleedPathOnlyCount + ' | movedToBleed=' + movedCount);
+  var _bleedNativeCount = _extractNativePathSources(bleedContainerRef, 'bleed-after-duplicate');
+  if(_bleedNativeCount > 0) movedCount = _bleedNativeCount;
+  _pathBleedDebug('bleed native summary | pathCount=' + _bleedNativeCount + ' | movedToBleed=' + movedCount);
   _auditStructure(bleedGroup || bleedLayer, 'bleed-after-duplicate');
   if(createCutline && cutGroup) _auditStructure(cutGroup, 'cut-after-duplicate');
 
@@ -4242,7 +4513,64 @@ function signarama_helper_applyPathBleed(jsonStr) {
     freeformFallbackMode = true;
   }
   var gradientSnapshot = _captureGradientSnapshot(bleedGroup || bleedLayer, 'pre-offset');
-  var _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  var _bleedOffsetTargets = _collectNativePathRoots(bleedGroup || bleedLayer);
+  var _offsetResult = null;
+  if(_bleedOffsetTargets && _bleedOffsetTargets.length) {
+    var _bleedApplied = 0;
+    var _bleedChanged = 0;
+    _pathBleedDebug('bleed offset targets | count=' + _bleedOffsetTargets.length);
+    for(var _bti = 0; _bti < _bleedOffsetTargets.length; _bti++) {
+      var _bleedTarget = _bleedOffsetTargets[_bti];
+      if(!_bleedTarget) continue;
+      var _bleedJoinInfo = _getOffsetJoinInfoFromItem(_bleedTarget);
+      var _bleedStrokeWidth = 0;
+      var _bleedHasStroke = false;
+      try {
+        _bleedHasStroke = !!_bleedTarget.stroked;
+        _bleedStrokeWidth = Number(_bleedTarget.strokeWidth || 0);
+      } catch(_eBst0) {
+        _bleedHasStroke = false;
+        _bleedStrokeWidth = 0;
+      }
+      _pathBleedDebug(
+        'bleed offset target | idx=' + _bti +
+        ' | ref=' + _itemRef(_bleedTarget) +
+        ' | join=' + _bleedJoinInfo.joinName +
+        ' | joinType=' + _bleedJoinInfo.joinType +
+        ' | miterLimit=' + _fmtNum3(_bleedJoinInfo.miterLimit) +
+        ' | stroked=' + (_bleedHasStroke ? 'yes' : 'no') +
+        ' | strokeWidth=' + _fmtNum3(_bleedStrokeWidth)
+      );
+      var _bleedTargetResult = null;
+      if(_bleedHasStroke && _bleedStrokeWidth > 0.01) {
+        var _bleedCenterShift = offsetPt / 2;
+        _pathBleedDebug(
+          'bleed offset target mode | idx=' + _bti +
+          ' | mode=stroke-band' +
+          ' | centerShift=' + _fmtNum3(_bleedCenterShift) +
+          ' | strokeWidthBefore=' + _fmtNum3(_bleedStrokeWidth) +
+          ' | strokeWidthAfter=' + _fmtNum3(_bleedStrokeWidth + offsetPt)
+        );
+        _bleedTargetResult = _applyOffsetToContainer(_bleedTarget, _bleedCenterShift, {
+          joinType: _bleedJoinInfo.joinType,
+          miterLimit: _bleedJoinInfo.miterLimit
+        });
+        try {_bleedTarget.strokeWidth = _bleedStrokeWidth + offsetPt;} catch(_eBst1) { }
+      } else {
+        _pathBleedDebug('bleed offset target mode | idx=' + _bti + ' | mode=plain-offset');
+        _bleedTargetResult = _applyOffsetToContainer(_bleedTarget, offsetPt, {
+          joinType: _bleedJoinInfo.joinType,
+          miterLimit: _bleedJoinInfo.miterLimit
+        });
+      }
+      if(_bleedTargetResult && _bleedTargetResult.applied) _bleedApplied++;
+      if(_bleedTargetResult && _bleedTargetResult.changed) _bleedChanged++;
+    }
+    _offsetResult = {applied: (_bleedApplied > 0), changed: (_bleedChanged > 0)};
+    _pathBleedDebug('bleed offset summary | targetsApplied=' + _bleedApplied + ' | targetsChanged=' + _bleedChanged);
+  } else {
+    _offsetResult = _applyOffsetToContainer(bleedGroup || bleedLayer, offsetPt);
+  }
   var removedInnerContours = 0;
   var _postOffsetPathMetrics = _collectPathMetrics(bleedGroup || bleedLayer);
   _logPathMetrics('post-offset', _postOffsetPathMetrics);
@@ -4304,23 +4632,66 @@ function signarama_helper_applyPathBleed(jsonStr) {
     var _cutPathCountBefore = _countPathLikeItems(cutGroup);
     if(_cutPathCountBefore > 0) cutCount = _cutPathCountBefore;
     _pathBleedDebug('cutline path summary | pathCount=' + _cutPathCountBefore + ' | cutDup=' + cutCount);
+    _logCutlineGeometry(cutGroup, 'before-processing');
     if(outlineText) _outlineTextInContainer(cutGroup);
-    if(outlineStroke) _outlineStrokeInContainer(cutGroup);
+    if(outlineStroke) {
+      var _cutStrokeWidthPt = _getMaxStrokeWidthInContainer(cutGroup);
+      var _cutStrokeOffsetPt = _cutStrokeWidthPt / 2;
+      _pathBleedDebug('cutline outline-stroke fallback | strokeWidthPt=' + _fmtNum3(_cutStrokeWidthPt) + ' | offsetPt=' + _fmtNum3(_cutStrokeOffsetPt));
+      if(_cutStrokeOffsetPt > 0.01) {
+        var _cutTargets = _collectNativePathRoots(cutGroup);
+        var _cutTargetApplied = 0;
+        var _cutTargetChanged = 0;
+        _pathBleedDebug('cutline outline-stroke targets | count=' + _cutTargets.length);
+        for(var _cti = 0; _cti < _cutTargets.length; _cti++) {
+          var _cutTarget = _cutTargets[_cti];
+          if(!_cutTarget) continue;
+          var _cutJoinInfo = _getOffsetJoinInfoFromItem(_cutTarget);
+          _pathBleedDebug(
+            'cutline outline-stroke target | idx=' + _cti +
+            ' | ref=' + _itemRef(_cutTarget) +
+            ' | join=' + _cutJoinInfo.joinName +
+            ' | joinType=' + _cutJoinInfo.joinType +
+            ' | miterLimit=' + _fmtNum3(_cutJoinInfo.miterLimit)
+          );
+          var _cutOffsetResult = _applyOffsetToContainer(_cutTarget, _cutStrokeOffsetPt, {
+            joinType: _cutJoinInfo.joinType,
+            miterLimit: _cutJoinInfo.miterLimit
+          });
+          if(_cutOffsetResult && _cutOffsetResult.applied) _cutTargetApplied++;
+          if(_cutOffsetResult && _cutOffsetResult.changed) _cutTargetChanged++;
+        }
+        _pathBleedDebug(
+          'cutline outline-stroke summary | pathCount=' + _countPathLikeItems(cutGroup) +
+          ' | targetsApplied=' + _cutTargetApplied +
+          ' | targetsChanged=' + _cutTargetChanged
+        );
+        _logCutlineGeometry(cutGroup, 'after-outline-stroke-offset');
+        cutCount = _countPathLikeItems(cutGroup);
+      } else {
+        _pathBleedDebug('cutline outline-stroke summary | skipped | reason=no-stroke-width');
+      }
+    }
     _setCutlineStyleOnItem(cutGroup, {outlineText: outlineText, outlineStroke: false});
+    _logCutlineGeometry(cutGroup, 'after-style-before-prune');
     _pruneCutlineContainer(cutGroup);
     _auditStructure(cutGroup, 'cut-after-style');
+    _logCutlineGeometry(cutGroup, 'after-style');
     if(autoWeld) {
       var welded = _uniteContainerPathfinderAdd(cutGroup);
       if(!welded) welded = _uniteContainer(cutGroup);
       // Re-apply style to welded result in cutline container only (never selection-based).
       _setCutlineStyleOnItem(cutGroup, {outlineText: false, outlineStroke: false});
+      _logCutlineGeometry(cutGroup, 'after-weld-before-prune');
       _pruneCutlineContainer(cutGroup);
       _auditStructure(cutGroup, 'cut-after-weld');
+      _logCutlineGeometry(cutGroup, 'after-weld');
     }
     var _cutPathCountAfter = _countPathLikeItems(cutGroup);
     if(_cutPathCountAfter > 0) cutCount = _cutPathCountAfter;
     _pruneCutlineContainer(cutGroup);
     _auditStructure(cutGroup, 'cut-final');
+    _logCutlineGeometry(cutGroup, 'final');
   }
 
   // Run final-target compensation after offset output is fully materialized on bleed layer.
@@ -7109,31 +7480,121 @@ function _dim_drawAreaApproxPolygon(layer, points, strokePt) {
   }
 }
 
+var _dim_areaDebugLines = null;
+function _dim_areaDbg(msg) {
+  var line = '[SRH][area] ' + String(msg || '');
+  try {$.writeln(line);} catch(_eAreaDbg0) { }
+  try {
+    if(_dim_areaDebugLines) _dim_areaDebugLines.push(line);
+  } catch(_eAreaDbg1) { }
+}
+
+function _dim_pointInPolygon(point, polygon) {
+  if(!point || !polygon || polygon.length < 3) return false;
+  var inside = false;
+  for(var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    var xi = polygon[i].x, yi = polygon[i].y;
+    var xj = polygon[j].x, yj = polygon[j].y;
+    var intersects = ((yi > point.y) !== (yj > point.y)) &&
+      (point.x < ((xj - xi) * (point.y - yi) / ((yj - yi) || 0.0000001)) + xi);
+    if(intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function _dim_getAreaSamplePoint(path, poly) {
+  var b = null;
+  try {b = path.geometricBounds;} catch(_eGb) {b = null;}
+  if(b && b.length === 4) {
+    return {
+      x: (Number(b[0]) + Number(b[2])) * 0.5,
+      y: (Number(b[1]) + Number(b[3])) * 0.5
+    };
+  }
+  if(poly && poly.length) {
+    var mid = poly[Math.floor(poly.length / 2)];
+    if(mid) return {x: mid.x, y: mid.y};
+  }
+  return null;
+}
+
+function _dim_collectCompoundAreaPaths(compoundItem, out, stepPt) {
+  if(!compoundItem || !compoundItem.pathItems || !compoundItem.pathItems.length || !out) return;
+  _dim_areaDbg('collect compound | name=' + String(compoundItem.name || '') + ' | children=' + compoundItem.pathItems.length);
+  var entries = [];
+  for(var c = 0; c < compoundItem.pathItems.length; c++) {
+    var cp = compoundItem.pathItems[c];
+    if(!cp) continue;
+    try {if(cp.guides || cp.clipping || !cp.closed) continue;} catch(_eCpSkip) { }
+    var poly = _dim_pathToPolygonPoints(cp, {stepPt: stepPt});
+    if(!poly || poly.length < 3) continue;
+    var absArea = Math.abs(_dim_polygonAreaSigned(poly));
+    if(!(absArea > 0.000001)) continue;
+    entries.push({
+      path: cp,
+      poly: poly,
+      absArea: absArea,
+      sample: _dim_getAreaSamplePoint(cp, poly),
+      sign: 1,
+      depth: 0
+    });
+  }
+  for(var i = 0; i < entries.length; i++) {
+    var sample = entries[i].sample;
+    if(!sample) continue;
+    var depth = 0;
+    for(var j = 0; j < entries.length; j++) {
+      if(i === j) continue;
+      if(entries[j].absArea <= entries[i].absArea) continue;
+      if(_dim_pointInPolygon(sample, entries[j].poly)) depth++;
+    }
+    entries[i].depth = depth;
+    entries[i].sign = (depth % 2 === 0) ? 1 : -1;
+    _dim_areaDbg(
+      'compound child | idx=' + i +
+      ' | areaPt2=' + entries[i].absArea +
+      ' | depth=' + depth +
+      ' | sign=' + entries[i].sign +
+      ' | sample=' + (sample ? (sample.x + ',' + sample.y) : 'n/a')
+    );
+    out.push(entries[i]);
+  }
+}
+
 function _dim_collectAreaPaths(item, out) {
   if(!item || !out) return;
+  var stepPt = arguments.length > 2 ? arguments[2] : null;
   try {
     if(item.locked || item.hidden) return;
   } catch(_eLocked) { }
 
   try {
+    _dim_areaDbg('collect item | type=' + String(item.typename || '') + ' | name=' + String(item.name || ''));
+    if(item.typename === "PathItem") {
+      var parent = null;
+      try {parent = item.parent;} catch(_eParent) {parent = null;}
+      try {
+        if(parent && parent.typename === "CompoundPathItem") {
+          _dim_areaDbg('promote path to compound parent | parentName=' + String(parent.name || ''));
+          _dim_collectCompoundAreaPaths(parent, out, stepPt);
+          return;
+        }
+      } catch(_eParentType) { }
+    }
     if(item.typename === "PathItem") {
       try {if(item.guides) return;} catch(_eGuides) { }
       try {if(item.clipping) return;} catch(_eClip) { }
-      out.push(item);
+      _dim_areaDbg('push simple path');
+      out.push({path: item, sign: 1, poly: null});
       return;
     }
     if(item.typename === "CompoundPathItem" && item.pathItems && item.pathItems.length) {
-      for(var c = 0; c < item.pathItems.length; c++) {
-        var cp = item.pathItems[c];
-        if(!cp) continue;
-        try {if(cp.clipping) continue;} catch(_eCpClip) { }
-        out.push(cp);
-      }
+      _dim_collectCompoundAreaPaths(item, out, stepPt);
       return;
     }
     if(item.typename === "GroupItem" && item.pageItems && item.pageItems.length) {
       for(var g = 0; g < item.pageItems.length; g++) {
-        _dim_collectAreaPaths(item.pageItems[g], out);
+        _dim_collectAreaPaths(item.pageItems[g], out, stepPt);
       }
     }
   } catch(_eCollect) { }
@@ -7141,11 +7602,13 @@ function _dim_collectAreaPaths(item, out) {
 
 function _dim_runArea(opts) {
   opts = opts || {};
+  _dim_areaDebugLines = [];
   var doc = app.activeDocument;
   if(!doc) return "No document open.";
 
   var originalSel = _dim_captureSelection();
   if(!originalSel || !originalSel.length) return "Nothing selected.";
+  _dim_areaDbg('run start | selection=' + originalSel.length);
 
   var scaleFactor = _srh_getScaleFactor();
   var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
@@ -7166,32 +7629,46 @@ function _dim_runArea(opts) {
   for(var i = 0; i < originalSel.length; i++) {
     var item = originalSel[i];
     if(!item) continue;
+    _dim_areaDbg('selection item | idx=' + i + ' | type=' + String(item.typename || '') + ' | name=' + String(item.name || ''));
 
     var paths = [];
-    _dim_collectAreaPaths(item, paths);
+    _dim_collectAreaPaths(item, paths, stepPt);
+    _dim_areaDbg('selection item collected paths=' + paths.length);
     if(!paths.length) continue;
 
     var totalSignedPt2 = 0;
     for(var p = 0; p < paths.length; p++) {
-      var path = paths[p];
+      var pathEntry = paths[p];
+      var path = pathEntry && pathEntry.path ? pathEntry.path : pathEntry;
       if(!path) continue;
       var isClosed = false;
       try {isClosed = !!path.closed;} catch(_eClosedPath) {isClosed = false;}
       if(!isClosed) continue;
 
-      var poly = null;
+      var poly = (pathEntry && pathEntry.poly) ? pathEntry.poly : null;
       var aSigned = 0;
-      poly = _dim_pathToPolygonPoints(path, {stepPt: stepPt});
+      if(!poly) poly = _dim_pathToPolygonPoints(path, {stepPt: stepPt});
       if(!poly || poly.length < 3) continue;
-      aSigned = _dim_polygonAreaSigned(poly);
+      aSigned = Math.abs(_dim_polygonAreaSigned(poly));
+      if(pathEntry && pathEntry.sign === -1) aSigned = -aSigned;
+      var polarityText = 'n/a';
       try {
-        if(path.polarity === PolarityValues.NEGATIVE) aSigned = -Math.abs(aSigned);
+        polarityText = String(path.polarity);
       } catch(_ePol) { }
+      _dim_areaDbg(
+        'path sum | idx=' + p +
+        ' | type=' + String(path.typename || '') +
+        ' | sign=' + (pathEntry && typeof pathEntry.sign !== 'undefined' ? pathEntry.sign : 1) +
+        ' | depth=' + (pathEntry && typeof pathEntry.depth !== 'undefined' ? pathEntry.depth : 'n/a') +
+        ' | polarity=' + polarityText +
+        ' | areaSignedPt2=' + aSigned
+      );
       if(showAreaApproximation && poly && poly.length >= 3) {
         _dim_drawAreaApproxPolygon(lyr, poly, approxStrokePt);
       }
       totalSignedPt2 += aSigned;
     }
+    _dim_areaDbg('selection item totalSignedPt2=' + totalSignedPt2);
 
     var areaPt2 = Math.abs(totalSignedPt2);
     if(!(areaPt2 > 0.000001)) continue;
@@ -7210,12 +7687,15 @@ function _dim_runArea(opts) {
     if(txt) {
       labelsAdded++;
       objectsProcessed++;
+      _dim_areaDbg('label added | text=' + label);
     }
   }
 
-  if(!labelsAdded) return 'No measurable closed shapes in selection.';
+  var debugText = (_dim_areaDebugLines && _dim_areaDebugLines.length) ? ('\n' + _dim_areaDebugLines.join('\n')) : '';
+  _dim_areaDebugLines = null;
+  if(!labelsAdded) return 'No measurable closed shapes in selection.' + debugText;
   return 'Added ' + labelsAdded + ' area label' + (labelsAdded === 1 ? '' : 's') +
-    ' on ' + objectsProcessed + ' object' + (objectsProcessed === 1 ? '' : 's') + '.';
+    ' on ' + objectsProcessed + ' object' + (objectsProcessed === 1 ? '' : 's') + '.' + debugText;
 }
 
 function _dim_runLine(opts) {
@@ -8253,6 +8733,466 @@ function signarama_helper_drawLedLayout(jsonStr) {
   _srh_bringLayerToFront(penGroupLayer);
 
   return 'LED layout drawn. Layouts: ' + totalLayouts + ', Rows: ' + totalRows + ', Columns: ' + totalCols + ', Watt: ' + ledWatt + 'W.';
+}
+
+function _srh_letter_collectPlacementRoots(container, out) {
+  if(!container || !out) return;
+  var items = null;
+  try {items = container.pageItems;} catch(_eLcp0) {items = null;}
+  if(!items || !items.length) return;
+  for(var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if(!it) continue;
+    var tn = '';
+    try {tn = String(it.typename || '');} catch(_eLcp1) {tn = '';}
+    if(tn === 'PathItem') {
+      try {if(it.guides || it.clipping || !it.closed) continue;} catch(_eLcp2) { }
+      out.push(it);
+      continue;
+    }
+    if(tn === 'CompoundPathItem') {
+      out.push(it);
+      continue;
+    }
+    if(tn === 'GroupItem') _srh_letter_collectPlacementRoots(it, out);
+  }
+}
+
+var _srh_letterDebugLines = null;
+function _srh_letterDbg(msg) {
+  var line = '[SRH][letter] ' + String(msg || '');
+  try {$.writeln(line);} catch(_eLdbg0) { }
+  try {
+    if(_srh_letterDebugLines) _srh_letterDebugLines.push(line);
+  } catch(_eLdbg1) { }
+}
+
+function _srh_letter_collectPlacementPaths(item, out) {
+  if(!item || !out) return;
+  var tn = '';
+  try {tn = String(item.typename || '');} catch(_eLcpp0) {tn = '';}
+  if(tn === 'PathItem') {
+    try {if(item.guides || item.clipping || !item.closed) return;} catch(_eLcpp1) { }
+    out.push(item);
+    return;
+  }
+  if(tn === 'CompoundPathItem') {
+    var kids = null;
+    try {kids = item.pathItems;} catch(_eLcpp2) {kids = null;}
+    if(!kids || !kids.length) return;
+    for(var i = 0; i < kids.length; i++) {
+      var cp = kids[i];
+      if(!cp) continue;
+      try {if(cp.guides || cp.clipping || !cp.closed) continue;} catch(_eLcpp3) { }
+      out.push(cp);
+    }
+    return;
+  }
+  if(tn === 'GroupItem') {
+    var items = null;
+    try {items = item.pageItems;} catch(_eLcpp4) {items = null;}
+    if(!items || !items.length) return;
+    for(var j = 0; j < items.length; j++) _srh_letter_collectPlacementPaths(items[j], out);
+  }
+}
+
+function _srh_letter_pointAndTangentAtDistance(points, distance) {
+  if(!points || points.length < 2) return null;
+  var remaining = Number(distance || 0);
+  if(!(remaining >= 0)) remaining = 0;
+  for(var i = 0; i < points.length - 1; i++) {
+    var p0 = points[i];
+    var p1 = points[i + 1];
+    if(!p0 || !p1) continue;
+    var dx = p1.x - p0.x;
+    var dy = p1.y - p0.y;
+    var segLen = Math.sqrt(dx * dx + dy * dy);
+    if(!(segLen > 0.0001)) continue;
+    if(remaining <= segLen || i === points.length - 2) {
+      var t = Math.max(0, Math.min(1, remaining / segLen));
+      return {
+        x: p0.x + dx * t,
+        y: p0.y + dy * t,
+        angle: Math.atan2(dy, dx)
+      };
+    }
+    remaining -= segLen;
+  }
+  return null;
+}
+
+function _srh_letter_polylineLength(points) {
+  if(!points || points.length < 2) return 0;
+  var total = 0;
+  for(var i = 0; i < points.length - 1; i++) {
+    var p0 = points[i];
+    var p1 = points[i + 1];
+    if(!p0 || !p1) continue;
+    var dx = p1.x - p0.x;
+    var dy = p1.y - p0.y;
+    total += Math.sqrt(dx * dx + dy * dy);
+  }
+  return total;
+}
+
+function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, angleRad, strokePt, black, red) {
+  var cosA = Math.cos(angleRad);
+  var sinA = Math.sin(angleRad);
+  var hx = widthPt * 0.5;
+  var hy = heightPt * 0.5;
+  var corners = [
+    {x: -hx, y: -hy},
+    {x: hx, y: -hy},
+    {x: hx, y: hy},
+    {x: -hx, y: hy}
+  ];
+  var pathPts = [];
+  for(var i = 0; i < corners.length; i++) {
+    var pt = corners[i];
+    pathPts.push([
+      cx + (pt.x * cosA) - (pt.y * sinA),
+      cy + (pt.x * sinA) + (pt.y * cosA)
+    ]);
+  }
+  pathPts.push(pathPts[0]);
+
+  var rect = null;
+  try {
+    rect = ledLayer.pathItems.add();
+    rect.setEntirePath(pathPts);
+    rect.closed = true;
+    rect.filled = false;
+    rect.stroked = true;
+    rect.strokeWidth = strokePt;
+    rect.strokeColor = black;
+  } catch(_eLdm0) { }
+
+  try {
+    var line = lineLayer.pathItems.add();
+    line.setEntirePath([
+      [cx - (hx * cosA), cy - (hx * sinA)],
+      [cx + (hx * cosA), cy + (hx * sinA)]
+    ]);
+    line.filled = false;
+    line.stroked = true;
+    line.strokeWidth = strokePt;
+    line.strokeColor = red;
+  } catch(_eLdm1) { }
+
+  return rect;
+}
+
+function _srh_letterRunOnSelection(doc, items, fn) {
+  if(!doc || !items || !fn) return false;
+  var list = items.length ? items : [items];
+  if(!list.length) return false;
+  var prevSel = null;
+  try {prevSel = doc.selection;} catch(_eLrs0) {prevSel = null;}
+  try {doc.selection = null;} catch(_eLrs1) { }
+  try {
+    for(var i = 0; i < list.length; i++) {
+      try {if(list[i]) list[i].selected = true;} catch(_eLrs2) { }
+    }
+    fn();
+    return true;
+  } catch(_eLrs3) {
+    return false;
+  } finally {
+    try {doc.selection = null;} catch(_eLrs4) { }
+    try {if(prevSel) doc.selection = prevSel;} catch(_eLrs5) { }
+  }
+}
+
+function _srh_letterExpandItems(doc, items) {
+  if(!doc || !items) return [];
+  var list = items.length ? items : [items];
+  if(!list.length) return [];
+  var prevSel = null;
+  try {prevSel = doc.selection;} catch(_eLex0) {prevSel = null;}
+  try {doc.selection = null;} catch(_eLex1) { }
+  try {
+    for(var i = 0; i < list.length; i++) {
+      try {if(list[i]) list[i].selected = true;} catch(_eLex2) { }
+    }
+    _srh_letterExpandSelection();
+    var out = [];
+    try {
+      if(doc.selection && doc.selection.length) {
+        for(var j = 0; j < doc.selection.length; j++) {
+          try {if(doc.selection[j]) out.push(doc.selection[j]);} catch(_eLex3) { }
+        }
+      }
+    } catch(_eLex4) { }
+    return out;
+  } catch(_eLex5) {
+    return [];
+  } finally {
+    try {doc.selection = null;} catch(_eLex6) { }
+    try {if(prevSel) doc.selection = prevSel;} catch(_eLex7) { }
+  }
+}
+
+function _srh_letterExpandSelection() {
+  try {app.executeMenuCommand('expandStyle');} catch(_eLexp0) { }
+  try {app.executeMenuCommand('expand');} catch(_eLexp1) { }
+}
+
+function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
+  if(!sourceItem || !tempLayer || !(offsetPt > 0)) return [];
+  _srh_letterDbg('offset source | type=' + String(sourceItem.typename || '') + ' | offsetPt=' + offsetPt);
+  var working = null;
+  var wrapper = null;
+  var doc = null;
+  try {doc = app.activeDocument;} catch(_eLosDoc) {doc = null;}
+  try {
+    working = sourceItem.duplicate(tempLayer, ElementPlacement.PLACEATEND);
+    _srh_letterDbg('offset duplicate OK | type=' + String(working.typename || ''));
+  } catch(_eLos0) {
+    _srh_letterDbg('offset duplicate FAILED | ' + String(_eLos0));
+    return [];
+  }
+  try {
+    wrapper = tempLayer.groupItems.add();
+    working.move(wrapper, ElementPlacement.PLACEATEND);
+    _srh_letterDbg('offset wrapper OK');
+  } catch(_eLosWrap) {
+    _srh_letterDbg('offset wrapper FAILED | ' + String(_eLosWrap));
+    try {if(working) working.remove();} catch(_eLosWrapRm) { }
+    return [];
+  }
+  var result = {applied:false, changed:false};
+  var expandedItems = [];
+  try {
+    var beforeBounds = null;
+    try {beforeBounds = wrapper.visibleBounds;} catch(_eLosB0) {beforeBounds = null;}
+    if(!beforeBounds || beforeBounds.length !== 4) {
+      try {beforeBounds = wrapper.geometricBounds;} catch(_eLosB1) {beforeBounds = null;}
+    }
+    var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(-Math.abs(offsetPt)) + ' I jntp 0 R mlim 180"/></LiveEffect>';
+    var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(-Math.abs(offsetPt)) + ' I jntp 0"/></LiveEffect>';
+    var applied = false;
+    try {wrapper.applyEffect(fx1); applied = true;} catch(_eLosFx0) {
+      try {wrapper.applyEffect(fx2); applied = true;} catch(_eLosFx1) { }
+    }
+    if(applied && doc) {
+      expandedItems = _srh_letterExpandItems(doc, wrapper);
+      _srh_letterDbg('offset expanded items=' + expandedItems.length);
+    }
+    var afterTarget = (expandedItems && expandedItems.length) ? expandedItems[0] : wrapper;
+    var afterBounds = null;
+    try {afterBounds = afterTarget.visibleBounds;} catch(_eLosA0) {afterBounds = null;}
+    if(!afterBounds || afterBounds.length !== 4) {
+      try {afterBounds = afterTarget.geometricBounds;} catch(_eLosA1) {afterBounds = null;}
+    }
+    var changed = false;
+    if(beforeBounds && afterBounds && beforeBounds.length === 4 && afterBounds.length === 4) {
+      for(var bi = 0; bi < 4; bi++) {
+        if(Math.abs(Number(beforeBounds[bi]) - Number(afterBounds[bi])) > 0.25) {
+          changed = true;
+          break;
+        }
+      }
+    }
+    result = {applied: applied, changed: changed};
+    _srh_letterDbg('offset local apply | applied=' + (applied ? 'yes' : 'no') + ' | changed=' + (changed ? 'yes' : 'no'));
+  } catch(_eLos3) {
+    _srh_letterDbg('offset apply FAILED | ' + String(_eLos3));
+    result = {applied:false, changed:false};
+  }
+  var changed = false;
+  try {changed = !!(result && result.changed);} catch(_eLos4) {changed = false;}
+  _srh_letterDbg('offset result | changed=' + (changed ? 'yes' : 'no'));
+  if(!changed) {
+    try {if(wrapper) wrapper.remove();} catch(_eLos5) { }
+    return [];
+  }
+  var roots = [];
+  if(expandedItems && expandedItems.length) {
+    for(var ei = 0; ei < expandedItems.length; ei++) {
+      var ex = expandedItems[ei];
+      if(!ex) continue;
+      var exType = '';
+      try {exType = String(ex.typename || '');} catch(_eLosExType) {exType = '';}
+      if(exType === 'GroupItem') _srh_letter_collectPlacementRoots(ex, roots);
+      else if(exType === 'PathItem' || exType === 'CompoundPathItem') roots.push(ex);
+    }
+  } else {
+    _srh_letter_collectPlacementRoots(wrapper, roots);
+  }
+  if(!roots.length) {
+    var workingType = '';
+    try {workingType = String(wrapper.typename || '');} catch(_eLosType) {workingType = '';}
+    if(workingType === 'PathItem' || workingType === 'CompoundPathItem') roots.push(wrapper);
+  }
+  _srh_letterDbg('offset roots=' + roots.length);
+  if(!roots.length) {
+    try {if(wrapper) wrapper.remove();} catch(_eLos6) { }
+    return [];
+  }
+  var out = [];
+  for(var i = 0; i < roots.length; i++) {
+    var root = roots[i];
+    if(!root) continue;
+    try {
+      var dup = root.duplicate(tempLayer, ElementPlacement.PLACEATEND);
+      if(dup) out.push(dup);
+    } catch(_eLos7) {
+      _srh_letterDbg('offset root duplicate FAILED | ' + String(_eLos7));
+    }
+  }
+  try {if(wrapper) wrapper.remove();} catch(_eLos8) { }
+  return out;
+}
+
+function signarama_helper_drawLetterLayout(jsonStr) {
+  if(!app.documents.length) return 'No open document.';
+  _srh_letterDebugLines = [];
+  var doc = app.activeDocument;
+  if(!doc.selection || !doc.selection.length) return 'No selection. Select one or more path items.';
+
+  var opts = {};
+  try {opts = JSON.parse(String(jsonStr));} catch(_eLl0) {opts = {};}
+
+  var ledWatt = Number(opts.ledWatt || 0);
+  var ledWidthMm = Number(opts.ledWidthMm || 0);
+  var ledHeightMm = Number(opts.ledHeightMm || 0);
+  var centerSpacingMm = Number(opts.centerSpacingMm || 0);
+  var initialOffsetMm = Number(opts.initialOffsetMm || 0);
+  var subsequentOffsetMm = Number(opts.subsequentOffsetMm || 0);
+  var rotationDeg = Number(opts.rotationDeg || 0);
+  var maxLedsInSeries = parseInt(opts.maxLedsInSeries, 10);
+  if(!maxLedsInSeries || maxLedsInSeries < 1) maxLedsInSeries = 50;
+
+  if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
+  if(!(initialOffsetMm > 0)) return 'Initial offset must be > 0.';
+  if(!(subsequentOffsetMm > 0)) return 'Subsequent offset must be > 0.';
+  if(!(centerSpacingMm > 0)) centerSpacingMm = ledWidthMm;
+
+  var ledWidthPt = _srh_mm2ptDoc(ledWidthMm);
+  var ledHeightPt = _srh_mm2ptDoc(ledHeightMm);
+  var centerSpacingPt = _srh_mm2ptDoc(centerSpacingMm);
+  var initialOffsetPt = _srh_mm2ptDoc(initialOffsetMm);
+  var subsequentOffsetPt = _srh_mm2ptDoc(subsequentOffsetMm);
+  var rotationRad = rotationDeg * Math.PI / 180.0;
+  var stroke1px = _srh_pxStrokeDoc(1);
+
+  var black = new RGBColor();
+  black.red = 0; black.green = 0; black.blue = 0;
+  var red = new RGBColor();
+  red.red = 255; red.green = 0; red.blue = 0;
+
+  var ledLayer = _srh_getOrCreateLayer(doc, 'Letter Layout LEDs');
+  var lineLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Center Lines');
+  var groupLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Groups');
+  var tempLayer = _srh_getOrCreateLayer(doc, '__SRH Letter Layout Temp');
+  try {tempLayer.locked = false;} catch(_eLlt0) { }
+  try {tempLayer.visible = true;} catch(_eLlt1) { }
+  try {
+    while(tempLayer.pageItems && tempLayer.pageItems.length) {
+      try {tempLayer.pageItems[0].remove();} catch(_eLltClr0) {break;}
+    }
+  } catch(_eLltClr1) { }
+  _srh_letterDbg('temp layer ready | locked=' + (function(){try{return !!tempLayer.locked;}catch(_e){return 'n/a';}}()) + ' | visible=' + (function(){try{return !!tempLayer.visible;}catch(_e){return 'n/a';}}()));
+
+  var currentItems = [];
+  for(var s = 0; s < doc.selection.length; s++) {
+    try {
+      if(doc.selection[s]) currentItems.push(doc.selection[s]);
+    } catch(_eLlt2) { }
+  }
+  _srh_letterDbg('run start | selection=' + currentItems.length);
+  if(!currentItems.length) return 'No valid selection items to process.';
+
+  var offsets = [initialOffsetPt];
+  var totalPlaced = 0;
+  var totalPaths = 0;
+  var totalOffsetPaths = 0;
+  var currentOffsetPt = initialOffsetPt;
+  var loopGuard = 0;
+
+  while(currentItems.length && loopGuard < 500) {
+    loopGuard++;
+    _srh_letterDbg('offset pass | pass=' + loopGuard + ' | items=' + currentItems.length + ' | offsetPt=' + currentOffsetPt);
+    var nextItems = [];
+    for(var ci = 0; ci < currentItems.length; ci++) {
+      var sourceItem = currentItems[ci];
+      if(!sourceItem) continue;
+      _srh_letterDbg('source item | idx=' + ci + ' | type=' + String(sourceItem.typename || ''));
+      var offsetItems = _srh_letter_offsetSourceItem(sourceItem, currentOffsetPt, tempLayer);
+      try {
+        if(sourceItem.layer && sourceItem.layer === tempLayer) sourceItem.remove();
+      } catch(_eLlt3) { }
+      _srh_letterDbg('offset items | idx=' + ci + ' | count=' + (offsetItems ? offsetItems.length : 0));
+      if(!offsetItems || !offsetItems.length) continue;
+
+      for(var oi = 0; oi < offsetItems.length; oi++) {
+        var offsetItem = offsetItems[oi];
+        if(!offsetItem) continue;
+        totalOffsetPaths++;
+        _srh_letterDbg('offset item | idx=' + oi + ' | type=' + String(offsetItem.typename || ''));
+
+        var placementPaths = [];
+        _srh_letter_collectPlacementPaths(offsetItem, placementPaths);
+        _srh_letterDbg('placement paths=' + placementPaths.length);
+        if(!placementPaths.length) continue;
+
+        for(var pp = 0; pp < placementPaths.length; pp++) {
+          var placePath = placementPaths[pp];
+          if(!placePath) continue;
+          var poly = _dim_pathToPolygonPoints(placePath, {stepPt: Math.max(_srh_mm2ptDoc(2), Math.min(centerSpacingPt / 4, _srh_mm2ptDoc(10)))});
+          var pathLen = _srh_letter_polylineLength(poly);
+          _srh_letterDbg('path | idx=' + pp + ' | pts=' + (poly ? poly.length : 0) + ' | len=' + pathLen);
+          if(!(pathLen > 0.0001)) continue;
+          totalPaths++;
+
+          var pathPlaced = 0;
+          var groupBounds = null;
+          for(var dist = 0; dist <= pathLen + 0.0001; dist += centerSpacingPt) {
+            var sample = _srh_letter_pointAndTangentAtDistance(poly, dist);
+            if(!sample) continue;
+            _srh_letter_drawModule(ledLayer, lineLayer, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red);
+            pathPlaced++;
+            totalPlaced++;
+            if(groupBounds === null) {
+              groupBounds = {left: sample.x, top: sample.y, right: sample.x, bottom: sample.y};
+            } else {
+              if(sample.x < groupBounds.left) groupBounds.left = sample.x;
+              if(sample.x > groupBounds.right) groupBounds.right = sample.x;
+              if(sample.y > groupBounds.top) groupBounds.top = sample.y;
+              if(sample.y < groupBounds.bottom) groupBounds.bottom = sample.y;
+            }
+          }
+
+          if(groupBounds && pathPlaced > 0) {
+            try {
+              var label = groupLayer.textFrames.pointText([(groupBounds.left + groupBounds.right) * 0.5, groupBounds.bottom - _srh_mm2ptDoc(5)]);
+              label.contents = pathPlaced + ' LEDs';
+              try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eLlt4) { }
+              try {label.textRange.characterAttributes.size = _srh_ptDoc(10);} catch(_eLlt5) { }
+              try {label.textRange.characterAttributes.fillColor = black;} catch(_eLlt6) { }
+            } catch(_eLlt7) { }
+          }
+          _srh_letterDbg('path placed=' + pathPlaced);
+        }
+
+        nextItems.push(offsetItem);
+      }
+    }
+    currentItems = nextItems;
+    currentOffsetPt = subsequentOffsetPt;
+  }
+
+  try {tempLayer.locked = false;} catch(_eLlt8a) { }
+  try {tempLayer.visible = true;} catch(_eLlt8b) { }
+  try {tempLayer.remove();} catch(_eLlt8) { }
+  _srh_bringLayerToFront(lineLayer);
+  _srh_bringLayerToFront(ledLayer);
+  _srh_bringLayerToFront(groupLayer);
+
+  var debugText = (_srh_letterDebugLines && _srh_letterDebugLines.length) ? ('\n' + _srh_letterDebugLines.join('\n')) : '';
+  _srh_letterDebugLines = null;
+  if(totalPlaced < 1) return 'Letter layout created no LED modules. Check offsets and selected path items.' + debugText;
+  return 'Letter layout drawn. Offset paths: ' + totalOffsetPaths + ', Path lines: ' + totalPaths + ', LEDs: ' + totalPlaced + ', Watt: ' + ledWatt + 'W, Max series: ' + maxLedsInSeries + '.' + debugText;
 }
 
 function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts, lightboxId) {

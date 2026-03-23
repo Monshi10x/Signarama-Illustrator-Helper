@@ -226,23 +226,64 @@
       padding-top:8px;
     }
 
-    .artboard-scale-banner {
-      margin-top:10px;
+    .panel-status {
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+    }
+    .artboard-scale-chip {
+      appearance:none;
+      border:1px solid #454545;
+      background:#252525;
+      color:#9f9f9f;
+      border-radius:999px;
+      min-width:44px;
+      padding:5px 10px;
+      font-size:12px;
+      font-weight:800;
+      line-height:1;
+      cursor:default;
+      transition:background .14s ease, border-color .14s ease, color .14s ease;
+    }
+    .artboard-scale-chip:hover,
+    .artboard-scale-chip:focus-visible {
+      background:#2e2e2e;
+      border-color:#5b5b5b;
+    }
+    .artboard-scale-chip:focus-visible {
+      outline:2px solid #7d7d7d;
+      outline-offset:2px;
+    }
+    .artboard-scale-chip.large {
+      border-color:#7a5f00;
+      background:#2b2200;
+      color:#ffd35a;
+    }
+    .artboard-scale-tooltip {
+      position:absolute;
+      top:calc(100% + 8px);
+      right:0;
+      width:min(320px, calc(100vw - 24px));
       padding:8px 10px;
       border-radius:10px;
       border:1px solid #3a3a3a;
       background:#131313;
       color:#d5d5d5;
       font-size:12px;
-      display:flex;
-      align-items:center;
-      gap:8px;
+      line-height:1.35;
       font-weight:700;
+      box-shadow:0 8px 18px rgba(0,0,0,0.35);
+      opacity:0;
+      transform:translateY(-4px);
+      pointer-events:none;
+      transition:opacity .14s ease, transform .14s ease;
+      z-index:20;
     }
-    .artboard-scale-banner.large {
-      border-color:#7a5f00;
-      background:#2b2200;
-      color:#ffd35a;
+    .panel-status:hover .artboard-scale-tooltip,
+    .panel-status:focus-within .artboard-scale-tooltip {
+      opacity:1;
+      transform:translateY(0);
     }
     .bleed-options-card {
       display:flex;
@@ -262,14 +303,22 @@
       grid-template-columns: repeat(3, 1fr);
       gap:8px;
     }
+    .theme-grid-scroll {
+      margin-top:10px;
+      max-height:220px;
+      overflow:auto;
+      padding-right:4px;
+    }
     .theme-tile {
       position:relative;
       min-height:62px;
       border:1px solid #444;
+      border-bottom:10px solid transparent;
       border-radius:12px;
       cursor:pointer;
       background:#202020;
       padding:6px;
+      padding-bottom:20px;
       box-shadow: inset 0px 1px 2px rgba(255,255,255,0.12),
                   5px 8px 10px rgba(0,0,0,0.45),
                   0 0px 1px rgba(0,0,0,0.6);
@@ -286,8 +335,75 @@
       grid-template-columns: 1fr 1fr;
       background:#111;
     }
+    .theme-tile-label {
+      margin-top:8px;
+      font-size:11px;
+      font-weight:700;
+      color:#d7d7d7;
+      line-height:1.25;
+      text-align:left;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .theme-tile-delete {
+      position:absolute;
+      top:6px;
+      right:6px;
+      width:20px;
+      height:20px;
+      border-radius:999px;
+      border:1px solid #8a3030;
+      background:rgba(92,24,24,0.95);
+      color:#fff0f0;
+      font-size:12px;
+      font-weight:800;
+      line-height:1;
+      cursor:pointer;
+      display:grid;
+      place-items:center;
+      padding:0;
+    }
+    .theme-tile-delete:hover {
+      background:#7a2222;
+      border-color:#9d3a3a;
+    }
     .theme-half { width:100%; height:100%; }
     .theme-half + .theme-half { border-left:1px solid rgba(255,255,255,0.28); }
+    .theme-profile-row {
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto auto;
+      gap:8px;
+      align-items:center;
+    }
+    .btn2.theme-save-btn {
+      background:#154a22;
+      border-color:#27653a;
+      color:#e8ffe9;
+    }
+    .btn2.theme-save-btn:hover { background:#1b5a2b; }
+    .btn2.theme-delete-btn {
+      background:#5c1818;
+      border-color:#7d2929;
+      color:#ffe9e9;
+    }
+    .btn2.theme-delete-btn:hover { background:#6b1d1d; }
+    .btn2.theme-delete-btn:disabled,
+    .btn2.theme-save-btn:disabled {
+      opacity:.55;
+      cursor:not-allowed;
+      filter:none;
+      transform:none;
+    }
+    .dimension-colour-grid {
+      grid-template-columns:1fr 1fr;
+    }
+    .dimension-colour-field input[type="color"] {
+      width:100%;
+      min-height:42px;
+      padding:4px;
+    }
     .origin-grid {
       display:grid;
       grid-template-columns: repeat(3, 1fr);
@@ -377,7 +493,14 @@
       </svg>
       <div class="brand-title">Signarama Helper</div>
     </div>
-    <div style="font-size:12px; color:#aaa; font-weight:700;" id="status"></div>
+    <div id="status" class="panel-status">
+      <button id="artboardScaleButton" class="artboard-scale-chip" type="button" aria-describedby="artboardScaleTooltip">
+        x1
+      </button>
+      <div id="artboardScaleTooltip" class="artboard-scale-tooltip" role="status" aria-live="polite">
+        Standard artboard scale detected (scaleFactor=1). Dimension/lightbox geometry uses x1.0000.
+      </div>
+    </div>
   </header>
 
   <div class="tabs" role="tablist" aria-label="Signarama Helper Tabs">
@@ -411,26 +534,6 @@
         <span class="info" data-tip="Creates a new artboard for each selected item and fits it to the item bounds.">i</span>
       </button>
 
-      <button class="btn" id="btnCopyOutlineScaleA4" type="button">
-        <span class="btnText">Scale Artwork for Proof (A4)</span>
-        <span class="btnMeta">
-          <label class="btnOpt" for="a4Rasterize">
-            <input id="a4Rasterize" type="checkbox">
-            <span>Rasterize</span>
-          </label>
-          <select id="a4RasterizeQuality" class="btnQuality" title="Rasterize quality">
-            <option value="draft">72 dpi</option>
-            <option value="medium">150 dpi</option>
-            <option value="high" selected>300 dpi</option>
-            <option value="print">600 dpi</option>
-            <option value="ultra">1200 dpi</option>
-            <option value="max">2400 dpi</option>
-            <option value="super">7200 dpi</option>
-            <option value="insane">30000 dpi</option>
-          </select>
-          <span class="info" data-tip="Copy -> Scale -> Scale strokes (optional rasterize)">i</span>
-        </span>
-      </button>
     </section>
 
     <!-- TAB: BLEEDS -->
@@ -503,7 +606,7 @@
 
       <div class="card" style="margin-top:12px;">
         <div class="cardHead">
-          <div class="cardTitle">Bleeds to paths (Offset Path)</div>
+          <div class="cardTitle">Bleed + Cutline</div>
           <span class="info" data-tip="Applies a true Offset Path bleed (mitre join, miter limit 180). Intended for paths/letters/shapes. All units mm.">i</span>
         </div>
 
@@ -818,46 +921,25 @@
         <div class="cardHead">
           <div class="cardTitle">Colours</div>
         </div>
-        <div class="grid3">
-          <label class="fld">Text colour
+        <div class="grid2 dimension-colour-grid">
+          <label class="fld dimension-colour-field">Text colour
             <input type="color" id="textColor" value="#000000">
           </label>
-          <label class="fld">Line colour
+          <label class="fld dimension-colour-field">Line colour
             <input type="color" id="lineColor" value="#000000">
           </label>
         </div>
+        <textarea id="dimensionThemeProfilesJson" class="hidden" aria-hidden="true"></textarea>
+        <div class="theme-profile-row">
+          <select id="dimensionThemeProfileSelect" aria-label="Dimension colour profile">
+            <option value="">Current colours</option>
+          </select>
+          <button id="btnDimensionThemeSave" class="btn2 theme-save-btn" type="button">Save</button>
+          <button id="btnDimensionThemeDelete" class="btn2 theme-delete-btn" type="button">Delete</button>
+        </div>
         <div class="small" style="margin-top:10px;">Quick Theme Colours</div>
-        <div class="theme-grid">
-          <button class="theme-tile" type="button" title="Black / Black" data-text-color="#000000" data-line-color="#000000">
-            <span class="theme-tile-inner">
-              <span class="theme-half" style="background:#000000;"></span>
-              <span class="theme-half" style="background:#000000;"></span>
-            </span>
-          </button>
-          <button class="theme-tile" type="button" title="Pink / Pink" data-text-color="#ff00ff" data-line-color="#ff00ff">
-            <span class="theme-tile-inner">
-              <span class="theme-half" style="background:#ff00ff;"></span>
-              <span class="theme-half" style="background:#ff00ff;"></span>
-            </span>
-          </button>
-          <button class="theme-tile" type="button" title="Red / Red" data-text-color="#ff0000" data-line-color="#ff0000">
-            <span class="theme-tile-inner">
-              <span class="theme-half" style="background:#ff0000;"></span>
-              <span class="theme-half" style="background:#ff0000;"></span>
-            </span>
-          </button>
-          <button class="theme-tile" type="button" title="Red / Black" data-text-color="#ff0000" data-line-color="#000000">
-            <span class="theme-tile-inner">
-              <span class="theme-half" style="background:#ff0000;"></span>
-              <span class="theme-half" style="background:#000000;"></span>
-            </span>
-          </button>
-          <button class="theme-tile" type="button" title="White / White" data-text-color="#ffffff" data-line-color="#ffffff">
-            <span class="theme-tile-inner">
-              <span class="theme-half" style="background:#ffffff;"></span>
-              <span class="theme-half" style="background:#ffffff;"></span>
-            </span>
-          </button>
+        <div class="theme-grid-scroll">
+          <div id="dimensionThemeGrid" class="theme-grid"></div>
         </div>
       </div>
 
@@ -961,6 +1043,26 @@
           <span class="btnText">Create Proof for Selected</span>
           <span class="info" data-tip="Runs Create Proof for Item, then scales selected artwork for A4 proof and places it inside 'Artwork Placement Area'.">i</span>
         </button>
+        <button class="btn" id="btnCopyOutlineScaleA4" type="button">
+          <span class="btnText">Scale Artwork for Proof (A4)</span>
+          <span class="btnMeta">
+            <label class="btnOpt" for="a4Rasterize">
+              <input id="a4Rasterize" type="checkbox">
+              <span>Rasterize</span>
+            </label>
+            <select id="a4RasterizeQuality" class="btnQuality" title="Rasterize quality">
+              <option value="draft">72 dpi</option>
+              <option value="medium">150 dpi</option>
+              <option value="high" selected>300 dpi</option>
+              <option value="print">600 dpi</option>
+              <option value="ultra">1200 dpi</option>
+              <option value="max">2400 dpi</option>
+              <option value="super">7200 dpi</option>
+              <option value="insane">30000 dpi</option>
+            </select>
+            <span class="info" data-tip="Copy -> Scale -> Scale strokes (optional rasterize)">i</span>
+          </span>
+        </button>
       </div>
       <div id="corebridgeFetchStatus" class="corebridge-fetch-status" aria-live="polite">
         <span class="corebridge-spinner" aria-hidden="true"></span>
@@ -1050,10 +1152,6 @@
           <button id="btnCreateLightbox" class="btn2" type="button">Create lightbox</button>
           <button id="btnCreateLightboxWithLedPanel" class="btn2" type="button">Create lightbox + LED panel</button>
         </div>
-        <div id="lightboxArtboardScaleNotice" class="artboard-scale-banner" aria-live="polite">
-          <span id="lightboxArtboardScaleIcon">✅</span>
-          <span id="lightboxArtboardScaleText">Standard artboard scale detected.</span>
-        </div>
       </div>
 
         <div class="card" style="margin-top:12px;">
@@ -1123,8 +1221,68 @@
         <div class="row" style="margin-top:10px;">
           <button id="btnDrawLEDs" class="btn2" type="button">Draw LED Layout</button>
         </div>
-        <div class="small" style="margin-top:8px;">
+      <div class="small" style="margin-top:8px;">
           Note: uses Lightbox Width/Height/Depth if no selection is active.
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Letter Layout</div>
+          <span class="info" data-tip="Offsets selected path items inward, then places LED modules along each resulting path using the local tangent plus an optional rotation. Each offset path starts its own placement sequence.">i</span>
+        </div>
+        <div class="row" style="margin-bottom:10px; align-items:flex-end; gap:12px;">
+          <div style="border:1px solid #333; border-radius:10px; padding:10px; background:#101010; display:flex; align-items:center; gap:10px;">
+            <div id="letterLedDepiction" style="width:140px;height:70px;display:grid;place-items:center;border:1px dashed #444;border-radius:8px;background:#151515;position:relative;">
+              <div id="letterLedDepictionRect" style="width:90px;height:26px;border:1px solid #ddd;position:relative;">
+                <div id="letterLedDepictionLine" style="position:absolute;left:0;right:0;top:50%;height:1px;background:#ff3b3b;"></div>
+              </div>
+            </div>
+            <div style="font-size:12px;color:#bcbcbc;">
+              <div id="letterLedDepictionText">LED 66mm Ã— 13mm</div>
+              <div style="color:#888;">Width Ã— Height</div>
+            </div>
+          </div>
+        </div>
+        <div class="grid2">
+          <label class="fld">
+            <span>Max LEDs in Series</span>
+            <input type="number" id="letterMaxLedsInSeries" step="1" value="50">
+          </label>
+          <label class="fld">
+            <span>LED Watt</span>
+            <input type="number" id="letterLedWatt" step="0.01" value="1.5">
+          </label>
+          <label class="fld">
+            <span>LED Width (mm)</span>
+            <input type="number" id="letterLedWidthMm" step="1" value="66">
+          </label>
+          <label class="fld">
+            <span>LED Height (mm)</span>
+            <input type="number" id="letterLedHeightMm" step="1" value="13">
+          </label>
+          <label class="fld">
+            <span>Allowance Between Centers (mm)</span>
+            <input type="number" id="letterAllowanceBetweenCentersMm" step="0.1" value="66">
+          </label>
+          <label class="fld">
+            <span>Rotation (deg)</span>
+            <input type="number" id="letterRotationDeg" step="0.1" value="0">
+          </label>
+          <label class="fld">
+            <span>Initial Offset (mm)</span>
+            <input type="number" id="letterInitialOffsetMm" step="0.1" value="20">
+          </label>
+          <label class="fld">
+            <span>Subsequent Offset (mm)</span>
+            <input type="number" id="letterSubsequentOffsetMm" step="0.1" value="20">
+          </label>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btnCreateLetterLayout" class="btn2" type="button">Create Letter Layout</button>
+        </div>
+        <div class="small" style="margin-top:8px;">
+          Note: uses the current selection only. Invalid inward offset fragments are skipped and remaining paths continue.
         </div>
       </div>
     </section>
