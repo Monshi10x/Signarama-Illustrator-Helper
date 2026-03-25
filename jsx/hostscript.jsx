@@ -4370,6 +4370,8 @@ function signarama_helper_applyPathBleed(jsonStr) {
   var cutCount = 0;
   var movedCount = 0;
   var originalItems = [];
+  var bleedWorkContainers = [];
+  var cutWorkContainers = [];
   var docGradientFillCount = _countDocumentGradientFillObjects(doc);
   _pathBleedDebug('doc gradient-fill object count=' + docGradientFillCount);
   _pathBleedDebug('layers: bleed=' + (bleedLayer ? bleedLayer.name : 'n/a') + ', original=' + (originalLayer ? originalLayer.name : 'n/a') + ', cut=' + (cutLayer ? cutLayer.name : 'n/a'));
@@ -4402,13 +4404,34 @@ function signarama_helper_applyPathBleed(jsonStr) {
     var item = originalItems[n];
     if(!item) continue;
     _pathBleedDebug('duplicate source[' + n + '] ' + _itemRef(item));
-
-    if(createCutline && cutGroup) {
-      try {cutCount += _duplicateNativePathsFromItem(item, cutGroup, 'cut', {outlineText: outlineText});} catch(_eDupCut) { }
-    }
+    var bleedTargetContainer = bleedGroup || bleedLayer;
+    var cutTargetContainer = cutGroup || cutLayer;
 
     if(bleedGroup) {
-      try {movedCount += _duplicateNativePathsFromItem(item, bleedGroup, 'bleed', {outlineText: outlineText});} catch(_eDupBleed0) { }
+      try {
+        bleedTargetContainer = bleedGroup.groupItems.add();
+        bleedTargetContainer.name = 'SRH_BLEED_ITEM__' + _pbRunId + '__' + n;
+        bleedWorkContainers.push(bleedTargetContainer);
+      } catch(_eDupBleedGrp0) {
+        bleedTargetContainer = bleedGroup;
+      }
+    }
+    if(createCutline && cutGroup) {
+      try {
+        cutTargetContainer = cutGroup.groupItems.add();
+        cutTargetContainer.name = 'SRH_CUT_ITEM__' + _pbRunId + '__' + n;
+        cutWorkContainers.push(cutTargetContainer);
+      } catch(_eDupCutGrp0) {
+        cutTargetContainer = cutGroup;
+      }
+    }
+
+    if(createCutline && cutTargetContainer) {
+      try {cutCount += _duplicateNativePathsFromItem(item, cutTargetContainer, 'cut', {outlineText: outlineText});} catch(_eDupCut) { }
+    }
+
+    if(bleedTargetContainer) {
+      try {movedCount += _duplicateNativePathsFromItem(item, bleedTargetContainer, 'bleed', {outlineText: outlineText});} catch(_eDupBleed0) { }
     } else {
       try {movedCount += _duplicateNativePathsFromItem(item, bleedLayer, 'bleed-layer', {outlineText: outlineText});} catch(_eDupBleed1) { }
     }
@@ -4470,7 +4493,14 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
   _pathBleedDebug('duplicate summary | originals=' + originalCount + ' | movedToBleed=' + movedCount + ' | cutDup=' + cutCount);
   var bleedContainerRef = bleedGroup || bleedLayer;
-  var _bleedNativeCount = _extractNativePathSources(bleedContainerRef, 'bleed-after-duplicate');
+  var _bleedNativeCount = 0;
+  if(bleedWorkContainers && bleedWorkContainers.length) {
+    for(var _bw = 0; _bw < bleedWorkContainers.length; _bw++) {
+      _bleedNativeCount += _extractNativePathSources(bleedWorkContainers[_bw], 'bleed-after-duplicate[' + _bw + ']');
+    }
+  } else {
+    _bleedNativeCount = _extractNativePathSources(bleedContainerRef, 'bleed-after-duplicate');
+  }
   if(_bleedNativeCount > 0) movedCount = _bleedNativeCount;
   _pathBleedDebug('bleed native summary | pathCount=' + _bleedNativeCount + ' | movedToBleed=' + movedCount);
   _auditStructure(bleedGroup || bleedLayer, 'bleed-after-duplicate');
@@ -4629,69 +4659,74 @@ function signarama_helper_applyPathBleed(jsonStr) {
   }
 
   if(createCutline && cutGroup) {
-    var _cutPathCountBefore = _countPathLikeItems(cutGroup);
-    if(_cutPathCountBefore > 0) cutCount = _cutPathCountBefore;
-    _pathBleedDebug('cutline path summary | pathCount=' + _cutPathCountBefore + ' | cutDup=' + cutCount);
-    _logCutlineGeometry(cutGroup, 'before-processing');
-    if(outlineText) _outlineTextInContainer(cutGroup);
-    if(outlineStroke) {
-      var _cutStrokeWidthPt = _getMaxStrokeWidthInContainer(cutGroup);
-      var _cutStrokeOffsetPt = _cutStrokeWidthPt / 2;
-      _pathBleedDebug('cutline outline-stroke fallback | strokeWidthPt=' + _fmtNum3(_cutStrokeWidthPt) + ' | offsetPt=' + _fmtNum3(_cutStrokeOffsetPt));
-      if(_cutStrokeOffsetPt > 0.01) {
-        var _cutTargets = _collectNativePathRoots(cutGroup);
-        var _cutTargetApplied = 0;
-        var _cutTargetChanged = 0;
-        _pathBleedDebug('cutline outline-stroke targets | count=' + _cutTargets.length);
-        for(var _cti = 0; _cti < _cutTargets.length; _cti++) {
-          var _cutTarget = _cutTargets[_cti];
-          if(!_cutTarget) continue;
-          var _cutJoinInfo = _getOffsetJoinInfoFromItem(_cutTarget);
+    var _cutContainers = (cutWorkContainers && cutWorkContainers.length) ? cutWorkContainers : [cutGroup];
+    cutCount = 0;
+    for(var _cci = 0; _cci < _cutContainers.length; _cci++) {
+      var _cutContainer = _cutContainers[_cci];
+      if(!_cutContainer) continue;
+      var _cutPathCountBefore = _countPathLikeItems(_cutContainer);
+      _pathBleedDebug('cutline path summary | container=' + _cci + ' | pathCount=' + _cutPathCountBefore + ' | cutDup=' + cutCount);
+      _logCutlineGeometry(_cutContainer, 'before-processing[' + _cci + ']');
+      if(outlineText) _outlineTextInContainer(_cutContainer);
+      if(outlineStroke) {
+        var _cutStrokeWidthPt = _getMaxStrokeWidthInContainer(_cutContainer);
+        var _cutStrokeOffsetPt = _cutStrokeWidthPt / 2;
+        _pathBleedDebug('cutline outline-stroke fallback | container=' + _cci + ' | strokeWidthPt=' + _fmtNum3(_cutStrokeWidthPt) + ' | offsetPt=' + _fmtNum3(_cutStrokeOffsetPt));
+        if(_cutStrokeOffsetPt > 0.01) {
+          var _cutTargets = _collectNativePathRoots(_cutContainer);
+          var _cutTargetApplied = 0;
+          var _cutTargetChanged = 0;
+          _pathBleedDebug('cutline outline-stroke targets | container=' + _cci + ' | count=' + _cutTargets.length);
+          for(var _cti = 0; _cti < _cutTargets.length; _cti++) {
+            var _cutTarget = _cutTargets[_cti];
+            if(!_cutTarget) continue;
+            var _cutJoinInfo = _getOffsetJoinInfoFromItem(_cutTarget);
+            _pathBleedDebug(
+              'cutline outline-stroke target | container=' + _cci +
+              ' | idx=' + _cti +
+              ' | ref=' + _itemRef(_cutTarget) +
+              ' | join=' + _cutJoinInfo.joinName +
+              ' | joinType=' + _cutJoinInfo.joinType +
+              ' | miterLimit=' + _fmtNum3(_cutJoinInfo.miterLimit)
+            );
+            var _cutOffsetResult = _applyOffsetToContainer(_cutTarget, _cutStrokeOffsetPt, {
+              joinType: _cutJoinInfo.joinType,
+              miterLimit: _cutJoinInfo.miterLimit
+            });
+            if(_cutOffsetResult && _cutOffsetResult.applied) _cutTargetApplied++;
+            if(_cutOffsetResult && _cutOffsetResult.changed) _cutTargetChanged++;
+          }
           _pathBleedDebug(
-            'cutline outline-stroke target | idx=' + _cti +
-            ' | ref=' + _itemRef(_cutTarget) +
-            ' | join=' + _cutJoinInfo.joinName +
-            ' | joinType=' + _cutJoinInfo.joinType +
-            ' | miterLimit=' + _fmtNum3(_cutJoinInfo.miterLimit)
+            'cutline outline-stroke summary | container=' + _cci +
+            ' | pathCount=' + _countPathLikeItems(_cutContainer) +
+            ' | targetsApplied=' + _cutTargetApplied +
+            ' | targetsChanged=' + _cutTargetChanged
           );
-          var _cutOffsetResult = _applyOffsetToContainer(_cutTarget, _cutStrokeOffsetPt, {
-            joinType: _cutJoinInfo.joinType,
-            miterLimit: _cutJoinInfo.miterLimit
-          });
-          if(_cutOffsetResult && _cutOffsetResult.applied) _cutTargetApplied++;
-          if(_cutOffsetResult && _cutOffsetResult.changed) _cutTargetChanged++;
+          _logCutlineGeometry(_cutContainer, 'after-outline-stroke-offset[' + _cci + ']');
+        } else {
+          _pathBleedDebug('cutline outline-stroke summary | container=' + _cci + ' | skipped | reason=no-stroke-width');
         }
-        _pathBleedDebug(
-          'cutline outline-stroke summary | pathCount=' + _countPathLikeItems(cutGroup) +
-          ' | targetsApplied=' + _cutTargetApplied +
-          ' | targetsChanged=' + _cutTargetChanged
-        );
-        _logCutlineGeometry(cutGroup, 'after-outline-stroke-offset');
-        cutCount = _countPathLikeItems(cutGroup);
-      } else {
-        _pathBleedDebug('cutline outline-stroke summary | skipped | reason=no-stroke-width');
       }
+      _setCutlineStyleOnItem(_cutContainer, {outlineText: outlineText, outlineStroke: false});
+      _logCutlineGeometry(_cutContainer, 'after-style-before-prune[' + _cci + ']');
+      _pruneCutlineContainer(_cutContainer);
+      _auditStructure(_cutContainer, 'cut-after-style[' + _cci + ']');
+      _logCutlineGeometry(_cutContainer, 'after-style[' + _cci + ']');
+      if(autoWeld) {
+        var welded = _uniteContainerPathfinderAdd(_cutContainer);
+        if(!welded) welded = _uniteContainer(_cutContainer);
+        _setCutlineStyleOnItem(_cutContainer, {outlineText: false, outlineStroke: false});
+        _logCutlineGeometry(_cutContainer, 'after-weld-before-prune[' + _cci + ']');
+        _pruneCutlineContainer(_cutContainer);
+        _auditStructure(_cutContainer, 'cut-after-weld[' + _cci + ']');
+        _logCutlineGeometry(_cutContainer, 'after-weld[' + _cci + ']');
+      }
+      var _cutPathCountAfter = _countPathLikeItems(_cutContainer);
+      if(_cutPathCountAfter > 0) cutCount += _cutPathCountAfter;
+      _pruneCutlineContainer(_cutContainer);
+      _auditStructure(_cutContainer, 'cut-final[' + _cci + ']');
+      _logCutlineGeometry(_cutContainer, 'final[' + _cci + ']');
     }
-    _setCutlineStyleOnItem(cutGroup, {outlineText: outlineText, outlineStroke: false});
-    _logCutlineGeometry(cutGroup, 'after-style-before-prune');
-    _pruneCutlineContainer(cutGroup);
-    _auditStructure(cutGroup, 'cut-after-style');
-    _logCutlineGeometry(cutGroup, 'after-style');
-    if(autoWeld) {
-      var welded = _uniteContainerPathfinderAdd(cutGroup);
-      if(!welded) welded = _uniteContainer(cutGroup);
-      // Re-apply style to welded result in cutline container only (never selection-based).
-      _setCutlineStyleOnItem(cutGroup, {outlineText: false, outlineStroke: false});
-      _logCutlineGeometry(cutGroup, 'after-weld-before-prune');
-      _pruneCutlineContainer(cutGroup);
-      _auditStructure(cutGroup, 'cut-after-weld');
-      _logCutlineGeometry(cutGroup, 'after-weld');
-    }
-    var _cutPathCountAfter = _countPathLikeItems(cutGroup);
-    if(_cutPathCountAfter > 0) cutCount = _cutPathCountAfter;
-    _pruneCutlineContainer(cutGroup);
-    _auditStructure(cutGroup, 'cut-final');
-    _logCutlineGeometry(cutGroup, 'final');
   }
 
   // Run final-target compensation after offset output is fully materialized on bleed layer.
