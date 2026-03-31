@@ -6528,6 +6528,670 @@ try {signarama_helper_corebridge_flashGetState = this.signarama_helper_corebridg
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg21) { }
 try {signarama_helper_corebridge_flashTickTaskRunner = this.signarama_helper_corebridge_flashTickTaskRunner;} catch(_eTg22) { }
 
+function _srh_nest_getItemBounds(item) {
+  var b = null;
+  try {b = item.visibleBounds;} catch(_eNestBounds0) {b = null;}
+  if(!b || b.length !== 4) {
+    try {b = item.geometricBounds;} catch(_eNestBounds1) {b = null;}
+  }
+  if(!b || b.length !== 4) return null;
+  return {
+    left: Number(b[0]),
+    top: Number(b[1]),
+    right: Number(b[2]),
+    bottom: Number(b[3])
+  };
+}
+function _srh_nest_unionBounds(items) {
+  var out = null;
+  if(!items || !items.length) return null;
+  for(var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if(!item) continue;
+    var b = _srh_nest_getItemBounds(item);
+    if(!b) continue;
+    if(!out) {
+      out = {
+        left: b.left,
+        top: b.top,
+        right: b.right,
+        bottom: b.bottom
+      };
+    } else {
+      if(b.left < out.left) out.left = b.left;
+      if(b.top > out.top) out.top = b.top;
+      if(b.right > out.right) out.right = b.right;
+      if(b.bottom < out.bottom) out.bottom = b.bottom;
+    }
+  }
+  if(!out) return null;
+  out.width = Math.abs(out.right - out.left);
+  out.height = Math.abs(out.top - out.bottom);
+  return out;
+}
+function _srh_nest_escapeJsonString(value) {
+  var s = String(value == null ? '' : value);
+  return s
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    .replace(/\f/g, '\\f')
+    .replace(/[\b]/g, '\\b');
+}
+function _srh_nest_toJsonText(value) {
+  var i = 0;
+  var parts = [];
+  if(value === null || value === undefined) return 'null';
+  if(typeof value === 'string') return '"' + _srh_nest_escapeJsonString(value) + '"';
+  if(typeof value === 'number') return isFinite(value) ? String(value) : 'null';
+  if(typeof value === 'boolean') return value ? 'true' : 'false';
+  if(value instanceof Array) {
+    for(i = 0; i < value.length; i++) parts.push(_srh_nest_toJsonText(value[i]));
+    return '[' + parts.join(',') + ']';
+  }
+  if(typeof value === 'object') {
+    for(var key in value) {
+      if(value.hasOwnProperty && !value.hasOwnProperty(key)) continue;
+      parts.push('"' + _srh_nest_escapeJsonString(key) + '":' + _srh_nest_toJsonText(value[key]));
+    }
+    return '{' + parts.join(',') + '}';
+  }
+  return '"' + _srh_nest_escapeJsonString(String(value)) + '"';
+}
+function _srh_nest_jsonResponse(ok, payload) {
+  var out = {ok: !!ok};
+  var key = null;
+  if(payload) {
+    for(key in payload) {
+      if(payload.hasOwnProperty && !payload.hasOwnProperty(key)) continue;
+      out[key] = payload[key];
+    }
+  }
+  return _srh_nest_toJsonText(out);
+}
+function _srh_nest_collectSelection(doc) {
+  var out = [];
+  if(!doc || !doc.selection || !doc.selection.length) return out;
+  for(var i = 0; i < doc.selection.length; i++) {
+    try {
+      if(doc.selection[i]) out.push(doc.selection[i]);
+    } catch(_eNestSel0) { }
+  }
+  return out;
+}
+function _srh_nest_outlineTempText(doc) {
+  if(!doc || !doc.textFrames || !doc.textFrames.length) return;
+  for(var i = doc.textFrames.length - 1; i >= 0; i--) {
+    try {
+      if(doc.textFrames[i]) doc.textFrames[i].createOutline();
+    } catch(_eNestOutline0) { }
+  }
+}
+function _srh_nest_translateItem(item, dx, dy) {
+  try {item.translate(dx, dy);} catch(_eNestMove0) { }
+}
+function _srh_nest_scaleItem(item, scalePercent) {
+  try {item.resize(scalePercent, scalePercent, true, true, true, true, scalePercent, Transformation.TOPLEFT);} catch(_eNestScale0) { }
+}
+function _srh_nest_docPtToActualPt(pt, scaleFactor) {
+  var sf = Number(scaleFactor);
+  if(!(sf > 0)) sf = _srh_getScaleFactor();
+  return Number(pt || 0) * sf;
+}
+function _srh_nest_exportDocToSvgText(doc, exportFile) {
+  var svgOptions = null;
+  var svgText = '';
+  svgOptions = new ExportOptionsSVG();
+  try {svgOptions.embedRasterImages = true;} catch(_eNestSvg0) { }
+  try {svgOptions.fontSubsetting = SVGFontSubsetting.None;} catch(_eNestSvg1) { }
+  try {svgOptions.fontType = SVGFontType.OUTLINEFONT;} catch(_eNestSvg2) { }
+  try {svgOptions.cssProperties = SVGCSSPropertyLocation.PRESENTATIONATTRIBUTES;} catch(_eNestSvg3) { }
+  try {svgOptions.documentEncoding = SVGDocumentEncoding.UTF8;} catch(_eNestSvg4) { }
+  try {svgOptions.coordinatePrecision = 3;} catch(_eNestSvg5) { }
+  try {svgOptions.preserveEditability = false;} catch(_eNestSvg6) { }
+  doc.exportFile(exportFile, ExportType.SVG, svgOptions);
+  if(exportFile.open('r')) {
+    svgText = exportFile.read();
+    exportFile.close();
+  }
+  return String(svgText || '');
+}
+function signarama_helper_nest_captureSelectionBounds() {
+  if(!app.documents.length) return _srh_nest_jsonResponse(false, {error: 'No open document.'});
+  var doc = app.activeDocument;
+  var items = _srh_nest_collectSelection(doc);
+  if(!items.length) return _srh_nest_jsonResponse(false, {error: 'No selection.'});
+  var bounds = _srh_nest_unionBounds(items);
+  if(!bounds) return _srh_nest_jsonResponse(false, {error: 'Could not read selection bounds.'});
+  var scaleFactor = _srh_getScaleFactor();
+  if(!(scaleFactor > 0)) scaleFactor = 1;
+
+  var widthPt = _srh_nest_docPtToActualPt(bounds.width, scaleFactor);
+  var heightPt = _srh_nest_docPtToActualPt(bounds.height, scaleFactor);
+  return _srh_nest_jsonResponse(true, {
+    itemCount: items.length,
+    scaleFactor: scaleFactor,
+    widthPt: widthPt,
+    heightPt: heightPt,
+    widthMm: _srh_pt2mm(widthPt),
+    heightMm: _srh_pt2mm(heightPt)
+  });
+}
+function signarama_helper_nest_captureSelectionAsSvg() {
+  if(!app.documents.length) return _srh_nest_jsonResponse(false, {error: 'No open document.'});
+
+  var sourceDoc = app.activeDocument;
+  var selectionItems = _srh_nest_collectSelection(sourceDoc);
+  if(!selectionItems.length) return _srh_nest_jsonResponse(false, {error: 'No selection.'});
+
+  var sourceBounds = _srh_nest_unionBounds(selectionItems);
+  if(!sourceBounds) return _srh_nest_jsonResponse(false, {error: 'Could not read selection bounds.'});
+
+  var scaleFactor = _srh_getScaleFactor();
+  if(!(scaleFactor > 0)) scaleFactor = 1;
+
+  var actualWidthPt = _srh_nest_docPtToActualPt(sourceBounds.width, scaleFactor);
+  var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
+  var marginPt = _srh_mm2pt(10);
+  var tempDoc = null;
+  var tempFile = null;
+  var debugSteps = [];
+
+  function _dbg(step, extra) {
+    debugSteps.push(step + (extra ? (': ' + extra) : ''));
+  }
+  function _nestRunOnSelection(items, fn) {
+    if(!items || !items.length || !fn) return false;
+    var prevSel = null;
+    try {prevSel = tempDoc.selection;} catch(_eNestSelRun0) {prevSel = null;}
+    try {tempDoc.selection = null;} catch(_eNestSelRun1) { }
+    try {
+      for(var si = 0; si < items.length; si++) {
+        try {if(items[si]) items[si].selected = true;} catch(_eNestSelRun2) { }
+      }
+      fn();
+      return true;
+    } catch(_eNestSelRun3) {
+      return false;
+    } finally {
+      try {tempDoc.selection = null;} catch(_eNestSelRun4) { }
+      try {if(prevSel) tempDoc.selection = prevSel;} catch(_eNestSelRun5) { }
+    }
+  }
+  function _nestPushPageItems(container, stack) {
+    try {
+      if(container && container.pageItems && container.pageItems.length) {
+        for(var pi = 0; pi < container.pageItems.length; pi++) {
+          try {if(container.pageItems[pi]) stack.push(container.pageItems[pi]);} catch(_eNestPush0) { }
+        }
+      }
+    } catch(_eNestPush1) { }
+  }
+  function _nestHasCompoundAncestor(item) {
+    var parentRef = null;
+    var guardRef = 0;
+    try {parentRef = item.parent;} catch(_eNestHca0) {parentRef = null;}
+    while(parentRef && guardRef < 100) {
+      guardRef++;
+      try {if(String(parentRef.typename || '') === 'CompoundPathItem') return true;} catch(_eNestHca1) { }
+      try {parentRef = parentRef.parent;} catch(_eNestHca2) {parentRef = null;}
+    }
+    return false;
+  }
+  function _nestOutlineStrokeInContainer(container) {
+    if(!container) return 0;
+    var targets = [];
+    var stack = [];
+    var count = 0;
+    try {stack.push(container);} catch(_eNestOs0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eNestOs1) {tn = '';}
+      if(tn === 'PathItem') {
+        var hasStroke = false;
+        try {hasStroke = !!cur.stroked && Number(cur.strokeWidth || 0) > 0;} catch(_eNestOs2) {hasStroke = false;}
+        if(hasStroke) targets.push(cur);
+      } else if(tn === 'CompoundPathItem') {
+        var compoundHasStroke = false;
+        try {
+          if(cur.pathItems && cur.pathItems.length) {
+            for(var cpi = 0; cpi < cur.pathItems.length; cpi++) {
+              var cp = cur.pathItems[cpi];
+              if(cp && cp.stroked && Number(cp.strokeWidth || 0) > 0) {
+                compoundHasStroke = true;
+                break;
+              }
+            }
+          }
+        } catch(_eNestOs3) {compoundHasStroke = false;}
+        if(compoundHasStroke) targets.push(cur);
+      }
+      _nestPushPageItems(cur, stack);
+    }
+    count = targets.length;
+    if(!count) return 0;
+    _nestRunOnSelection(targets, function() {
+      try {app.executeMenuCommand('Outline Stroke');} catch(_eNestOs4) { }
+      try {app.executeMenuCommand('expandStyle');} catch(_eNestOs5) { }
+      try {app.executeMenuCommand('expand');} catch(_eNestOs6) { }
+    });
+    return count;
+  }
+  function _nestExtractNativePathSources(container) {
+    if(!container) return 0;
+    var layerRef = null;
+    try {layerRef = container.layer;} catch(_eNestExt0) {layerRef = null;}
+    if(!layerRef) return 0;
+    var tmpRef = null;
+    try {
+      tmpRef = layerRef.groupItems.add();
+      tmpRef.name = 'SRH_NEST_NATIVE_TMP__' + String(new Date().getTime());
+    } catch(_eNestExt1) {tmpRef = null;}
+    if(!tmpRef) return 0;
+
+    var copied = 0;
+    var stack = [];
+    try {stack.push(container);} catch(_eNestExt2) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eNestExt3) {tn = '';}
+      if(tn === 'CompoundPathItem') {
+        try {cur.duplicate(tmpRef, ElementPlacement.PLACEATEND); copied++;} catch(_eNestExt4) { }
+        continue;
+      }
+      if(tn === 'PathItem') {
+        if(!_nestHasCompoundAncestor(cur)) {
+          try {cur.duplicate(tmpRef, ElementPlacement.PLACEATEND); copied++;} catch(_eNestExt5) { }
+        }
+        continue;
+      }
+      _nestPushPageItems(cur, stack);
+    }
+
+    try {
+      var existingKids = [];
+      for(var ek = 0; ek < container.pageItems.length; ek++) {
+        try {if(container.pageItems[ek]) existingKids.push(container.pageItems[ek]);} catch(_eNestExt6) { }
+      }
+      for(var er = 0; er < existingKids.length; er++) {
+        try {existingKids[er].remove();} catch(_eNestExt7) { }
+      }
+    } catch(_eNestExt8) { }
+
+    var moved = 0;
+    try {
+      var tmpKids = [];
+      for(var tk = 0; tk < tmpRef.pageItems.length; tk++) {
+        try {if(tmpRef.pageItems[tk]) tmpKids.push(tmpRef.pageItems[tk]);} catch(_eNestExt9) { }
+      }
+      for(var tm = 0; tm < tmpKids.length; tm++) {
+        try {tmpKids[tm].move(container, ElementPlacement.PLACEATEND); moved++;} catch(_eNestExt10) { }
+      }
+    } catch(_eNestExt11) { }
+    try {tmpRef.remove();} catch(_eNestExt12) { }
+    return moved;
+  }
+
+  try {
+    var docColorSpace = DocumentColorSpace.RGB;
+    try {docColorSpace = sourceDoc.documentColorSpace;} catch(_eNestDocSpace0) {docColorSpace = DocumentColorSpace.RGB;}
+    _dbg('sourceDocColorSpace', (docColorSpace === DocumentColorSpace.CMYK ? 'CMYK' : 'RGB'));
+    _dbg('createTempDoc', String(Math.max(1, actualWidthPt + marginPt * 2)) + ' x ' + String(Math.max(1, actualHeightPt + marginPt * 2)));
+    tempDoc = app.documents.add(docColorSpace, Math.max(1, actualWidthPt + marginPt * 2), Math.max(1, actualHeightPt + marginPt * 2));
+    var targetLayer = tempDoc.activeLayer;
+    var duplicated = [];
+    var partGroups = [];
+    var i = 0;
+    var dup = null;
+    var partGroup = null;
+    for(i = 0; i < selectionItems.length; i++) {
+      try {
+        dup = selectionItems[i].duplicate(targetLayer, ElementPlacement.PLACEATEND);
+        if(dup) {
+          duplicated.push(dup);
+          try {
+            partGroup = targetLayer.groupItems.add();
+            partGroup.name = 'SRH_NEST_EXPORT_PART_' + String(i);
+            try {dup.move(partGroup, ElementPlacement.PLACEATEND);} catch(_eNestMoveToPart0) { }
+            partGroups.push(partGroup);
+          } catch(_eNestGroup0) {
+            _dbg('createTempPartGroupFailed[' + i + ']', String(_eNestGroup0));
+          }
+        }
+      } catch(_eNestDup0) {
+        _dbg('duplicateFailed[' + i + ']', String(_eNestDup0));
+      }
+    }
+    _dbg('duplicated', String(duplicated.length) + '/' + String(selectionItems.length));
+    if(!duplicated.length) return _srh_nest_jsonResponse(false, {error: 'Could not duplicate selection into a temporary document.', debug: debugSteps});
+
+    if(scaleFactor > 1.0001) {
+      _dbg('applyScaleFactor', String(scaleFactor));
+      for(i = 0; i < partGroups.length; i++) {
+        if(partGroups[i]) _srh_nest_scaleItem(partGroups[i], scaleFactor * 100);
+      }
+    }
+
+    try {
+      _srh_nest_outlineTempText(tempDoc);
+      _dbg('outlineTempText', 'ok');
+    } catch(_eNestOutline1) {
+      _dbg('outlineTempTextFailed', String(_eNestOutline1));
+    }
+
+    try {
+      _dbg('outlineTempStroke', String(_nestOutlineStrokeInContainer(targetLayer)));
+    } catch(_eNestOutlineStroke1) {
+      _dbg('outlineTempStrokeFailed', String(_eNestOutlineStroke1));
+    }
+
+    var extractedItemCount = 0;
+    try {
+      for(i = 0; i < partGroups.length; i++) {
+        partGroup = partGroups[i];
+        if(!partGroup) continue;
+        try {
+          _nestExtractNativePathSources(partGroup);
+          var uniteTargets = [];
+          var ut = 0;
+          for(ut = 0; ut < partGroup.pageItems.length; ut++) {
+            try {if(partGroup.pageItems[ut]) uniteTargets.push(partGroup.pageItems[ut]);} catch(_eNestUniteItem0) { }
+          }
+          try {
+            var unitedOk = false;
+            if(uniteTargets.length > 1) {
+              unitedOk = _nestRunOnSelection(uniteTargets, function() {
+                try {app.executeMenuCommand('group');} catch(_eNestUGrp0) { }
+                try {app.executeMenuCommand('Live Pathfinder Add');} catch(_eNestUAdd0) { }
+                try {app.executeMenuCommand('expandStyle');} catch(_eNestUExp0) { }
+                try {app.executeMenuCommand('expand');} catch(_eNestUExp1) { }
+                try {app.executeMenuCommand('ungroup');} catch(_eNestUUng0) { }
+              });
+            }
+            _dbg('unitePart[' + i + ']', unitedOk ? 'ok' : 'skip');
+          } catch(_eNestUnite0) {
+            _dbg('unitePartFailed[' + i + ']', String(_eNestUnite0));
+          }
+          var partKids = [];
+          var pk = 0;
+          for(pk = 0; pk < partGroup.pageItems.length; pk++) {
+            try {if(partGroup.pageItems[pk]) partKids.push(partGroup.pageItems[pk]);} catch(_eNestPartItem0) { }
+          }
+          _dbg('extractNativePaths[' + i + ']', String(partKids.length));
+          for(pk = partKids.length - 1; pk >= 0; pk--) {
+            try {
+              partKids[pk].move(targetLayer, ElementPlacement.PLACEATEND);
+              extractedItemCount++;
+            } catch(_eNestMoveOut0) { }
+          }
+          try {partGroup.remove();} catch(_eNestPartRm0) { }
+        } catch(_eNestExtract0) {
+          _dbg('extractNativePathsFailed[' + i + ']', String(_eNestExtract0));
+        }
+      }
+      _dbg('extractNativePathsTotal', String(extractedItemCount));
+    } catch(_eNestExtract1) {
+      _dbg('extractNativePathsFailed', String(_eNestExtract1));
+    }
+
+    var tempItems = [];
+    var tempItemSource = targetLayer || tempDoc;
+    for(i = 0; i < tempItemSource.pageItems.length; i++) {
+      try {
+        if(tempItemSource.pageItems[i]) tempItems.push(tempItemSource.pageItems[i]);
+      } catch(_eNestItem0) { }
+    }
+    _dbg('tempItems', String(tempItems.length));
+    var tempBounds = _srh_nest_unionBounds(tempItems);
+    if(!tempBounds) return _srh_nest_jsonResponse(false, {error: 'Could not prepare temporary SVG bounds.', debug: debugSteps});
+
+    _dbg('translateToMargin', String(tempBounds.left) + ',' + String(tempBounds.top));
+    var artboardRect = tempDoc.artboards[0].artboardRect;
+    var desiredLeft = Number(artboardRect[0]) + marginPt;
+    var desiredTop = Number(artboardRect[1]) - marginPt;
+    var dx = desiredLeft - tempBounds.left;
+    var dy = desiredTop - tempBounds.top;
+    for(i = 0; i < tempItems.length; i++) _srh_nest_translateItem(tempItems[i], dx, dy);
+
+    tempBounds = _srh_nest_unionBounds(tempItems);
+    if(tempBounds) {
+      try {
+        tempDoc.artboards[0].artboardRect = [
+          tempBounds.left - marginPt,
+          tempBounds.top + marginPt,
+          tempBounds.right + marginPt,
+          tempBounds.bottom - marginPt
+        ];
+        _dbg('setArtboardRect', 'ok');
+      } catch(_eNestArtboardRect0) {
+        _dbg('setArtboardRectFailed', String(_eNestArtboardRect0));
+      }
+    }
+
+    var unique = '';
+    try {
+      unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+      _dbg('uniqueToken', unique);
+    } catch(_eNestUnique0) {
+      return _srh_nest_jsonResponse(false, {error: 'Failed generating export token: ' + String(_eNestUnique0), debug: debugSteps});
+    }
+
+    var tempFolder = null;
+    try {
+      tempFolder = Folder.temp;
+      _dbg('tempFolder', tempFolder ? String(tempFolder.fsName || tempFolder.fullName || '[unknown]') : '[null]');
+    } catch(_eNestTempFolder0) {
+      return _srh_nest_jsonResponse(false, {error: 'Failed resolving temp folder: ' + String(_eNestTempFolder0), debug: debugSteps});
+    }
+    if(!tempFolder) return _srh_nest_jsonResponse(false, {error: 'Temp folder unavailable.', debug: debugSteps});
+
+    try {
+      tempFile = new File(tempFolder.fsName + '/srh-nest-' + unique + '.svg');
+      tempFile.encoding = 'UTF-8';
+      _dbg('exportSvg', tempFile.fsName);
+    } catch(_eNestTempFile0) {
+      return _srh_nest_jsonResponse(false, {error: 'Failed creating temp SVG file: ' + String(_eNestTempFile0), debug: debugSteps});
+    }
+
+    var svgText = '';
+    try {
+      svgText = _srh_nest_exportDocToSvgText(tempDoc, tempFile);
+      _dbg('exportSvgDone', String(svgText ? svgText.length : 0));
+    } catch(_eNestExport0) {
+      return _srh_nest_jsonResponse(false, {error: 'SVG export failed: ' + String(_eNestExport0), debug: debugSteps});
+    }
+    if(!svgText) return _srh_nest_jsonResponse(false, {error: 'Illustrator returned an empty SVG export.', debug: debugSteps});
+
+    return _srh_nest_jsonResponse(true, {
+      itemCount: selectionItems.length,
+      scaleFactor: scaleFactor,
+      boundsPt: {
+        width: actualWidthPt,
+        height: actualHeightPt
+      },
+      boundsMm: {
+        width: _srh_pt2mm(actualWidthPt),
+        height: _srh_pt2mm(actualHeightPt)
+      },
+      debug: debugSteps,
+      svgText: svgText
+    });
+  } catch(e) {
+    return _srh_nest_jsonResponse(false, {error: String(e), debug: debugSteps});
+  } finally {
+    try {if(tempFile && tempFile.exists) tempFile.remove();} catch(_eNestFile0) { }
+    try {if(tempDoc) tempDoc.close(SaveOptions.DONOTSAVECHANGES);} catch(_eNestClose0) { }
+  }
+}
+function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
+  function _nestLooksLikeSvgText(v) {
+    var s = String(v == null ? '' : v);
+    return s.indexOf('<svg') >= 0 && s.indexOf('</svg>') >= 0;
+  }
+  function _nestNormalizeRect(rect) {
+    if(!rect || rect.length !== 4) return null;
+    var l = Number(rect[0]), t = Number(rect[1]), r = Number(rect[2]), b = Number(rect[3]);
+    if(!(isFinite(l) && isFinite(t) && isFinite(r) && isFinite(b))) return null;
+    var left = Math.min(l, r);
+    var right = Math.max(l, r);
+    var top = Math.max(t, b);
+    var bottom = Math.min(t, b);
+    return [left, top, right, bottom];
+  }
+  function _nestGetBounds(itemRef) {
+    var b = null;
+    try {b = itemRef.visibleBounds;} catch(_eNestPlaceB0) {b = null;}
+    if(!b || b.length !== 4) {
+      try {b = itemRef.geometricBounds;} catch(_eNestPlaceB1) {b = null;}
+    }
+    return _nestNormalizeRect(b);
+  }
+  function _nestFitItemToActiveArtboard(docRef, itemRef) {
+    try {
+      var activeIdxRef = 0;
+      try {activeIdxRef = docRef.artboards.getActiveArtboardIndex();} catch(_eNestAb0) {activeIdxRef = 0;}
+      var abRef = _nestNormalizeRect(docRef.artboards[activeIdxRef].artboardRect);
+      var ibRef = _nestGetBounds(itemRef);
+      if(!abRef || !ibRef) return false;
+
+      var marginRef = _srh_mm2ptDoc(10);
+      var targetLeftRef = Number(abRef[0]) + marginRef;
+      var targetTopRef = Number(abRef[1]) - marginRef;
+      var targetWidthRef = Math.max(0, Number(abRef[2]) - Number(abRef[0]) - (marginRef * 2));
+      var targetHeightRef = Math.max(0, Number(abRef[1]) - Number(abRef[3]) - (marginRef * 2));
+      var itemWidthRef = Math.max(0, Number(ibRef[2]) - Number(ibRef[0]));
+      var itemHeightRef = Math.max(0, Number(ibRef[1]) - Number(ibRef[3]));
+
+      if(targetWidthRef > 0 && targetHeightRef > 0 && itemWidthRef > 0 && itemHeightRef > 0) {
+        var fitRatioRef = Math.min(targetWidthRef / itemWidthRef, targetHeightRef / itemHeightRef);
+        var scalePctRef = fitRatioRef * 100;
+        // Preserve true size; only scale down if the result would exceed the artboard.
+        if(fitRatioRef > 0 && fitRatioRef < 0.999 && Math.abs(scalePctRef - 100) > 0.001) {
+          itemRef.resize(scalePctRef, scalePctRef, true, true, true, true, scalePctRef, Transformation.TOPLEFT);
+        }
+      }
+      itemRef.position = [targetLeftRef, targetTopRef];
+      return true;
+    } catch(_eNestFit0) {
+      return false;
+    }
+  }
+  function _nestSelectAllArtwork(docRef) {
+    try {docRef.selection = null;} catch(_eNestSel0) { }
+    var selectedCount = 0;
+    var itemsRef = null;
+    try {itemsRef = docRef.pageItems;} catch(_eNestSel1) {itemsRef = null;}
+    if(!itemsRef || !itemsRef.length) return 0;
+    for(var iRef = 0; iRef < itemsRef.length; iRef++) {
+      var itemRef = null;
+      try {itemRef = itemsRef[iRef];} catch(_eNestSel2) {itemRef = null;}
+      if(!itemRef) continue;
+      try {
+        if(itemRef.locked || itemRef.hidden) continue;
+      } catch(_eNestSel3) { }
+      try {itemRef.selected = true; selectedCount++;} catch(_eNestSel4) { }
+    }
+    return selectedCount;
+  }
+  function _nestOpenAndPasteSvg(docRef, tmpFileRef) {
+    var importDocRef = null;
+    var pastedRef = null;
+    try {
+      importDocRef = app.open(tmpFileRef);
+      if(!importDocRef) return false;
+      if(!_nestSelectAllArtwork(importDocRef)) return false;
+
+      try {app.copy();} catch(_eNestCopy0) {
+        try {app.executeMenuCommand('copy');} catch(_eNestCopy1) {return false;}
+      }
+
+      try {docRef.activate();} catch(_eNestAct0) { }
+      try {docRef.selection = null;} catch(_eNestSel5) { }
+
+      try {
+        app.paste();
+      } catch(_eNestPaste0) {
+        try {app.executeMenuCommand('pasteInPlace');} catch(_eNestPaste1) {return false;}
+      }
+
+      var pastedSelRef = null;
+      try {pastedSelRef = docRef.selection;} catch(_eNestSel6) {pastedSelRef = null;}
+      if(pastedSelRef && pastedSelRef.length === 1) pastedRef = pastedSelRef[0];
+      else if(pastedSelRef && pastedSelRef.length > 1) {
+        try {
+          var grpRef = docRef.activeLayer.groupItems.add();
+          for(var pRef = pastedSelRef.length - 1; pRef >= 0; pRef--) {
+            try {pastedSelRef[pRef].move(grpRef, ElementPlacement.PLACEATBEGINNING);} catch(_eNestMove0) { }
+          }
+          pastedRef = grpRef;
+        } catch(_eNestGroup0) {
+          pastedRef = pastedSelRef[0];
+        }
+      }
+      if(!pastedRef) return false;
+      _nestFitItemToActiveArtboard(docRef, pastedRef);
+      return true;
+    } catch(_eNestOpen0) {
+      return false;
+    } finally {
+      try {if(importDocRef) importDocRef.close(SaveOptions.DONOTSAVECHANGES);} catch(_eNestClose2) { }
+    }
+  }
+  function _nestPlaceSvgOnActiveArtboard(docRef, svgMarkup) {
+    var tmpFileRef = null;
+    var placedItem = null;
+    try {
+      var tmpFolderRef = Folder.temp;
+      if(!tmpFolderRef || !tmpFolderRef.exists) return false;
+      var uniqueRef = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
+      tmpFileRef = new File(tmpFolderRef.fsName + '/srh-nest-output-' + uniqueRef + '.svg');
+      tmpFileRef.encoding = 'UTF-8';
+      if(!tmpFileRef.open('w')) return false;
+      tmpFileRef.write(String(svgMarkup == null ? '' : svgMarkup));
+      tmpFileRef.close();
+
+      placedItem = docRef.placedItems.add();
+      placedItem.file = tmpFileRef;
+      _nestFitItemToActiveArtboard(docRef, placedItem);
+      try {placedItem.embed();} catch(_eNestEmbed1) { }
+      return true;
+    } catch(_eNestPlace1) {
+      try {
+        if(placedItem) {
+          try {placedItem.remove();} catch(_eNestRm0) { }
+        }
+      } catch(_eNestRm1) { }
+      return _nestOpenAndPasteSvg(docRef, tmpFileRef);
+    } finally {
+      try {if(tmpFileRef && tmpFileRef.opened) tmpFileRef.close();} catch(_eNestTmpClose1) { }
+      try {if(tmpFileRef && tmpFileRef.exists) tmpFileRef.remove();} catch(_eNestTmpRm0) { }
+    }
+  }
+  if(!app.documents.length) return 'Error: No open document.';
+  if(!_nestLooksLikeSvgText(svgText)) return 'Error: Invalid SVG text.';
+  var doc = app.activeDocument;
+  try {
+    var normalized = String(svgText == null ? '' : svgText);
+    if(normalized.indexOf('<?xml') !== 0) normalized = '<?xml version="1.0" encoding="UTF-8"?>\n' + normalized;
+    if(_nestPlaceSvgOnActiveArtboard(doc, normalized)) return 'Nested SVG placed on the active artboard.';
+    return 'Error: Illustrator could not place the generated SVG file.';
+  } catch(e) {
+    return 'Error: ' + e;
+  }
+}
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_nest_captureSelectionBounds = signarama_helper_nest_captureSelectionBounds;} catch(_eNestExp0) { }
+try {this.signarama_helper_nest_captureSelectionBounds = signarama_helper_nest_captureSelectionBounds;} catch(_eNestExp1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_nest_captureSelectionAsSvg = signarama_helper_nest_captureSelectionAsSvg;} catch(_eNestExp2) { }
+try {this.signarama_helper_nest_captureSelectionAsSvg = signarama_helper_nest_captureSelectionAsSvg;} catch(_eNestExp3) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_nest_placeSvgOnActiveArtboard = signarama_helper_nest_placeSvgOnActiveArtboard;} catch(_eNestExp4) { }
+try {this.signarama_helper_nest_placeSvgOnActiveArtboard = signarama_helper_nest_placeSvgOnActiveArtboard;} catch(_eNestExp5) { }
+
 
 
 function signarama_helper_addFilePathTextToArtboards() {

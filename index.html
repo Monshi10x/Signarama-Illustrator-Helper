@@ -168,6 +168,101 @@
     .artboards-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
     .artboards-list { max-height:160px; overflow:auto; border:1px solid #2d2d2d; border-radius:8px; padding:6px; background:#0f0f0f; }
     .artboards-empty { font-size:12px; color:#9e9e9e; padding:6px; }
+    .nest-actions {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .nest-actions .btn2 {
+      flex:1 1 180px;
+    }
+    .nest-status-grid {
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap:8px;
+      margin-top:10px;
+    }
+    .nest-metric {
+      border:1px solid #333;
+      border-radius:10px;
+      background:#101010;
+      padding:10px;
+      display:grid;
+      gap:4px;
+    }
+    .nest-metric-label {
+      font-size:11px;
+      color:#9f9f9f;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .nest-metric-value {
+      font-size:18px;
+      font-weight:800;
+      color:#f1f1f1;
+      line-height:1;
+    }
+    .nest-inline-status {
+      margin-top:10px;
+      font-size:12px;
+      color:#cfcfcf;
+    }
+    .nest-preview-shell {
+      min-height:320px;
+      border:1px solid #333;
+      border-radius:12px;
+      background:#0e0e0e;
+      overflow:auto;
+      padding:10px;
+    }
+    .nest-preview-shell svg {
+      display:block;
+      width:100%;
+      height:auto;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.03) 75%, rgba(255,255,255,0.03)),
+        linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.03) 75%, rgba(255,255,255,0.03));
+      background-size:24px 24px;
+      background-position:0 0, 12px 12px;
+      border-radius:8px;
+    }
+    .nest-empty {
+      min-height:300px;
+      display:grid;
+      place-items:center;
+      text-align:center;
+      color:#8f8f8f;
+      font-size:13px;
+      border:1px dashed #3b3b3b;
+      border-radius:10px;
+      background:#141414;
+      padding:16px;
+      box-sizing:border-box;
+    }
+    .nest-progress {
+      margin-top:10px;
+      height:8px;
+      border-radius:999px;
+      background:#1e1e1e;
+      overflow:hidden;
+      border:1px solid #2d2d2d;
+    }
+    .nest-progress-bar {
+      height:100%;
+      width:0%;
+      background:linear-gradient(90deg, #c8102e, #f35a71);
+      transition:width .12s ease;
+    }
+    .nest-secondary {
+      font-size:12px;
+      color:#a9a9a9;
+    }
+    @media (max-width: 560px) {
+      .nest-status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
 
     .hidden { display:none; }
     .corebridge-fetch-status {
@@ -512,6 +607,7 @@
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Corebridge</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
+    <button class="tab" data-tab="tab-nest" type="button">Nest</button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
 
@@ -1306,6 +1402,132 @@
       </div>
     </section>
 
+    <!-- TAB: NEST -->
+    <section id="tab-nest" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">SVG Nesting</div>
+          <span class="info" data-tip="Loads selected Illustrator artwork into SVGnest, nests it in the browser panel, then places the nested result back into Illustrator.">i</span>
+        </div>
+        <div class="small">Load the parts from Illustrator first. The nesting sheet can be entered manually or pulled from the bounds of a different Illustrator selection.</div>
+
+        <div class="nest-actions" style="margin-top:12px;">
+          <button id="btnNestLoadParts" class="btn2" type="button">Load Parts From Selection</button>
+          <button id="btnNestPlaceResult" class="btn2" type="button" disabled>Place Result In Illustrator</button>
+        </div>
+        <div id="nestPartsSummary" class="nest-inline-status">No parts loaded.</div>
+
+        <div class="grid2" style="margin-top:12px;">
+          <label class="fld">
+            <span>Sheet size source</span>
+            <select id="nestSizeMode">
+              <option value="manual">Manual width and height</option>
+              <option value="selection">Use current selection bounds</option>
+            </select>
+          </label>
+          <label class="fld">
+            <span>Spacing (mm)</span>
+            <input id="nestSpacingMm" type="number" step="0.1" value="5">
+          </label>
+        </div>
+
+        <div id="nestManualSizeFields" class="grid2" style="margin-top:10px;">
+          <label class="fld">
+            <span>Sheet width (mm)</span>
+            <input id="nestBinWidthMm" type="number" step="0.1" value="2440">
+          </label>
+          <label class="fld">
+            <span>Sheet height (mm)</span>
+            <input id="nestBinHeightMm" type="number" step="0.1" value="1220">
+          </label>
+        </div>
+
+        <div id="nestSelectionSizeFields" class="hidden" style="margin-top:10px;">
+          <div class="nest-actions">
+            <button id="btnNestCaptureSelectionSize" class="btn2" type="button">Use Current Selection Size</button>
+          </div>
+          <div id="nestSelectionSizeSummary" class="nest-inline-status">No selection size captured.</div>
+        </div>
+
+        <div class="grid2" style="margin-top:10px;">
+          <label class="fld">
+            <span>Rotations</span>
+            <input id="nestRotations" type="number" step="1" min="1" value="4">
+          </label>
+          <label class="fld">
+            <span>Curve tolerance (mm)</span>
+            <input id="nestCurveToleranceMm" type="number" step="0.01" value="0.5">
+          </label>
+          <label class="fld">
+            <span>GA population</span>
+            <input id="nestPopulationSize" type="number" step="1" min="3" value="10">
+          </label>
+          <label class="fld">
+            <span>Mutation rate</span>
+            <input id="nestMutationRate" type="number" step="1" min="1" value="10">
+          </label>
+        </div>
+
+        <div class="row" style="margin-top:10px; align-items:center;">
+          <label class="chk">
+            <input id="nestUseHoles" type="checkbox">
+            <span>Part in part</span>
+          </label>
+          <label class="chk">
+            <input id="nestExploreConcave" type="checkbox">
+            <span>Explore concave areas</span>
+          </label>
+        </div>
+
+        <div class="nest-actions" style="margin-top:12px;">
+          <button id="btnNestStart" class="btn2" type="button">Start Nest</button>
+          <button id="btnNestStop" class="btn2" type="button" disabled>Stop</button>
+          <button id="btnNestClear" class="btn2" type="button">Clear Result</button>
+        </div>
+
+        <div class="nest-progress">
+          <div id="nestProgressBar" class="nest-progress-bar"></div>
+        </div>
+        <div id="nestStatusText" class="nest-inline-status">Ready.</div>
+
+        <div class="nest-status-grid">
+          <div class="nest-metric">
+            <div class="nest-metric-label">Iterations</div>
+            <div id="nestIterations" class="nest-metric-value">0</div>
+          </div>
+          <div class="nest-metric">
+            <div class="nest-metric-label">Efficiency</div>
+            <div id="nestEfficiency" class="nest-metric-value">0%</div>
+          </div>
+          <div class="nest-metric">
+            <div class="nest-metric-label">Placed</div>
+            <div id="nestPlaced" class="nest-metric-value">0/0</div>
+          </div>
+          <div class="nest-metric">
+            <div class="nest-metric-label">Sheet</div>
+            <div id="nestSheetSize" class="nest-metric-value" style="font-size:14px;">-</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Preview</div>
+          <div id="nestPreviewMode" class="nest-secondary">Input preview</div>
+        </div>
+        <div id="nestPreviewHost" class="nest-preview-shell">
+          <div class="nest-empty">Load parts from Illustrator to preview the nesting canvas.</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead">
+          <div class="cardTitle">Log</div>
+        </div>
+        <div id="nestLog" class="log"></div>
+      </div>
+    </section>
+
     <!-- TAB: TESTING -->
     <section id="tab-testing" class="wrap hidden" role="tabpanel">
       <div class="card">
@@ -1322,6 +1544,15 @@
 
   <script src="js/CSInterface.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="js/vendor/svgnest/util/pathsegpolyfill.js"></script>
+  <script src="js/vendor/svgnest/util/matrix.js"></script>
+  <script src="js/vendor/svgnest/util/domparser.js"></script>
+  <script src="js/vendor/svgnest/util/clipper.js"></script>
+  <script src="js/vendor/svgnest/util/parallel.js"></script>
+  <script src="js/vendor/svgnest/util/geometryutil.js"></script>
+  <script src="js/vendor/svgnest/util/placementworker.js"></script>
+  <script src="js/vendor/svgnest/svgparser.js"></script>
+  <script src="js/vendor/svgnest/svgnest.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

@@ -150,6 +150,26 @@
     return [r2(r), r2(g), r2(b)].join(',');
   }
 
+  function summarizeSvgChildrenFromText(svgText) {
+    try {
+      const parser = new DOMParser();
+      const parsed = parser.parseFromString(String(svgText || ''), 'image/svg+xml');
+      const root = parsed && parsed.documentElement;
+      if(!root || !root.childNodes) return 'no-root';
+      const summary = [];
+      Array.prototype.slice.call(root.childNodes).forEach((child, index) => {
+        if(!child || !child.tagName) return;
+        const tag = String(child.tagName || '');
+        const id = child.getAttribute ? String(child.getAttribute('id') || '') : '';
+        const childCount = child.childNodes ? child.childNodes.length : 0;
+        summary.push('#' + index + ':' + tag + (id ? ('#' + id) : '') + '[children=' + childCount + ']');
+      });
+      return summary.length ? summary.join(', ') : 'no-element-children';
+    } catch(_eSvgSummary0) {
+      return 'summary-failed: ' + (_eSvgSummary0 && _eSvgSummary0.message ? _eSvgSummary0.message : _eSvgSummary0);
+    }
+  }
+
   const colourEditState = {
     lastEdit: null,
     mode: 'CMYK'
@@ -170,6 +190,34 @@
   let isApplyingPanelSettings = false;
   let schedulePanelSettingsSave = null;
   let scheduleDimensionSelectionHintRefresh = null;
+  const SRH_NEST_BACKUP_KEY = 'srhNestResultBackup';
+  const SRH_NEST_FORCE_TAB_KEY = 'srhNestForceTabRestore';
+  const SRH_NEST_RUNTIME_KEY = 'srhNestRuntimeState';
+
+  function saveNestRuntimeMarker(eventName, extra) {
+    try {
+      if(typeof localStorage === 'undefined') return;
+      const current = readNestRuntimeMarker() || {};
+      const isNestEvent = /^(nest-|result-)/.test(String(eventName || ''));
+      const payload = Object.assign({
+        event: String(eventName || ''),
+        at: Date.now(),
+        lastNestEvent: isNestEvent ? String(eventName || '') : (current.lastNestEvent || ''),
+        lastNestAt: isNestEvent ? Date.now() : Number(current.lastNestAt || 0)
+      }, extra || {});
+      localStorage.setItem(SRH_NEST_RUNTIME_KEY, JSON.stringify(payload));
+    } catch(_eNestRuntimeSave) { }
+  }
+
+  function readNestRuntimeMarker() {
+    try {
+      if(typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(SRH_NEST_RUNTIME_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch(_eNestRuntimeRead) {
+      return null;
+    }
+  }
 
   function jsxEscapeDoubleQuoted(text) {
     return String(text)
@@ -306,6 +354,23 @@
     wireActions();
 
     log('Panel booting…');
+    const lastNestRuntime = readNestRuntimeMarker();
+    if(lastNestRuntime && (lastNestRuntime.lastNestEvent || lastNestRuntime.event)) {
+      const markerEvent = String(lastNestRuntime.lastNestEvent || lastNestRuntime.event || '');
+      const markerAt = Number(lastNestRuntime.lastNestAt || lastNestRuntime.at || 0);
+      const ageMs = Math.max(0, Date.now() - markerAt);
+      if(ageMs < 5 * 60 * 1000) {
+        log('Nest runtime marker from previous panel instance: ' + markerEvent + ' (' + Math.round(ageMs / 1000) + 's ago).');
+        if(/nest-|result-/.test(markerEvent)) {
+          showToast('The panel appears to have reloaded during nesting. Last marker: ' + markerEvent, {
+            type: 'warn',
+            title: 'Nest reload detected',
+            duration: 20000
+          });
+        }
+      }
+    }
+    saveNestRuntimeMarker('panel-boot');
 
     cs.evalScript('app.name', function(name) {
       setStatus(name ? ('Connected: ' + name) : 'Not connected');
@@ -318,11 +383,36 @@
         if(type !== 'function') log('ERROR: JSX not loaded (check path/case).');
         loadPanelSettings(function() {
           setupPanelSettingsPersistence();
+          try {
+            if(typeof localStorage !== 'undefined' && localStorage.getItem(SRH_NEST_FORCE_TAB_KEY) && activateTabFn) {
+              activateTabFn('tab-nest');
+            }
+          } catch(_eNestTabRestore) { }
           if(typeof refreshLightboxArtboardScaleNotice === 'function') refreshLightboxArtboardScaleNotice();
         });
       });
     });
   });
+
+  if(typeof window !== 'undefined') {
+    window.addEventListener('error', function(evt) {
+      const msg = evt && evt.message ? evt.message : 'unknown-error';
+      saveNestRuntimeMarker('window-error', {message: String(msg)});
+      log('Window error: ' + msg);
+    });
+    window.addEventListener('unhandledrejection', function(evt) {
+      const reason = evt && evt.reason;
+      const text = reason && reason.message ? reason.message : String(reason || 'unknown-rejection');
+      saveNestRuntimeMarker('window-unhandledrejection', {message: text});
+      log('Unhandled rejection: ' + text);
+    });
+    window.addEventListener('beforeunload', function() {
+      saveNestRuntimeMarker('panel-beforeunload');
+    });
+    window.addEventListener('pagehide', function() {
+      saveNestRuntimeMarker('panel-pagehide');
+    });
+  }
 
   function wireTabs() {
     const tabs = $all('.tab[data-tab]');
@@ -1623,6 +1713,7 @@
     wireLedDepiction();
     wireLetterLayout();
     wireColours();
+    wireNest();
 
     const clear = $('btnClearLog');
     if(clear) clear.onclick = () => {const el = $('log'); if(el) el.textContent = ''; showToast('Console cleared.', {type: 'info', title: 'Log', duration: 2500});};
@@ -1640,6 +1731,976 @@
         {logFn: log, toastTitle: 'Debug gradient 10/90'}
       ));
     }
+  }
+
+  function wireNest() {
+    const partsBtn = $('btnNestLoadParts');
+    const placeBtn = $('btnNestPlaceResult');
+    const startBtn = $('btnNestStart');
+    const stopBtn = $('btnNestStop');
+    const clearBtn = $('btnNestClear');
+    const sizeModeField = $('nestSizeMode');
+    const manualSizeWrap = $('nestManualSizeFields');
+    const selectionSizeWrap = $('nestSelectionSizeFields');
+    const captureSelectionSizeBtn = $('btnNestCaptureSelectionSize');
+    const partsSummary = $('nestPartsSummary');
+    const selectionSummary = $('nestSelectionSizeSummary');
+    const statusText = $('nestStatusText');
+    const previewHost = $('nestPreviewHost');
+    const previewMode = $('nestPreviewMode');
+    const progressBar = $('nestProgressBar');
+    const logEl = $('nestLog');
+    const iterationsEl = $('nestIterations');
+    const efficiencyEl = $('nestEfficiency');
+    const placedEl = $('nestPlaced');
+    const sheetSizeEl = $('nestSheetSize');
+
+    if(!partsBtn || !startBtn || !previewHost) return;
+
+    const nestState = {
+      partsSvg: '',
+      partsMeta: null,
+      selectionSize: null,
+      working: false,
+      iterations: 0,
+      latestPlacement: null,
+      latestResultSvgList: null,
+      latestOutputSvg: '',
+      latestOutputSvgPath: '',
+      startTimeMs: 0,
+      heartbeatTimer: null,
+      latestProgress: 0,
+      lastHeartbeatLogMs: 0
+    };
+
+    let lastSavedProgressPct = -1;
+
+    function mmToPt(mm) {
+      return num(mm) * 2.834645669291339;
+    }
+
+    function logNest(line) {
+      log('[Nest] ' + String(line));
+      if(logEl) {
+        logEl.textContent += String(line) + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+    }
+
+    function saveNestBackup(payload) {
+      try {
+        if(typeof localStorage === 'undefined') return false;
+        localStorage.setItem(SRH_NEST_BACKUP_KEY, JSON.stringify(payload || {}));
+        localStorage.setItem(SRH_NEST_FORCE_TAB_KEY, '1');
+        return true;
+      } catch(_eNestBackupSave) {
+        logNest('Backup save failed: ' + (_eNestBackupSave && _eNestBackupSave.message ? _eNestBackupSave.message : _eNestBackupSave));
+        return false;
+      }
+    }
+
+    function writeNestOutputToTempFile(svgText) {
+      try {
+        if(typeof require !== 'function') return '';
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        const outDir = path.join(os.tmpdir(), 'SignaramaIllustratorHelper');
+        if(!fs.existsSync(outDir)) fs.mkdirSync(outDir, {recursive: true});
+        const filePath = path.join(outDir, 'nest-result-' + Date.now() + '.svg');
+        fs.writeFileSync(filePath, String(svgText || ''), 'utf8');
+        return filePath;
+      } catch(_eNestTempWrite) {
+        logNest('Result file save failed: ' + (_eNestTempWrite && _eNestTempWrite.message ? _eNestTempWrite.message : _eNestTempWrite));
+        return '';
+      }
+    }
+
+    function readNestOutputFromTempFile(filePath) {
+      try {
+        if(!filePath || typeof require !== 'function') return '';
+        const fs = require('fs');
+        if(!fs.existsSync(filePath)) return '';
+        return String(fs.readFileSync(filePath, 'utf8') || '');
+      } catch(_eNestTempRead) {
+        logNest('Result file read failed: ' + (_eNestTempRead && _eNestTempRead.message ? _eNestTempRead.message : _eNestTempRead));
+        return '';
+      }
+    }
+
+    function clearNestBackup() {
+      try {
+        if(typeof localStorage === 'undefined') return;
+        localStorage.removeItem(SRH_NEST_BACKUP_KEY);
+        localStorage.removeItem(SRH_NEST_FORCE_TAB_KEY);
+      } catch(_eNestBackupClear) { }
+    }
+
+    function copyTextToClipboard(text) {
+      const value = String(text || '');
+      if(!value) return Promise.reject(new Error('Nothing to copy.'));
+      if(typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(value);
+      }
+      return new Promise((resolve, reject) => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = value;
+          ta.setAttribute('readonly', 'readonly');
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          ta.style.pointerEvents = 'none';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          ta.remove();
+          if(ok) resolve();
+          else reject(new Error('Clipboard copy was rejected.'));
+        } catch(err) {
+          reject(err);
+        }
+      });
+    }
+
+    function buildNestClipboardPayload(details) {
+      const info = details || {};
+      const lines = [
+        'SVGnest completed',
+        'Iterations: ' + String(info.iterations || 0),
+        'Efficiency: ' + String(info.efficiencyText || 'n/a'),
+        'Placed: ' + String(info.placedText || 'n/a'),
+        'Bins: ' + String(info.binCount || 0)
+      ];
+      if(info.sheetText) lines.push('Sheet: ' + String(info.sheetText));
+      if(info.outputFilePath) lines.push('Saved file: ' + String(info.outputFilePath));
+      if(info.savedAtText) lines.push('Saved at: ' + String(info.savedAtText));
+      return lines.join('\n');
+    }
+
+    function restoreNestBackup() {
+      try {
+        if(typeof localStorage === 'undefined') return;
+        const raw = localStorage.getItem(SRH_NEST_BACKUP_KEY);
+        if(!raw) return;
+        const saved = JSON.parse(raw);
+        if(!saved) return;
+        nestState.latestPlacement = saved.rawPlacement || null;
+        nestState.latestOutputSvg = String(saved.outputSvg || '');
+        nestState.latestOutputSvgPath = String(saved.outputFilePath || '');
+        if(!nestState.latestOutputSvg && nestState.latestOutputSvgPath) {
+          nestState.latestOutputSvg = readNestOutputFromTempFile(nestState.latestOutputSvgPath);
+        }
+        if(!nestState.latestOutputSvg && !nestState.latestOutputSvgPath && !nestState.latestPlacement) return;
+        nestState.latestResultSvgList = [];
+        setMetricText(iterationsEl, saved.iterations || 0);
+        setMetricText(efficiencyEl, saved.efficiencyText || 'n/a');
+        setMetricText(placedEl, saved.placedText || 'n/a');
+        if(saved.sheetText) setMetricText(sheetSizeEl, saved.sheetText);
+        const shell = document.createElement('div');
+        shell.style.display = 'grid';
+        shell.style.gap = '10px';
+        const title = document.createElement('div');
+        title.className = 'small';
+        title.textContent = 'Recovered the latest nest result after a panel reload.';
+        shell.appendChild(title);
+        const meta = document.createElement('div');
+        meta.className = 'small';
+        meta.textContent = 'Iterations: ' + (saved.iterations || 0) + ', efficiency: ' + (saved.efficiencyText || 'n/a') + ', placed: ' + (saved.placedText || 'n/a') + '.';
+        shell.appendChild(meta);
+        const note = document.createElement('div');
+        note.className = 'small';
+        note.textContent = nestState.latestOutputSvgPath
+          ? ('Recovered result file: ' + nestState.latestOutputSvgPath)
+          : (nestState.latestPlacement
+            ? 'Recovered raw placement data. Final SVG generation is deferred until needed.'
+            : 'The final SVG remains available for Illustrator placement.');
+        shell.appendChild(note);
+        mountPreview(shell, 'Recovered result');
+        setNestStatus('Recovered the last nest result after a panel reload.');
+        logNest('Recovered a saved nest result from local storage.');
+        updateButtons();
+      } catch(_eNestRestore) {
+        logNest('Nest backup restore failed: ' + (_eNestRestore && _eNestRestore.message ? _eNestRestore.message : _eNestRestore));
+      }
+    }
+
+    if(typeof window !== 'undefined') {
+      window.__srhNestLogHook = function(message) {
+        if(!message) return;
+        logNest(String(message));
+      };
+      if(!window.__srhNestConsoleMirrorInstalled && typeof console !== 'undefined' && console && typeof console.error === 'function') {
+        const originalConsoleError = console.error.bind(console);
+        console.error = function() {
+          const args = Array.prototype.slice.call(arguments);
+          try {
+            originalConsoleError.apply(console, args);
+          } catch(_eNestConsoleOriginal) { }
+          try {
+            if(window.__srhNestLogHook) {
+              const text = args.map((entry) => {
+                if(entry == null) return '';
+                if(typeof entry === 'string') return entry;
+                try {return JSON.stringify(entry);} catch(_eNestConsoleJson) {return String(entry);}
+              }).join(' ');
+              if(text) window.__srhNestLogHook('Console error: ' + text);
+            }
+          } catch(_eNestConsoleMirror) { }
+        };
+        window.__srhNestConsoleMirrorInstalled = true;
+      }
+    }
+
+    function setNestStatus(text) {
+      if(statusText) statusText.textContent = String(text || '');
+    }
+
+    function setNestProgress(percent) {
+      if(!progressBar) return;
+      const clamped = Math.max(0, Math.min(1, Number(percent) || 0));
+      progressBar.style.width = (clamped * 100).toFixed(1) + '%';
+      nestState.latestProgress = clamped;
+    }
+
+    function parseNestJson(raw) {
+      const text = String(raw || '');
+      try {
+        return JSON.parse(text);
+      } catch(_eNestParse) {
+        try {
+          return Function('return ' + text)();
+        } catch(_eNestLegacyParse) {
+          return {
+            ok: false,
+            error: text || 'Invalid response from Illustrator.'
+          };
+        }
+      }
+    }
+
+    function setMetricText(el, text) {
+      if(el) el.textContent = String(text);
+    }
+
+    function updateButtons() {
+      if(stopBtn) stopBtn.disabled = !nestState.working;
+      if(startBtn) startBtn.disabled = !nestState.partsSvg || nestState.working;
+      if(placeBtn) placeBtn.disabled = (!nestState.latestOutputSvg && !nestState.latestOutputSvgPath && !nestState.latestPlacement && (!nestState.latestResultSvgList || !nestState.latestResultSvgList.length)) || nestState.working;
+    }
+
+    function clearNestHeartbeat() {
+      if(nestState.heartbeatTimer) {
+        clearInterval(nestState.heartbeatTimer);
+        nestState.heartbeatTimer = null;
+      }
+    }
+
+    function formatNestElapsed(ms) {
+      const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return minutes + 'm ' + String(seconds).padStart(2, '0') + 's';
+    }
+
+    function updateNestHeartbeat() {
+      if(!nestState.working) return;
+      const now = Date.now();
+      const elapsed = nestState.startTimeMs ? (now - nestState.startTimeMs) : 0;
+      const progressPct = Math.round((nestState.latestProgress || 0) * 100);
+      const resultState = nestState.iterations
+        ? ('best result after ' + nestState.iterations + ' iteration(s)')
+        : 'no result yet';
+      setNestStatus('Nesting... ' + formatNestElapsed(elapsed) + ' elapsed, pass ' + progressPct + '%, ' + resultState + '.');
+      if(!nestState.lastHeartbeatLogMs || (now - nestState.lastHeartbeatLogMs) >= 5000) {
+        logNest('Still nesting... ' + formatNestElapsed(elapsed) + ' elapsed, pass ' + progressPct + '%, ' + resultState + '.');
+        nestState.lastHeartbeatLogMs = now;
+      }
+    }
+
+    function startNestHeartbeat() {
+      clearNestHeartbeat();
+      nestState.startTimeMs = Date.now();
+      nestState.lastHeartbeatLogMs = 0;
+      nestState.latestProgress = 0;
+      nestState.heartbeatTimer = setInterval(updateNestHeartbeat, 1000);
+      updateNestHeartbeat();
+    }
+
+    function updatePartsSummary() {
+      if(!partsSummary) return;
+      if(!nestState.partsMeta) {
+        partsSummary.textContent = 'No parts loaded.';
+        return;
+      }
+      const widthMm = Number(nestState.partsMeta.boundsMm && nestState.partsMeta.boundsMm.width) || 0;
+      const heightMm = Number(nestState.partsMeta.boundsMm && nestState.partsMeta.boundsMm.height) || 0;
+      const itemCount = parseInt(nestState.partsMeta.itemCount, 10) || 0;
+      partsSummary.textContent = itemCount + ' part(s) loaded. Source bounds: ' + widthMm.toFixed(2) + ' x ' + heightMm.toFixed(2) + ' mm.';
+    }
+
+    function updateSelectionSummary() {
+      if(!selectionSummary) return;
+      if(!nestState.selectionSize) {
+        selectionSummary.textContent = 'No selection size captured.';
+        return;
+      }
+      selectionSummary.textContent = 'Captured selection bounds: ' + nestState.selectionSize.widthMm.toFixed(2) + ' x ' + nestState.selectionSize.heightMm.toFixed(2) + ' mm (' + nestState.selectionSize.itemCount + ' item(s)).';
+    }
+
+    function updateSheetMetric() {
+      const size = getBinSize();
+      if(!size) {
+        setMetricText(sheetSizeEl, '-');
+        return;
+      }
+      setMetricText(sheetSizeEl, size.widthMm.toFixed(0) + ' x ' + size.heightMm.toFixed(0) + ' mm');
+    }
+
+    function updateSizeModeUi() {
+      const mode = String((sizeModeField && sizeModeField.value) || 'manual');
+      if(manualSizeWrap) manualSizeWrap.classList.toggle('hidden', mode !== 'manual');
+      if(selectionSizeWrap) selectionSizeWrap.classList.toggle('hidden', mode !== 'selection');
+      updateSheetMetric();
+      renderInputPreview();
+    }
+
+    function getBinSize() {
+      const mode = String((sizeModeField && sizeModeField.value) || 'manual');
+      if(mode === 'selection') {
+        if(!nestState.selectionSize) return null;
+        return {
+          widthPt: Number(nestState.selectionSize.widthPt) || 0,
+          heightPt: Number(nestState.selectionSize.heightPt) || 0,
+          widthMm: Number(nestState.selectionSize.widthMm) || 0,
+          heightMm: Number(nestState.selectionSize.heightMm) || 0
+        };
+      }
+      const widthMm = num(($('nestBinWidthMm') && $('nestBinWidthMm').value) || 0);
+      const heightMm = num(($('nestBinHeightMm') && $('nestBinHeightMm').value) || 0);
+      if(!(widthMm > 0) || !(heightMm > 0)) return null;
+      return {
+        widthPt: mmToPt(widthMm),
+        heightPt: mmToPt(heightMm),
+        widthMm: widthMm,
+        heightMm: heightMm
+      };
+    }
+
+    function stopNest() {
+      if(window.SvgNest && typeof window.SvgNest.stop === 'function') {
+        try {window.SvgNest.stop();} catch(_eNestStop) { }
+      }
+      nestState.working = false;
+      saveNestRuntimeMarker('nest-stop');
+      clearNestHeartbeat();
+      updateButtons();
+    }
+
+    function mountPreview(node, modeLabel) {
+      if(!previewHost) return;
+      previewHost.innerHTML = '';
+      if(node) previewHost.appendChild(node);
+      else previewHost.innerHTML = '<div class="nest-empty">Nothing to preview yet.</div>';
+      if(previewMode) previewMode.textContent = modeLabel || 'Preview';
+    }
+
+    function cloneSvgNode(svgNode) {
+      return svgNode ? svgNode.cloneNode(true) : null;
+    }
+
+    function measureSvgBounds(svgNode, targetNode) {
+      if(!svgNode || !targetNode || !document.body) return null;
+      const host = document.createElement('div');
+      host.style.position = 'fixed';
+      host.style.left = '-100000px';
+      host.style.top = '-100000px';
+      host.style.width = '1px';
+      host.style.height = '1px';
+      host.style.opacity = '0';
+      host.style.pointerEvents = 'none';
+      try {
+        document.body.appendChild(host);
+        host.appendChild(svgNode);
+        const box = targetNode.getBBox ? targetNode.getBBox() : null;
+        if(!box) return null;
+        return {
+          x: Number(box.x) || 0,
+          y: Number(box.y) || 0,
+          width: Number(box.width) || 0,
+          height: Number(box.height) || 0
+        };
+      } catch(_eNestMeasure) {
+        return null;
+      } finally {
+        if(host.parentNode) host.parentNode.removeChild(host);
+      }
+    }
+
+    function buildNestSource() {
+      if(!nestState.partsSvg) return null;
+      const binSize = getBinSize();
+      if(!binSize || !(binSize.widthPt > 0) || !(binSize.heightPt > 0)) return null;
+
+      const parser = new DOMParser();
+      const parsed = parser.parseFromString(nestState.partsSvg, 'image/svg+xml');
+      const partSvg = parsed.documentElement;
+      if(!partSvg || !partSvg.childNodes) return null;
+
+      const ns = 'http://www.w3.org/2000/svg';
+      const out = document.createElementNS(ns, 'svg');
+      out.setAttribute('xmlns', ns);
+      out.setAttribute('version', '1.1');
+
+      const partsScaleGroup = document.createElementNS(ns, 'g');
+      const partsOriginGroup = document.createElementNS(ns, 'g');
+      partsScaleGroup.appendChild(partsOriginGroup);
+
+      const sourceWidthPt = Math.max(
+        binSize.widthPt + mmToPt(10),
+        Number(nestState.partsMeta && nestState.partsMeta.boundsPt && nestState.partsMeta.boundsPt.width) || 0
+      );
+      const sourceHeightPt = Math.max(
+        binSize.heightPt + mmToPt(10),
+        Number(nestState.partsMeta && nestState.partsMeta.boundsPt && nestState.partsMeta.boundsPt.height) || 0
+      );
+
+      out.setAttribute('viewBox', '0 0 ' + sourceWidthPt + ' ' + sourceHeightPt);
+      out.setAttribute('width', String(sourceWidthPt));
+      out.setAttribute('height', String(sourceHeightPt));
+
+      let rawPartIndex = 0;
+      Array.prototype.slice.call(partSvg.childNodes).forEach((child) => {
+        const cloned = child.cloneNode(true);
+        if(cloned && cloned.tagName && cloned.setAttribute) {
+          const sourcePartId = 'srh-nest-part-' + rawPartIndex;
+          cloned.setAttribute('data-srh-part-id', sourcePartId);
+          if(!cloned.getAttribute('id')) cloned.setAttribute('id', sourcePartId);
+          const existingClass = String(cloned.getAttribute('class') || '').trim();
+          cloned.setAttribute('class', (existingClass ? (existingClass + ' ') : '') + sourcePartId);
+          rawPartIndex += 1;
+        }
+        partsOriginGroup.appendChild(cloned);
+      });
+      out.appendChild(partsScaleGroup);
+
+      const measuredBounds = measureSvgBounds(out, partsOriginGroup);
+      const expectedWidthPt = Number(nestState.partsMeta && nestState.partsMeta.boundsPt && nestState.partsMeta.boundsPt.width) || 0;
+      const expectedHeightPt = Number(nestState.partsMeta && nestState.partsMeta.boundsPt && nestState.partsMeta.boundsPt.height) || 0;
+      let normalizationNote = 'none';
+      if(measuredBounds && measuredBounds.width > 0 && measuredBounds.height > 0) {
+        let scaleRatio = 1;
+        const widthRatio = expectedWidthPt > 0 ? (expectedWidthPt / measuredBounds.width) : 1;
+        const heightRatio = expectedHeightPt > 0 ? (expectedHeightPt / measuredBounds.height) : 1;
+        const widthRatioOk = isFinite(widthRatio) && widthRatio > 0;
+        const heightRatioOk = isFinite(heightRatio) && heightRatio > 0;
+        const ratioSpread = (widthRatioOk && heightRatioOk)
+          ? (Math.abs(widthRatio - heightRatio) / Math.max(widthRatio, heightRatio))
+          : 0;
+        if(widthRatioOk && heightRatioOk && ratioSpread <= 0.08) {
+          scaleRatio = (widthRatio + heightRatio) / 2;
+          normalizationNote = 'uniform-scale widthRatio=' + widthRatio.toFixed(4) + ', heightRatio=' + heightRatio.toFixed(4);
+        } else if(widthRatioOk && !heightRatioOk) {
+          scaleRatio = widthRatio;
+          normalizationNote = 'width-only-scale widthRatio=' + widthRatio.toFixed(4);
+        } else if(heightRatioOk && !widthRatioOk) {
+          scaleRatio = heightRatio;
+          normalizationNote = 'height-only-scale heightRatio=' + heightRatio.toFixed(4);
+        } else if(widthRatioOk && heightRatioOk) {
+          scaleRatio = 1;
+          normalizationNote = 'scale-skipped ratio-mismatch widthRatio=' + widthRatio.toFixed(4) + ', heightRatio=' + heightRatio.toFixed(4);
+        }
+        partsOriginGroup.setAttribute('transform', 'translate(' + (-measuredBounds.x) + ' ' + (-measuredBounds.y) + ')');
+        if(isFinite(scaleRatio) && scaleRatio > 0 && Math.abs(scaleRatio - 1) > 0.001) {
+          partsScaleGroup.setAttribute('transform', 'scale(' + scaleRatio + ')');
+        }
+        out.setAttribute('data-srh-part-scale', String(scaleRatio));
+        out.setAttribute('data-srh-part-bounds', measuredBounds.width.toFixed(3) + 'x' + measuredBounds.height.toFixed(3));
+        out.setAttribute('data-srh-part-normalization-note', normalizationNote);
+      }
+
+      const binRect = document.createElementNS(ns, 'rect');
+      binRect.setAttribute('id', 'nest-bin');
+      binRect.setAttribute('x', '0');
+      binRect.setAttribute('y', '0');
+      binRect.setAttribute('width', String(binSize.widthPt));
+      binRect.setAttribute('height', String(binSize.heightPt));
+      binRect.setAttribute('fill', 'none');
+      binRect.setAttribute('stroke', '#c8102e');
+      binRect.setAttribute('stroke-width', String(Math.max(1, mmToPt(0.2))));
+      out.appendChild(binRect);
+
+      const serialized = (new XMLSerializer()).serializeToString(out);
+      const normalizedChildSummary = Array.prototype.slice.call(out.childNodes).map((child, index) => {
+        if(!child || !child.tagName) return null;
+        return '#' + index + ':' + child.tagName + (child.getAttribute && child.getAttribute('id') ? ('#' + child.getAttribute('id')) : '') + '[children=' + (child.childNodes ? child.childNodes.length : 0) + ']';
+      }).filter(Boolean).join(', ');
+      return {
+        svgText: serialized,
+        previewSvg: out,
+        binSize: binSize,
+        partScale: Number(out.getAttribute('data-srh-part-scale') || 1),
+        partBoundsText: String(out.getAttribute('data-srh-part-bounds') || ''),
+        partNormalizationNote: String(out.getAttribute('data-srh-part-normalization-note') || normalizationNote),
+        normalizedChildSummary: normalizedChildSummary,
+        rawChildSummary: summarizeSvgChildrenFromText(nestState.partsSvg)
+      };
+    }
+
+    function renderInputPreview() {
+      if(!nestState.partsSvg) {
+        mountPreview(null, 'Input preview');
+        return;
+      }
+      const source = buildNestSource();
+      if(!source) {
+        mountPreview(null, 'Input preview');
+        return;
+      }
+      mountPreview(cloneSvgNode(source.previewSvg), 'Input preview');
+    }
+
+    function serializeOutputSvgList(svgList) {
+      if(!svgList || !svgList.length) return '';
+      const ns = 'http://www.w3.org/2000/svg';
+      const root = document.createElementNS(ns, 'svg');
+      root.setAttribute('xmlns', ns);
+      root.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      root.setAttribute('version', '1.1');
+      let offsetY = 0;
+      let maxWidth = 0;
+
+      if(window.SvgNest && window.SvgNest.style) {
+        try {root.appendChild(window.SvgNest.style.cloneNode(true));} catch(_eNestStyle) { }
+      }
+
+      svgList.forEach((svgNode) => {
+        const width = parseFloat(svgNode.getAttribute('width')) || ((svgNode.viewBox && svgNode.viewBox.baseVal && svgNode.viewBox.baseVal.width) || 0);
+        const height = parseFloat(svgNode.getAttribute('height')) || ((svgNode.viewBox && svgNode.viewBox.baseVal && svgNode.viewBox.baseVal.height) || 0);
+        const group = document.createElementNS(ns, 'g');
+        group.setAttribute('transform', 'translate(0 ' + offsetY + ')');
+        Array.prototype.slice.call(svgNode.childNodes).forEach((child) => {
+          group.appendChild(child.cloneNode(true));
+        });
+        root.appendChild(group);
+        maxWidth = Math.max(maxWidth, width);
+        offsetY += height + (height * 0.1);
+      });
+
+      const finalHeight = Math.max(0, offsetY);
+      root.setAttribute('viewBox', '0 0 ' + maxWidth + ' ' + finalHeight);
+      root.setAttribute('width', String(maxWidth));
+      root.setAttribute('height', String(finalHeight));
+      return '<?xml version="1.0" encoding="UTF-8"?>\n' + (new XMLSerializer()).serializeToString(root);
+    }
+
+    function renderOutputPreview(svgList) {
+      if(!svgList || !svgList.length) return;
+      const shell = document.createElement('div');
+      shell.style.display = 'grid';
+      shell.style.gap = '10px';
+
+      const summary = document.createElement('div');
+      summary.className = 'small';
+      summary.textContent = 'Best result uses ' + svgList.length + ' bin(s). The final SVG will be copied to your clipboard and backed up locally.';
+      shell.appendChild(summary);
+
+      if(svgList.length > 1) {
+        const more = document.createElement('div');
+        more.className = 'small';
+        more.textContent = String(svgList.length - 1) + ' additional bin(s) are included in the saved final SVG.';
+        shell.appendChild(more);
+      }
+
+      mountPreview(shell, 'Nested result');
+    }
+
+    function resetNestMetrics() {
+      nestState.iterations = 0;
+      nestState.latestProgress = 0;
+      setMetricText(iterationsEl, '0');
+      setMetricText(efficiencyEl, '0%');
+      setMetricText(placedEl, '0/0');
+      setNestProgress(0);
+      updateSheetMetric();
+    }
+
+    function callNestJsx(functionName, argString, cb) {
+      loadJSX(function() {
+        const fallback = '{\\"ok\\":false,\\"error\\":\\"' + functionName + ' not loaded.\\"}';
+        const fnCall = '((typeof ' + functionName + ' === "function") ? ' + functionName + ' : ((typeof $ !== "undefined" && $.global && typeof $.global.' + functionName + ' === "function") ? $.global.' + functionName + ' : function(){return "' + fallback + '";}))(' + (argString || '') + ')';
+        callJSX(fnCall, cb);
+      });
+    }
+
+    function startNest() {
+      if(!window.SvgNest) {
+        showToast('SVGnest failed to load in this panel.', {type: 'error', title: 'Nest'});
+        return;
+      }
+      const source = buildNestSource();
+      if(!source) {
+        showToast('Load parts and provide a valid sheet size before nesting.', {type: 'warn', title: 'Nest'});
+        return;
+      }
+
+      stopNest();
+      nestState.latestPlacement = null;
+      nestState.latestResultSvgList = null;
+      nestState.latestOutputSvg = '';
+      nestState.latestOutputSvgPath = '';
+      lastSavedProgressPct = -1;
+      clearNestBackup();
+      resetNestMetrics();
+      updateButtons();
+      renderInputPreview();
+
+      const spacingPt = mmToPt(($('nestSpacingMm') && $('nestSpacingMm').value) || 0);
+      const curveTolerancePt = mmToPt(($('nestCurveToleranceMm') && $('nestCurveToleranceMm').value) || 0.5);
+      const config = {
+        spacing: spacingPt,
+        curveTolerance: curveTolerancePt,
+        rotations: parseInt((($('nestRotations') && $('nestRotations').value) || 4), 10) || 4,
+        populationSize: parseInt((($('nestPopulationSize') && $('nestPopulationSize').value) || 10), 10) || 10,
+        mutationRate: parseInt((($('nestMutationRate') && $('nestMutationRate').value) || 10), 10) || 10,
+        useHoles: !!($('nestUseHoles') && $('nestUseHoles').checked),
+        exploreConcave: !!($('nestExploreConcave') && $('nestExploreConcave').checked)
+      };
+
+      try {
+        if(typeof window !== 'undefined') {
+          window.__srhSvgNestUsePlacementOnlyCallback = true;
+          window.__srhSvgNestMaxWorkers = 1;
+          window.__srhSvgNestDisableWorkers = true;
+        }
+        window.SvgNest.config(config);
+        const parsedSvg = window.SvgNest.parsesvg(source.svgText);
+        const binNode = parsedSvg ? parsedSvg.querySelector('#nest-bin') : null;
+        if(!parsedSvg || !binNode) {
+          showToast('Could not prepare the nesting SVG input.', {type: 'error', title: 'Nest'});
+          return;
+        }
+        window.SvgNest.setbin(binNode);
+      } catch(e) {
+        showToast('SVGnest setup failed: ' + (e && e.message ? e.message : e), {type: 'error', title: 'Nest'});
+        logNest('SVGnest setup failed: ' + (e && e.message ? e.message : e));
+        return;
+      }
+
+      nestState.working = true;
+      saveNestRuntimeMarker('nest-start', {
+        partsLoaded: !!nestState.partsSvg
+      });
+      startNestHeartbeat();
+      updateButtons();
+      setNestStatus('Searching for a better nesting layout...');
+      logNest(
+        'Nest started. Sheet ' + source.binSize.widthMm.toFixed(2) + ' x ' + source.binSize.heightMm.toFixed(2) +
+        ' mm. Spacing ' + (($('nestSpacingMm') && $('nestSpacingMm').value) || 0) +
+        ' mm, rotations ' + config.rotations + ', population ' + config.populationSize + ', mutation ' + config.mutationRate + ', workers disabled=' + (!!(window && window.__srhSvgNestDisableWorkers)) + '.'
+      );
+      if(source.partBoundsText) {
+        logNest('Imported SVG geometry measured at ' + source.partBoundsText + ' pt with normalization scale ' + source.partScale.toFixed(4) + '.');
+        if(source.partNormalizationNote) {
+          logNest('Normalization detail: ' + source.partNormalizationNote + '.');
+        }
+      }
+      if(source.rawChildSummary) {
+        logNest('Nest source raw SVG children: ' + source.rawChildSummary + '.');
+      }
+      if(source.normalizedChildSummary) {
+        logNest('Nest source normalized children: ' + source.normalizedChildSummary + '.');
+      }
+
+      window.SvgNest.start(function(percent) {
+        setNestProgress(percent);
+        if(nestState.working) {
+          const elapsed = nestState.startTimeMs ? (Date.now() - nestState.startTimeMs) : 0;
+          const progressPct = Math.round((nestState.latestProgress || 0) * 100);
+          if(progressPct !== lastSavedProgressPct && progressPct % 5 === 0) {
+            lastSavedProgressPct = progressPct;
+            saveNestRuntimeMarker('nest-progress-' + progressPct, {progressPct: progressPct});
+          }
+          const resultState = nestState.iterations
+            ? ('best result after ' + nestState.iterations + ' iteration(s)')
+            : 'still searching for first result';
+          setNestStatus('Nesting... ' + formatNestElapsed(elapsed) + ' elapsed, pass ' + progressPct + '%, ' + resultState + '.');
+        }
+      }, function(svgList, efficiency, placed, total) {
+        const placementPayload = (!Array.isArray(svgList) && svgList && svgList.placementOnly && svgList.placements)
+          ? svgList
+          : null;
+        const hasSvgListResult = Array.isArray(svgList) && svgList.length > 0;
+        const hasPlacementResult = !!(placementPayload && placementPayload.placements && placementPayload.placements.length);
+        const resultBinCount = hasPlacementResult
+          ? placementPayload.placements.length
+          : (hasSvgListResult ? svgList.length : 0);
+
+        saveNestRuntimeMarker('result-callback-enter', {
+          binCount: resultBinCount
+        });
+        logNest('Result callback entered. Bins=' + resultBinCount + '.');
+
+        if(!hasSvgListResult && !hasPlacementResult) {
+          logNest('No improved placement in this pass.');
+          return;
+        }
+
+        nestState.iterations += 1;
+        setMetricText(iterationsEl, nestState.iterations);
+
+        if(typeof efficiency === 'number' && isFinite(efficiency)) {
+          setMetricText(efficiencyEl, Math.round(efficiency * 100) + '%');
+        }
+        if(typeof placed !== 'undefined' && typeof total !== 'undefined') {
+          setMetricText(placedEl, String(placed) + '/' + String(total));
+        }
+
+        if(hasSvgListResult || hasPlacementResult) {
+          try {
+            const binCount = resultBinCount;
+            nestState.latestPlacement = placementPayload ? placementPayload.placements : null;
+            nestState.latestResultSvgList = placementPayload ? null : svgList;
+            renderOutputPreview(placementPayload ? placementPayload.placements : svgList);
+            const efficiencyText = (typeof efficiency === 'number' && isFinite(efficiency)) ? (Math.round(efficiency * 100) + '%') : 'n/a';
+            const placedText = (typeof placed !== 'undefined' && typeof total !== 'undefined') ? (String(placed) + '/' + String(total)) : 'n/a';
+            const savedAtText = (new Date()).toLocaleString();
+            saveNestBackup({
+              rawPlacement: nestState.latestPlacement,
+              iterations: nestState.iterations,
+              efficiencyText: efficiencyText,
+              placedText: placedText,
+              sheetText: sheetSizeEl ? sheetSizeEl.textContent : '',
+              binCount: binCount,
+              savedAt: Date.now(),
+              savedAtText: savedAtText
+            });
+            copyTextToClipboard(buildNestClipboardPayload({
+              iterations: nestState.iterations,
+              efficiencyText: efficiencyText,
+              placedText: placedText,
+              binCount: binCount,
+              sheetText: sheetSizeEl ? sheetSizeEl.textContent : '',
+              savedAtText: savedAtText
+            }))
+              .then(() => {
+                saveNestRuntimeMarker('result-summary-copied');
+                showToast('Nest finished. Result summary copied to clipboard.', {type: 'success', title: 'Nest', duration: 20000});
+                logNest('Copied nest result summary to clipboard.');
+              })
+              .catch((copyErr) => {
+                logNest('Clipboard summary copy failed: ' + (copyErr && copyErr.message ? copyErr.message : copyErr));
+              });
+            setNestStatus('Best result updated after ' + nestState.iterations + ' iteration(s).');
+            logNest('Result #' + nestState.iterations + ': efficiency ' + efficiencyText + ', placed ' + placedText + ', bins ' + binCount + '.');
+            if(placementPayload) {
+              logNest('Stored raw placement data. Final SVG generation is deferred until you place or export it.');
+              updateButtons();
+              return;
+            }
+            updateButtons();
+            setTimeout(() => {
+              try {
+                saveNestRuntimeMarker('result-svg-save-begin');
+                const outputSvg = serializeOutputSvgList(svgList);
+                const outputFilePath = writeNestOutputToTempFile(outputSvg);
+                nestState.latestOutputSvg = outputSvg;
+                nestState.latestOutputSvgPath = outputFilePath;
+                saveNestBackup({
+                  outputSvg: '',
+                  outputFilePath: outputFilePath,
+                  iterations: nestState.iterations,
+                  efficiencyText: efficiencyText,
+                  placedText: placedText,
+                  sheetText: sheetSizeEl ? sheetSizeEl.textContent : '',
+                  binCount: svgList.length,
+                  savedAt: Date.now(),
+                  savedAtText: savedAtText
+                });
+                if(outputFilePath) {
+                  saveNestRuntimeMarker('result-svg-saved', {outputFilePath: outputFilePath});
+                  logNest('Saved final nest SVG to ' + outputFilePath + '.');
+                  copyTextToClipboard(buildNestClipboardPayload({
+                    iterations: nestState.iterations,
+                    efficiencyText: efficiencyText,
+                    placedText: placedText,
+                    binCount: svgList.length,
+                    sheetText: sheetSizeEl ? sheetSizeEl.textContent : '',
+                    outputFilePath: outputFilePath,
+                    savedAtText: savedAtText
+                  }))
+                    .then(() => {
+                      saveNestRuntimeMarker('result-filepath-copied', {outputFilePath: outputFilePath});
+                      logNest('Copied nest result file path to clipboard.');
+                    })
+                    .catch((copyErr) => {
+                      logNest('Clipboard file-path copy failed: ' + (copyErr && copyErr.message ? copyErr.message : copyErr));
+                    });
+                }
+                updateButtons();
+              } catch(renderErr) {
+                logNest('Deferred result save error: ' + (renderErr && renderErr.message ? renderErr.message : renderErr));
+              }
+            }, 0);
+          } catch(renderErr) {
+            logNest('Result handling error: ' + (renderErr && renderErr.message ? renderErr.message : renderErr));
+            setNestStatus('Result found, but preview rendering failed. You can still try placing it.');
+            updateButtons();
+          }
+        }
+      });
+    }
+
+    partsBtn.addEventListener('click', () => {
+      const loadingToast = showToast('Reading selected Illustrator artwork...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+      stopNest();
+      callNestJsx('signarama_helper_nest_captureSelectionAsSvg', '', (res) => {
+        if(loadingToast) loadingToast.close();
+        const payload = parseNestJson(res);
+        if(!payload.ok) {
+          showToast(payload.error || 'Failed to load selection as SVG.', {type: 'error', title: 'Nest'});
+          logNest('Load parts failed: ' + (payload.error || res));
+          if(payload.debug && payload.debug.length) {
+            payload.debug.forEach((line) => logNest('Debug: ' + line));
+          }
+          return;
+        }
+        nestState.partsSvg = String(payload.svgText || '');
+        nestState.partsMeta = payload;
+        nestState.latestPlacement = null;
+        nestState.latestResultSvgList = null;
+        nestState.latestOutputSvg = '';
+        nestState.latestOutputSvgPath = '';
+        clearNestBackup();
+        updatePartsSummary();
+        resetNestMetrics();
+        updateButtons();
+        renderInputPreview();
+        setNestStatus('Parts loaded. Ready to nest.');
+        logNest(
+          'Loaded ' + (payload.itemCount || 0) + ' part(s) from Illustrator selection. Bounds ' +
+          Number(payload.boundsMm && payload.boundsMm.width || 0).toFixed(2) + ' x ' +
+          Number(payload.boundsMm && payload.boundsMm.height || 0).toFixed(2) + ' mm' +
+          ' (scaleFactor=' + Number(payload.scaleFactor || 1) + ').'
+        );
+        logNest('Loaded-parts raw SVG children: ' + summarizeSvgChildrenFromText(nestState.partsSvg) + '.');
+        if(payload.debug && payload.debug.length) {
+          payload.debug.forEach((line) => logNest('Debug: ' + line));
+        }
+      });
+    });
+
+    if(captureSelectionSizeBtn) {
+      captureSelectionSizeBtn.addEventListener('click', () => {
+        const loadingToast = showToast('Reading selection bounds from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        callNestJsx('signarama_helper_nest_captureSelectionBounds', '', (res) => {
+          if(loadingToast) loadingToast.close();
+          const payload = parseNestJson(res);
+          if(!payload.ok) {
+            showToast(payload.error || 'Failed to capture selection bounds.', {type: 'error', title: 'Nest'});
+            logNest('Capture size failed: ' + (payload.error || res));
+            return;
+          }
+          nestState.selectionSize = payload;
+          updateSelectionSummary();
+          updateSheetMetric();
+          renderInputPreview();
+          setNestStatus('Selection size captured.');
+          logNest('Captured sheet size from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
+        });
+      });
+    }
+
+    startBtn.addEventListener('click', startNest);
+    if(stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        stopNest();
+        setNestStatus('Nesting stopped.');
+        logNest('Nest stopped.');
+      });
+    }
+    if(clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        stopNest();
+        nestState.latestPlacement = null;
+        nestState.latestResultSvgList = null;
+        nestState.latestOutputSvg = '';
+        nestState.latestOutputSvgPath = '';
+        clearNestBackup();
+        resetNestMetrics();
+        updateButtons();
+        renderInputPreview();
+        setNestStatus('Result cleared.');
+      });
+    }
+    if(placeBtn) {
+      placeBtn.addEventListener('click', () => {
+        if(!nestState.latestOutputSvg && !nestState.latestOutputSvgPath && !nestState.latestPlacement && (!nestState.latestResultSvgList || !nestState.latestResultSvgList.length)) {
+          showToast('Run a nest first so there is a result to place.', {type: 'warn', title: 'Nest'});
+          return;
+        }
+        const loadingToast = showToast('Placing nested SVG into Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        let outputSvg = String(nestState.latestOutputSvg || '');
+        try {
+          if(!outputSvg && nestState.latestOutputSvgPath) {
+            outputSvg = readNestOutputFromTempFile(nestState.latestOutputSvgPath);
+            nestState.latestOutputSvg = outputSvg;
+            if(outputSvg) logNest('Loaded the saved final SVG output from ' + nestState.latestOutputSvgPath + '.');
+          }
+          if(!outputSvg && nestState.latestPlacement && window.SvgNest && typeof window.SvgNest.applyPlacement === 'function') {
+            logNest('Generating final SVG from saved raw placement data.');
+            nestState.latestResultSvgList = window.SvgNest.applyPlacement(nestState.latestPlacement);
+          }
+          if(!outputSvg) {
+            outputSvg = serializeOutputSvgList(nestState.latestResultSvgList);
+            nestState.latestOutputSvg = outputSvg;
+            logNest('Prepared final SVG output (' + outputSvg.length + ' chars) for Illustrator placement.');
+          } else {
+            logNest('Using the saved final SVG output (' + outputSvg.length + ' chars) for Illustrator placement.');
+          }
+        } catch(serializeErr) {
+          if(loadingToast) loadingToast.close();
+          showToast('Could not prepare the final SVG output: ' + (serializeErr && serializeErr.message ? serializeErr.message : serializeErr), {type: 'error', title: 'Nest'});
+          logNest('Place result failed during serialization: ' + (serializeErr && serializeErr.message ? serializeErr.message : serializeErr));
+          return;
+        }
+        const safeSvg = jsxEscapeDoubleQuoted(outputSvg);
+        callNestJsx('signarama_helper_nest_placeSvgOnActiveArtboard', '"' + safeSvg + '"', (res) => {
+          if(loadingToast) loadingToast.close();
+          const text = String(res || '');
+          const isError = /^error:/i.test(text);
+          if(isError) {
+            showToast(text, {type: 'error', title: 'Nest'});
+            logNest('Place result failed: ' + text);
+            return;
+          }
+          showToast(text || 'Nested SVG placed in Illustrator.', {type: 'success', title: 'Nest'});
+          logNest(text || 'Placed nested SVG on active artboard.');
+        });
+      });
+    }
+
+    if(sizeModeField) sizeModeField.addEventListener('change', updateSizeModeUi);
+    ['nestBinWidthMm', 'nestBinHeightMm', 'nestSpacingMm', 'nestRotations', 'nestCurveToleranceMm', 'nestPopulationSize', 'nestMutationRate'].forEach((id) => {
+      const el = $(id);
+      if(!el) return;
+      el.addEventListener('input', () => {
+        updateSheetMetric();
+        renderInputPreview();
+      });
+      el.addEventListener('change', () => {
+        updateSheetMetric();
+        renderInputPreview();
+      });
+    });
+
+    updatePartsSummary();
+    updateSelectionSummary();
+    resetNestMetrics();
+    updateButtons();
+    updateSizeModeUi();
+    restoreNestBackup();
+    setNestStatus('Ready.');
   }
 
   function wireLightbox() {
