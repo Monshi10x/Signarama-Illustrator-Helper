@@ -872,7 +872,19 @@
 				newsvg.setAttribute('height',binBounds.height + 'px');
 				var binclone = bin.cloneNode(false);
 				
-				binclone.setAttribute('class','bin');
+				var existingBinClass = '';
+				try{
+					existingBinClass = binclone.getAttribute('class') || '';
+				}
+				catch(_eBinClass0){
+					existingBinClass = '';
+				}
+				if(existingBinClass){
+					binclone.setAttribute('class', existingBinClass + ' bin');
+				}
+				else{
+					binclone.setAttribute('class','bin');
+				}
 				binclone.setAttribute('transform','translate('+(-binBounds.x)+' '+(-binBounds.y)+')');
 				newsvg.appendChild(binclone);
 

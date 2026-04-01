@@ -1742,12 +1742,13 @@
     const sizeModeField = $('nestSizeMode');
     const manualSizeWrap = $('nestManualSizeFields');
     const selectionSizeWrap = $('nestSelectionSizeFields');
+    const selectionShapeWrap = $('nestSelectionShapeFields');
     const captureSelectionSizeBtn = $('btnNestCaptureSelectionSize');
+    const captureSelectionShapeBtn = $('btnNestCaptureSelectionShape');
     const partsSummary = $('nestPartsSummary');
     const selectionSummary = $('nestSelectionSizeSummary');
+    const selectionShapeSummary = $('nestSelectionShapeSummary');
     const statusText = $('nestStatusText');
-    const previewHost = $('nestPreviewHost');
-    const previewMode = $('nestPreviewMode');
     const progressBar = $('nestProgressBar');
     const logEl = $('nestLog');
     const iterationsEl = $('nestIterations');
@@ -1755,12 +1756,13 @@
     const placedEl = $('nestPlaced');
     const sheetSizeEl = $('nestSheetSize');
 
-    if(!partsBtn || !startBtn || !previewHost) return;
+    if(!partsBtn || !startBtn) return;
 
     const nestState = {
       partsSvg: '',
       partsMeta: null,
       selectionSize: null,
+      selectionBin: null,
       working: false,
       iterations: 0,
       latestPlacement: null,
@@ -1897,26 +1899,6 @@
         setMetricText(efficiencyEl, saved.efficiencyText || 'n/a');
         setMetricText(placedEl, saved.placedText || 'n/a');
         if(saved.sheetText) setMetricText(sheetSizeEl, saved.sheetText);
-        const shell = document.createElement('div');
-        shell.style.display = 'grid';
-        shell.style.gap = '10px';
-        const title = document.createElement('div');
-        title.className = 'small';
-        title.textContent = 'Recovered the latest nest result after a panel reload.';
-        shell.appendChild(title);
-        const meta = document.createElement('div');
-        meta.className = 'small';
-        meta.textContent = 'Iterations: ' + (saved.iterations || 0) + ', efficiency: ' + (saved.efficiencyText || 'n/a') + ', placed: ' + (saved.placedText || 'n/a') + '.';
-        shell.appendChild(meta);
-        const note = document.createElement('div');
-        note.className = 'small';
-        note.textContent = nestState.latestOutputSvgPath
-          ? ('Recovered result file: ' + nestState.latestOutputSvgPath)
-          : (nestState.latestPlacement
-            ? 'Recovered raw placement data. Final SVG generation is deferred until needed.'
-            : 'The final SVG remains available for Illustrator placement.');
-        shell.appendChild(note);
-        mountPreview(shell, 'Recovered result');
         setNestStatus('Recovered the last nest result after a panel reload.');
         logNest('Recovered a saved nest result from local storage.');
         updateButtons();
@@ -2048,6 +2030,15 @@
       selectionSummary.textContent = 'Captured selection bounds: ' + nestState.selectionSize.widthMm.toFixed(2) + ' x ' + nestState.selectionSize.heightMm.toFixed(2) + ' mm (' + nestState.selectionSize.itemCount + ' item(s)).';
     }
 
+    function updateSelectionShapeSummary() {
+      if(!selectionShapeSummary) return;
+      if(!nestState.selectionBin) {
+        selectionShapeSummary.textContent = 'No selection shape captured.';
+        return;
+      }
+      selectionShapeSummary.textContent = 'Captured bin shape: ' + nestState.selectionBin.widthMm.toFixed(2) + ' x ' + nestState.selectionBin.heightMm.toFixed(2) + ' mm (' + nestState.selectionBin.itemCount + ' item selected).';
+    }
+
     function updateSheetMetric() {
       const size = getBinSize();
       if(!size) {
@@ -2061,12 +2052,21 @@
       const mode = String((sizeModeField && sizeModeField.value) || 'manual');
       if(manualSizeWrap) manualSizeWrap.classList.toggle('hidden', mode !== 'manual');
       if(selectionSizeWrap) selectionSizeWrap.classList.toggle('hidden', mode !== 'selection');
+      if(selectionShapeWrap) selectionShapeWrap.classList.toggle('hidden', mode !== 'shape');
       updateSheetMetric();
-      renderInputPreview();
     }
 
     function getBinSize() {
       const mode = String((sizeModeField && sizeModeField.value) || 'manual');
+      if(mode === 'shape') {
+        if(!nestState.selectionBin) return null;
+        return {
+          widthPt: Number(nestState.selectionBin.widthPt) || 0,
+          heightPt: Number(nestState.selectionBin.heightPt) || 0,
+          widthMm: Number(nestState.selectionBin.widthMm) || 0,
+          heightMm: Number(nestState.selectionBin.heightMm) || 0
+        };
+      }
       if(mode === 'selection') {
         if(!nestState.selectionSize) return null;
         return {
@@ -2095,18 +2095,6 @@
       saveNestRuntimeMarker('nest-stop');
       clearNestHeartbeat();
       updateButtons();
-    }
-
-    function mountPreview(node, modeLabel) {
-      if(!previewHost) return;
-      previewHost.innerHTML = '';
-      if(node) previewHost.appendChild(node);
-      else previewHost.innerHTML = '<div class="nest-empty">Nothing to preview yet.</div>';
-      if(previewMode) previewMode.textContent = modeLabel || 'Preview';
-    }
-
-    function cloneSvgNode(svgNode) {
-      return svgNode ? svgNode.cloneNode(true) : null;
     }
 
     function measureSvgBounds(svgNode, targetNode) {
@@ -2139,6 +2127,7 @@
 
     function buildNestSource() {
       if(!nestState.partsSvg) return null;
+      const mode = String((sizeModeField && sizeModeField.value) || 'manual');
       const binSize = getBinSize();
       if(!binSize || !(binSize.widthPt > 0) || !(binSize.heightPt > 0)) return null;
 
@@ -2151,10 +2140,20 @@
       const out = document.createElementNS(ns, 'svg');
       out.setAttribute('xmlns', ns);
       out.setAttribute('version', '1.1');
+      const collectedStyleTexts = [];
+
+      function collectStyleText(rootNode) {
+        if(!rootNode || !rootNode.querySelectorAll) return;
+        Array.prototype.slice.call(rootNode.querySelectorAll('style')).forEach((styleNode) => {
+          const text = String((styleNode && styleNode.textContent) || '').trim();
+          if(text) collectedStyleTexts.push(text);
+        });
+      }
 
       const partsScaleGroup = document.createElementNS(ns, 'g');
       const partsOriginGroup = document.createElementNS(ns, 'g');
       partsScaleGroup.appendChild(partsOriginGroup);
+      collectStyleText(partSvg);
 
       const sourceWidthPt = Math.max(
         binSize.widthPt + mmToPt(10),
@@ -2219,16 +2218,61 @@
         out.setAttribute('data-srh-part-normalization-note', normalizationNote);
       }
 
-      const binRect = document.createElementNS(ns, 'rect');
-      binRect.setAttribute('id', 'nest-bin');
-      binRect.setAttribute('x', '0');
-      binRect.setAttribute('y', '0');
-      binRect.setAttribute('width', String(binSize.widthPt));
-      binRect.setAttribute('height', String(binSize.heightPt));
-      binRect.setAttribute('fill', 'none');
-      binRect.setAttribute('stroke', '#c8102e');
-      binRect.setAttribute('stroke-width', String(Math.max(1, mmToPt(0.2))));
-      out.appendChild(binRect);
+      if(mode === 'shape') {
+        if(!nestState.selectionBin || !nestState.selectionBin.svgText) return null;
+        const parsedBin = parser.parseFromString(String(nestState.selectionBin.svgText || ''), 'image/svg+xml');
+        const binSvg = parsedBin.documentElement;
+        if(!binSvg) return null;
+        collectStyleText(binSvg);
+        const binElement = binSvg.querySelector ? binSvg.querySelector('path, polygon, polyline, rect, circle, ellipse') : null;
+        if(!binElement) return null;
+        const binGroup = document.createElementNS(ns, 'g');
+        const binClone = binElement.cloneNode(true);
+        binClone.setAttribute('id', 'nest-bin');
+        const originalAppearance = nestState.selectionBin.originalAppearance || null;
+        if(originalAppearance) {
+          if(originalAppearance.filled) {
+            binClone.setAttribute('fill', String(originalAppearance.fillCss || 'none'));
+          } else {
+            binClone.setAttribute('fill', 'none');
+          }
+          if(originalAppearance.stroked) {
+            binClone.setAttribute('stroke', String(originalAppearance.strokeCss || 'none'));
+            if(Number(originalAppearance.strokeWidthPt || 0) > 0) {
+              binClone.setAttribute('stroke-width', String(Number(originalAppearance.strokeWidthPt || 0)));
+            }
+          } else {
+            binClone.setAttribute('stroke', 'none');
+          }
+          if(isFinite(Number(originalAppearance.opacity))) {
+            binClone.setAttribute('opacity', String(Number(originalAppearance.opacity)));
+          }
+        }
+        binGroup.appendChild(binClone);
+        out.appendChild(binGroup);
+        const binBounds = measureSvgBounds(out, binGroup);
+        if(!binBounds || !(binBounds.width > 0) || !(binBounds.height > 0)) return null;
+        binGroup.setAttribute('transform', 'translate(' + (-binBounds.x) + ' ' + (-binBounds.y) + ')');
+      } else {
+        const binRect = document.createElementNS(ns, 'rect');
+        binRect.setAttribute('id', 'nest-bin');
+        binRect.setAttribute('x', '0');
+        binRect.setAttribute('y', '0');
+        binRect.setAttribute('width', String(binSize.widthPt));
+        binRect.setAttribute('height', String(binSize.heightPt));
+        binRect.setAttribute('fill', 'none');
+        binRect.setAttribute('stroke', '#c8102e');
+        binRect.setAttribute('stroke-width', String(Math.max(1, mmToPt(0.2))));
+        out.appendChild(binRect);
+      }
+
+      if(collectedStyleTexts.length) {
+        const mergedStyle = document.createElementNS(ns, 'style');
+        mergedStyle.setAttribute('type', 'text/css');
+        mergedStyle.textContent = collectedStyleTexts.join('\n');
+        if(out.firstChild) out.insertBefore(mergedStyle, out.firstChild);
+        else out.appendChild(mergedStyle);
+      }
 
       const serialized = (new XMLSerializer()).serializeToString(out);
       const normalizedChildSummary = Array.prototype.slice.call(out.childNodes).map((child, index) => {
@@ -2237,7 +2281,6 @@
       }).filter(Boolean).join(', ');
       return {
         svgText: serialized,
-        previewSvg: out,
         binSize: binSize,
         partScale: Number(out.getAttribute('data-srh-part-scale') || 1),
         partBoundsText: String(out.getAttribute('data-srh-part-bounds') || ''),
@@ -2245,19 +2288,6 @@
         normalizedChildSummary: normalizedChildSummary,
         rawChildSummary: summarizeSvgChildrenFromText(nestState.partsSvg)
       };
-    }
-
-    function renderInputPreview() {
-      if(!nestState.partsSvg) {
-        mountPreview(null, 'Input preview');
-        return;
-      }
-      const source = buildNestSource();
-      if(!source) {
-        mountPreview(null, 'Input preview');
-        return;
-      }
-      mountPreview(cloneSvgNode(source.previewSvg), 'Input preview');
     }
 
     function serializeOutputSvgList(svgList) {
@@ -2292,27 +2322,6 @@
       root.setAttribute('width', String(maxWidth));
       root.setAttribute('height', String(finalHeight));
       return '<?xml version="1.0" encoding="UTF-8"?>\n' + (new XMLSerializer()).serializeToString(root);
-    }
-
-    function renderOutputPreview(svgList) {
-      if(!svgList || !svgList.length) return;
-      const shell = document.createElement('div');
-      shell.style.display = 'grid';
-      shell.style.gap = '10px';
-
-      const summary = document.createElement('div');
-      summary.className = 'small';
-      summary.textContent = 'Best result uses ' + svgList.length + ' bin(s). The final SVG will be copied to your clipboard and backed up locally.';
-      shell.appendChild(summary);
-
-      if(svgList.length > 1) {
-        const more = document.createElement('div');
-        more.className = 'small';
-        more.textContent = String(svgList.length - 1) + ' additional bin(s) are included in the saved final SVG.';
-        shell.appendChild(more);
-      }
-
-      mountPreview(shell, 'Nested result');
     }
 
     function resetNestMetrics() {
@@ -2353,7 +2362,6 @@
       clearNestBackup();
       resetNestMetrics();
       updateButtons();
-      renderInputPreview();
 
       const spacingPt = mmToPt(($('nestSpacingMm') && $('nestSpacingMm').value) || 0);
       const curveTolerancePt = mmToPt(($('nestCurveToleranceMm') && $('nestCurveToleranceMm').value) || 0.5);
@@ -2461,7 +2469,6 @@
             const binCount = resultBinCount;
             nestState.latestPlacement = placementPayload ? placementPayload.placements : null;
             nestState.latestResultSvgList = placementPayload ? null : svgList;
-            renderOutputPreview(placementPayload ? placementPayload.placements : svgList);
             const efficiencyText = (typeof efficiency === 'number' && isFinite(efficiency)) ? (Math.round(efficiency * 100) + '%') : 'n/a';
             const placedText = (typeof placed !== 'undefined' && typeof total !== 'undefined') ? (String(placed) + '/' + String(total)) : 'n/a';
             const savedAtText = (new Date()).toLocaleString();
@@ -2575,7 +2582,6 @@
         updatePartsSummary();
         resetNestMetrics();
         updateButtons();
-        renderInputPreview();
         setNestStatus('Parts loaded. Ready to nest.');
         logNest(
           'Loaded ' + (payload.itemCount || 0) + ' part(s) from Illustrator selection. Bounds ' +
@@ -2604,9 +2610,30 @@
           nestState.selectionSize = payload;
           updateSelectionSummary();
           updateSheetMetric();
-          renderInputPreview();
           setNestStatus('Selection size captured.');
           logNest('Captured sheet size from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
+        });
+      });
+    }
+    if(captureSelectionShapeBtn) {
+      captureSelectionShapeBtn.addEventListener('click', () => {
+        const loadingToast = showToast('Reading selection shape from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        callNestJsx('signarama_helper_nest_captureSelectionShapeAsSvg', '', (res) => {
+          if(loadingToast) loadingToast.close();
+          const payload = parseNestJson(res);
+          if(!payload.ok) {
+            showToast(payload.error || 'Failed to capture selection shape.', {type: 'error', title: 'Nest'});
+            logNest('Capture shape failed: ' + (payload.error || res));
+            if(payload.debug && payload.debug.length) {
+              payload.debug.forEach((line) => logNest('Debug: ' + line));
+            }
+            return;
+          }
+          nestState.selectionBin = payload;
+          updateSelectionShapeSummary();
+          updateSheetMetric();
+          setNestStatus('Selection shape captured.');
+          logNest('Captured bin shape from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
         });
       });
     }
@@ -2629,7 +2656,6 @@
         clearNestBackup();
         resetNestMetrics();
         updateButtons();
-        renderInputPreview();
         setNestStatus('Result cleared.');
       });
     }
@@ -2686,16 +2712,15 @@
       if(!el) return;
       el.addEventListener('input', () => {
         updateSheetMetric();
-        renderInputPreview();
       });
       el.addEventListener('change', () => {
         updateSheetMetric();
-        renderInputPreview();
       });
     });
 
     updatePartsSummary();
     updateSelectionSummary();
+    updateSelectionShapeSummary();
     resetNestMetrics();
     updateButtons();
     updateSizeModeUi();

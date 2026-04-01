@@ -243,6 +243,20 @@
 		var rotate = Math.atan2(tarray[1], tarray[3])*180/Math.PI;
 		var scale = Math.sqrt(tarray[0]*tarray[0]+tarray[2]*tarray[2]);
 
+		function copyPresentationAttributes(fromEl, toEl){
+			if(!fromEl || !toEl || !fromEl.attributes){
+				return;
+			}
+			var attrs = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', 'fill-rule', 'fill-opacity', 'stroke-opacity', 'opacity', 'style'];
+			for(var ai=0; ai<attrs.length; ai++){
+				try{
+					if(fromEl.hasAttribute(attrs[ai])){
+						toEl.setAttribute(attrs[ai], fromEl.getAttribute(attrs[ai]));
+					}
+				}
+				catch(_eCopyPres0){}
+			}
+		}
 		if(element.tagName == 'g' || element.tagName == 'svg' || element.tagName == 'defs' || element.tagName == 'clipPath'){
 			element.removeAttribute('transform');
 			var children = Array.prototype.slice.call(element.childNodes);
@@ -261,6 +275,7 @@
 				case 'ellipse':
 					// the goal is to remove the transform property, but an ellipse without a transform will have no rotation
 					// for the sake of simplicity, we will replace the ellipse with a path, and apply the transform to that path
+					var ellipseOriginal = element;
 					var path = this.svg.createElementNS(element.namespaceURI, 'path');
 					var move = path.createSVGPathSegMovetoAbs(parseFloat(element.getAttribute('cx'))-parseFloat(element.getAttribute('rx')),element.getAttribute('cy'));
 					var arc1 = path.createSVGPathSegArcAbs(parseFloat(element.getAttribute('cx'))+parseFloat(element.getAttribute('rx')),element.getAttribute('cy'),element.getAttribute('rx'),element.getAttribute('ry'),0,1,0);
@@ -275,6 +290,7 @@
 					if(transformProperty){
 						path.setAttribute('transform', transformProperty);
 					}
+					copyPresentationAttributes(ellipseOriginal, path);
 					
 					element.parentElement.replaceChild(path, element);
 
@@ -395,6 +411,7 @@
 				break;
 				case 'rect':
 					// similar to the ellipse, we'll replace rect with polygon
+					var rectOriginal = element;
 					var polygon = this.svg.createElementNS(element.namespaceURI, 'polygon');
 															
 					var p1 = this.svgRoot.createSVGPoint();
@@ -423,6 +440,7 @@
 					if(transformProperty){
 						polygon.setAttribute('transform', transformProperty);
 					}
+					copyPresentationAttributes(rectOriginal, polygon);
 					
 					element.parentElement.replaceChild(polygon, element);
 					element = polygon;
