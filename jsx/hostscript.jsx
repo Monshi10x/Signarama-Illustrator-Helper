@@ -6204,6 +6204,30 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       } catch(_eAncCollect) { }
       return out.length ? out : null;
     }
+    function _targetOrAncestorMatchesAliases(item, aliasList) {
+      var aliasNorms = [];
+      for(var a = 0; a < aliasList.length; a++) {
+        var aliasNorm = _normalizeTargetAliasName(aliasList[a]);
+        if(aliasNorm) aliasNorms.push(aliasNorm);
+      }
+      var nm = '';
+      try {nm = String(item && item.name || '');} catch(_eTgtAliasNm) {nm = '';}
+      var norm = _normalizeTargetAliasName(nm);
+      if(norm) {
+        for(var n = 0; n < aliasNorms.length; n++) {
+          if(norm === aliasNorms[n] || norm.indexOf(aliasNorms[n]) >= 0) return true;
+        }
+      }
+      return _itemAncestorMatchesAliases(item, aliasNorms);
+    }
+    function _filterTargetsExcludingAliases(list, excludeAliasList) {
+      if(!list || !list.length) return list;
+      var out = [];
+      for(var i = 0; i < list.length; i++) {
+        if(!_targetOrAncestorMatchesAliases(list[i], excludeAliasList)) out.push(list[i]);
+      }
+      return out.length ? out : null;
+    }
     function _debugTargetNames(list) {
       var out = [];
       if(!list || !list.length) return '[]';
@@ -6399,6 +6423,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var derivedItemNumber = _readByPath(row, 'Derived.itemNumber');
     if(derivedItemNumber == null) derivedItemNumber = _readByPath(row, 'Id');
     var itemNumberFrames = _collectTextTargetsByAliases(['Item Number', 'Item No', 'Item #', 'Order Product ID', 'Order Product Id', 'Product ID', 'Product Id']);
+    itemNumberFrames = _filterTargetsExcludingAliases(itemNumberFrames, ['Line Item Number', 'Line Item No', 'Line Item #', 'Line Item']);
     var itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item Number');
     if((!itemNumberContainers || !itemNumberContainers.length)) itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item No');
     proofDebugLines.push('ItemNumber value="' + _debugValue(derivedItemNumber) + '" frames=' + _debugTargetNames(itemNumberFrames) + ' containers=' + _debugTargetNames(itemNumberContainers));
