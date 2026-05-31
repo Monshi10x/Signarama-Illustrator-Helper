@@ -6138,6 +6138,47 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       if(norm && frameMapNormalized[norm] && frameMapNormalized[norm].length) return frameMapNormalized[norm];
       return null;
     }
+    function _normalizeTargetAliasName(value) {
+      return String(value == null ? '' : value)
+        .replace(/\u00a0/g, ' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^\s+|\s+$/g, '');
+    }
+    function _collectTextTargetsByAliases(aliasList) {
+      var out = [];
+      var seen = [];
+      function _pushList(list) {
+        if(!list || !list.length) return;
+        for(var i = 0; i < list.length; i++) {
+          var item = list[i];
+          var already = false;
+          for(var s = 0; s < seen.length; s++) {if(seen[s] === item) {already = true; break;}}
+          if(!already) {seen.push(item); out.push(item);}
+        }
+      }
+      for(var a = 0; a < aliasList.length; a++) _pushList(_getTextTargetsByName(aliasList[a]));
+      if(out.length) return out;
+      var aliasNorms = [];
+      for(var an = 0; an < aliasList.length; an++) {
+        var aliasNorm = _normalizeTargetAliasName(aliasList[an]);
+        if(aliasNorm) aliasNorms.push(aliasNorm);
+      }
+      for(var key in frameMap) {
+        if(!frameMap.hasOwnProperty(key)) continue;
+        var keyNorm = _normalizeTargetAliasName(key);
+        if(!keyNorm) continue;
+        for(var k = 0; k < aliasNorms.length; k++) {
+          var alias = aliasNorms[k];
+          if(keyNorm === alias || keyNorm.indexOf(alias) >= 0 || alias.indexOf(keyNorm) >= 0) {
+            _pushList(frameMap[key]);
+            break;
+          }
+        }
+      }
+      return out.length ? out : null;
+    }
     var allItems = doc.pageItems;
     for(var p = 0; p < allItems.length; p++) {
       var item = allItems[p];
@@ -6274,8 +6315,11 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       }
     }
     var derivedQuantity = _readByPath(row, 'Derived.productQty');
-    var quantityFrames = _getTextTargetsByName('Quantity');
-    if((!quantityFrames || !quantityFrames.length)) quantityFrames = _getTextTargetsByName('Quantity Text');
+    var quantityFrames = _collectTextTargetsByAliases(['Quantity', 'Quantity Text', 'Qty', 'Qty Text', 'Product Quantity', 'Product Qty']);
+    var quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity Text');
+    if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity');
+    if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty Text');
+    if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty');
     if(quantityFrames && quantityFrames.length && derivedQuantity != null) {
       var quantityValue = _toTextValue(derivedQuantity);
       for(var qf = 0; qf < quantityFrames.length; qf++) {
@@ -6285,8 +6329,14 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eQtySet) { }
       }
     }
+    if((!quantityFrames || !quantityFrames.length) && quantityContainers && quantityContainers.length && derivedQuantity != null) {
+      var quantityValue2 = _toTextValue(derivedQuantity);
+      for(var qc = 0; qc < quantityContainers.length; qc++) {
+        forcedQuantityApplied += _setTextInContainer(quantityContainers[qc], quantityValue2);
+      }
+    }
     var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
-    var substrateFrames = _getTextTargetsByName('Substrate Text');
+    var substrateFrames = _collectTextTargetsByAliases(['Substrate Text', 'Substrate', 'Material', 'Material Text']);
     if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
       var substrateValue = _normalizeSubstrateProofText(_toTextValue(derivedSubstrate));
       for(var sf = 0; sf < substrateFrames.length; sf++) {

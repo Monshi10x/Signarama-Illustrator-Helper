@@ -1255,6 +1255,10 @@
       }
       function removeWordsForSubstrateFinish(value, materialName, thicknessClean) {
         let finish = String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        finish = finish
+          .replace(/\([^)]*\)/g, ' ')
+          .replace(/\b\d+(?:\.\d+)?(?:\s*x\s*\d+(?:\.\d+)?)+\b/ig, ' ')
+          .replace(/\b(?:sqm|sq\s*m|m2)\b/ig, ' ');
         if(thicknessClean) {
           const escapedThickness = escapeRegExp(thicknessClean);
           finish = finish
