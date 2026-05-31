@@ -6143,6 +6143,28 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         .replace(/\s+/g, ' ')
         .replace(/^\s+|\s+$/g, '');
     }
+    function _itemAncestorMatchesAliases(item, aliasNorms) {
+      var p = null;
+      try {p = item ? item.parent : null;} catch(_eAnc0) {p = null;}
+      var guard = 0;
+      while(p && guard < 30) {
+        guard++;
+        var tn = '';
+        try {tn = String(p.typename || '');} catch(_eAncType) {tn = '';}
+        if(tn === 'Document') return false;
+        var nm = '';
+        try {nm = String(p.name || '');} catch(_eAncName) {nm = '';}
+        var norm = _normalizeTargetAliasName(nm);
+        if(norm) {
+          for(var i = 0; i < aliasNorms.length; i++) {
+            var alias = aliasNorms[i];
+            if(norm === alias || norm.indexOf(alias) >= 0) return true;
+          }
+        }
+        try {p = p.parent;} catch(_eAncNext) {p = null;}
+      }
+      return false;
+    }
     function _collectTextTargetsByAliases(aliasList) {
       var out = [];
       var seen = [];
@@ -6174,6 +6196,12 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
           }
         }
       }
+      if(out.length) return out;
+      try {
+        for(var tf = 0; tf < allFrames.length; tf++) {
+          if(_itemAncestorMatchesAliases(allFrames[tf], aliasNorms)) _pushList([allFrames[tf]]);
+        }
+      } catch(_eAncCollect) { }
       return out.length ? out : null;
     }
     function _debugTargetNames(list) {
@@ -6184,7 +6212,21 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         try {nm = String(list[i].name || '');} catch(_eDbgName) {nm = '';}
         var tn = '';
         try {tn = String(list[i].typename || '');} catch(_eDbgType) {tn = '';}
-        out.push((nm || '(unnamed)') + (tn ? ':' + tn : ''));
+        var parents = [];
+        var p = null;
+        try {p = list[i].parent;} catch(_eDbgParent0) {p = null;}
+        var guard = 0;
+        while(p && guard < 5) {
+          guard++;
+          var pType = '';
+          try {pType = String(p.typename || '');} catch(_eDbgParentType) {pType = '';}
+          if(pType === 'Document') break;
+          var pName = '';
+          try {pName = String(p.name || '');} catch(_eDbgParentName) {pName = '';}
+          if(pName) parents.push(pName);
+          try {p = p.parent;} catch(_eDbgParentNext) {p = null;}
+        }
+        out.push((nm || '(unnamed)') + (tn ? ':' + tn : '') + (parents.length ? ' parent=' + parents.join('>') : ''));
       }
       return '[' + out.join(', ') + ']';
     }
