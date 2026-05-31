@@ -6375,6 +6375,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       }
     }
     var derivedLineItemNumber = _readByPath(row, 'Derived.lineItemNumber');
+    if(derivedLineItemNumber == null) derivedLineItemNumber = _readByPath(row, 'lineItemOrder');
     if(derivedLineItemNumber == null) derivedLineItemNumber = _readByPath(row, 'LineItemOrder');
     var lineItemFrames = _collectTextTargetsByAliases(['Line Item Number', 'Line Item No', 'Line Item #', 'Line Item']);
     var lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item Number');

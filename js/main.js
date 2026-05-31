@@ -1180,7 +1180,10 @@
     async function buildCorebridgeProofPayload() {
       const primaryRow = (Array.isArray(corebridgeLastFilteredData) && corebridgeLastFilteredData.length) ? corebridgeLastFilteredData[0] : {};
       const orderProductId = String(primaryRow && primaryRow.Id != null ? primaryRow.Id : (primaryRow && primaryRow.OrderProductId != null ? primaryRow.OrderProductId : (primaryRow && primaryRow.OrderProductID != null ? primaryRow.OrderProductID : ''))).trim();
-      const lineItemOrder = parseInt((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : 1, 10) || 1;
+      const corebridgeLineItemOrderRaw = primaryRow && primaryRow.lineItemOrder != null
+        ? primaryRow.lineItemOrder
+        : (primaryRow && primaryRow.LineItemOrder != null ? primaryRow.LineItemOrder : '');
+      const lineItemOrder = parseInt(corebridgeLineItemOrderRaw !== '' ? corebridgeLineItemOrderRaw : 1, 10) || 1;
 
       const secondary = corebridgeLastSecondaryFetchResults || {};
       const quoteRows = Array.isArray(secondary.quoteLevel) ? secondary.quoteLevel : [];
@@ -1213,7 +1216,7 @@
       const quoteItemIndex = lineItemOrder - 1;
       const quoteItem = (Array.isArray(quoteItems) && quoteItemIndex >= 0 && quoteItems.length > quoteItemIndex) ? quoteItems[quoteItemIndex] : null;
       const productQty = quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '';
-      const lineItemNumber = String((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : lineItemOrder);
+      const lineItemNumber = String(corebridgeLineItemOrderRaw !== '' ? corebridgeLineItemOrderRaw : lineItemOrder);
       const lineItemDescriptionHtml = quoteItem && quoteItem.I1 != null ? String(quoteItem.I1) : '';
       const lineItemDescription = htmlToPlainText(lineItemDescriptionHtml);
       const partPeekViews = Array.isArray(quoteItem && quoteItem.PartPeekViews) ? quoteItem.PartPeekViews : [];
@@ -1425,12 +1428,14 @@
           installAddressSource: installAddressDetails.source,
           installAddressTrace: installAddressDetails.debug,
           selectedRow: {
+            lineItemOrder: primaryRow && primaryRow.lineItemOrder != null ? primaryRow.lineItemOrder : null,
             LineItemOrder: primaryRow && primaryRow.LineItemOrder != null ? primaryRow.LineItemOrder : null,
             Id: primaryRow && primaryRow.Id != null ? primaryRow.Id : null,
             OrderProductId: primaryRow && primaryRow.OrderProductId != null ? primaryRow.OrderProductId : null,
             OrderProductID: primaryRow && primaryRow.OrderProductID != null ? primaryRow.OrderProductID : null
           },
           quoteLineItemSelection: {
+            corebridgeLineItemOrderRaw: corebridgeLineItemOrderRaw,
             lineItemOrder: lineItemOrder,
             quoteItemIndex: quoteItemIndex,
             quoteItemsCount: Array.isArray(quoteItems) ? quoteItems.length : 0,
@@ -1475,6 +1480,7 @@
       const item = String(itemNumber == null ? '' : itemNumber).trim();
       if(!item) return true;
       const candidates = [
+        row && row.lineItemOrder,
         row && row.LineItemOrder,
         row && row.Id,
         row && row.OrderProductId,
