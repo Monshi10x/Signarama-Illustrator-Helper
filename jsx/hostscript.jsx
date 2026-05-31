@@ -5265,6 +5265,49 @@ function _srh_corebridge_makeRgb(r, g, b) {
   c.blue = b;
   return c;
 }
+function _srh_corebridge_metaEscape(value) {
+  return String(value == null ? '' : value)
+    .replace(/\\/g, '\\\\')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\|/g, '\\p');
+}
+function _srh_corebridge_metaUnescape(value) {
+  var s = String(value == null ? '' : value);
+  var out = '';
+  for(var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    if(ch === '\\' && i + 1 < s.length) {
+      var n = s.charAt(++i);
+      if(n === 'n') out += '\n';
+      else if(n === 'r') out += '\r';
+      else if(n === 'p') out += '|';
+      else out += n;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+function _srh_corebridge_flashArrowNote(frameName, baseValue) {
+  return 'SRH_FLASH_ARROW|frame=' + _srh_corebridge_metaEscape(frameName) + '|base=' + _srh_corebridge_metaEscape(baseValue);
+}
+function _srh_corebridge_parseFlashArrowNote(noteText) {
+  var raw = String(noteText == null ? '' : noteText);
+  if(raw.indexOf('SRH_FLASH_ARROW') !== 0) return null;
+  var out = {frameName: '', baseValue: ''};
+  var parts = raw.split('|');
+  for(var i = 1; i < parts.length; i++) {
+    var part = parts[i];
+    var eq = part.indexOf('=');
+    if(eq < 0) continue;
+    var key = part.substring(0, eq);
+    var val = _srh_corebridge_metaUnescape(part.substring(eq + 1));
+    if(key === 'frame') out.frameName = val;
+    else if(key === 'base') out.baseValue = val;
+  }
+  return out;
+}
 function _srh_corebridge_parseFlashFieldNames(rawText) {
   function _trim(v) {return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');}
   var out = [];
@@ -5303,6 +5346,36 @@ function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
   } catch(_eTfClr2) { }
   return false;
 }
+function _srh_corebridge_isBlackColorValue(colorValue) {
+  if(!colorValue) return false;
+  try {
+    var tn = String(colorValue.typename || '');
+    if(tn === 'RGBColor') return Number(colorValue.red) <= 1 && Number(colorValue.green) <= 1 && Number(colorValue.blue) <= 1;
+    if(tn === 'CMYKColor') return Number(colorValue.cyan) <= 1 && Number(colorValue.magenta) <= 1 && Number(colorValue.yellow) <= 1 && Number(colorValue.black) >= 99;
+    if(tn === 'GrayColor') return Number(colorValue.gray) <= 1;
+  } catch(_eBlackColor) { }
+  return false;
+}
+function _srh_corebridge_textFrameIsBlack(textFrame) {
+  if(!textFrame) return false;
+  try {
+    if(textFrame.textRange && textFrame.textRange.characterAttributes) {
+      if(_srh_corebridge_isBlackColorValue(textFrame.textRange.characterAttributes.fillColor)) return true;
+    }
+  } catch(_eTfBlack0) { }
+  try {
+    if(textFrame.characters && textFrame.characters.length) {
+      var checked = 0;
+      for(var i = 0; i < textFrame.characters.length && checked < 5; i++) {
+        try {
+          checked++;
+          if(_srh_corebridge_isBlackColorValue(textFrame.characters[i].characterAttributes.fillColor)) return true;
+        } catch(_eTfBlack1) { }
+      }
+    }
+  } catch(_eTfBlack2) { }
+  return false;
+}
 function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
   if(!doc) return null;
   var layer = null;
@@ -5333,10 +5406,23 @@ function _srh_corebridge_finalizeArrowLayer(doc) {
 }
 function _srh_corebridge_removeArrow(entry) {
   if(!entry || !entry.arrowGroup) return;
+  var arrowLayer = null;
+  try {arrowLayer = entry.arrowGroup.layer;} catch(_eArrowLayerFromGroup) {arrowLayer = null;}
+  if(!arrowLayer && _srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
+    try {arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);} catch(_eArrowLayerFallback) {arrowLayer = null;}
+  }
+  var wasLocked = false;
+  if(arrowLayer) {
+    try {wasLocked = !!arrowLayer.locked;} catch(_eArrowWasLocked) {wasLocked = false;}
+    try {arrowLayer.locked = false;} catch(_eArrowUnlockRm) { }
+  }
   try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
+  if(arrowLayer && wasLocked) {
+    try {arrowLayer.locked = true;} catch(_eArrowRelockRm) { }
+  }
   entry.arrowGroup = null;
 }
-function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
+function _srh_corebridge_createArrowForTextFrame(doc, textFrame, baseValue) {
   if(!doc || !textFrame) return null;
   var layer = _srh_corebridge_getArrowLayer(doc, true);
   if(!layer) return null;
@@ -5363,6 +5449,9 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
 
     group = layer.groupItems.add();
     group.name = 'SRH_FlashArrow';
+    var frameNameForNote = '';
+    try {frameNameForNote = String(textFrame.name || '');} catch(_eArrowFrameName) {frameNameForNote = '';}
+    try {group.note = _srh_corebridge_flashArrowNote(frameNameForNote, baseValue);} catch(_eArrowNote) { }
 
     var shaft = group.pathItems.add();
     shaft.setEntirePath([[tailX, centerY], [tipX, centerY]]);
@@ -5393,6 +5482,70 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
     return null;
   }
 }
+function _srh_corebridge_clearFlashArrowLayer(doc) {
+  var layer = _srh_corebridge_getArrowLayer(doc, false);
+  if(!layer) return 0;
+  var removed = 0;
+  var wasLocked = false;
+  try {wasLocked = !!layer.locked;} catch(_eClearLock0) {wasLocked = false;}
+  try {layer.locked = false;} catch(_eClearUnlock) { }
+  try {
+    while(layer.pageItems && layer.pageItems.length) {
+      try {layer.pageItems[0].remove(); removed++;} catch(_eClearItem) {break;}
+    }
+  } catch(_eClearLoop) { }
+  try {
+    if(layer.pageItems && layer.pageItems.length === 0) layer.remove();
+    else if(wasLocked) layer.locked = true;
+  } catch(_eClearFinish) {
+    try {if(wasLocked) layer.locked = true;} catch(_eClearRelock) { }
+  }
+  return removed;
+}
+function _srh_corebridge_findTextFrameByName(doc, frameName) {
+  if(!doc || !frameName) return null;
+  var targetNorm = String(frameName).toLowerCase();
+  var frames = null;
+  try {frames = doc.textFrames;} catch(_eFindTf0) {frames = null;}
+  if(!frames) return null;
+  for(var i = 0; i < frames.length; i++) {
+    var nm = '';
+    try {nm = String(frames[i].name || '');} catch(_eFindTf1) {nm = '';}
+    if(nm && nm.toLowerCase() === targetNorm) return frames[i];
+  }
+  return null;
+}
+function _srh_corebridge_collectFlashEntriesFromLayer(doc) {
+  var entries = [];
+  var layer = _srh_corebridge_getArrowLayer(doc, false);
+  if(!layer) return entries;
+  var groups = null;
+  try {groups = layer.groupItems;} catch(_eCollectGrp0) {groups = null;}
+  if(!groups) return entries;
+  for(var i = 0; i < groups.length; i++) {
+    var group = groups[i];
+    var note = '';
+    var nm = '';
+    try {note = String(group.note || '');} catch(_eCollectNote) {note = '';}
+    try {nm = String(group.name || '');} catch(_eCollectName) {nm = '';}
+    if(note.indexOf('SRH_FLASH_ARROW') !== 0 && nm !== 'SRH_FlashArrow') continue;
+    var meta = _srh_corebridge_parseFlashArrowNote(note) || {frameName: '', baseValue: ''};
+    var frame = _srh_corebridge_findTextFrameByName(doc, meta.frameName);
+    entries.push({frame: frame, baseValue: meta.baseValue, arrowGroup: group, frameName: meta.frameName});
+  }
+  return entries;
+}
+function _srh_corebridge_ensureFlashStateFromDocument() {
+  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) return true;
+  var doc = null;
+  try {if(app.documents.length) doc = app.activeDocument;} catch(_eEnsDoc) {doc = null;}
+  if(!doc) return false;
+  var entries = _srh_corebridge_collectFlashEntriesFromLayer(doc);
+  if(!entries.length) return false;
+  _srhCorebridgeFlashState = {doc: doc, entries: entries, isRed: true};
+  _srh_corebridge_flashDebug('Rebuilt flash state from arrow layer. entries=' + entries.length);
+  return true;
+}
 function _srh_corebridge_stopFlashing(resetToBlack) {
   if(_srhCorebridgeFlashTaskId != null) {
     _srh_corebridge_flashDebug('Stopping flash task id=' + _srhCorebridgeFlashTaskId + ' (resetToBlack=' + (resetToBlack ? 'yes' : 'no') + ')');
@@ -5415,9 +5568,11 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
 function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashTickCount++;
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
-    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
-    _srh_corebridge_stopFlashing(false);
-    return false;
+    if(!_srh_corebridge_ensureFlashStateFromDocument()) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
+      _srh_corebridge_stopFlashing(false);
+      return false;
+    }
   }
   var entries = _srhCorebridgeFlashState.entries;
   _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | mode=state-check');
@@ -5425,6 +5580,7 @@ function _srh_corebridge_flashTick() {
   for(var i = entries.length - 1; i >= 0; i--) {
     var entry = entries[i];
     if(!entry || !entry.frame) {
+      _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
@@ -5433,12 +5589,19 @@ function _srh_corebridge_flashTick() {
     try {frameName = String(entry.frame.name || '');} catch(_eFlashName) {frameName = '';}
     try {currentValue = String(entry.frame.contents == null ? '' : entry.frame.contents);} catch(_eFlashRead) {
       _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' removing entry index=' + i + ' (failed reading contents).');
+      _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
     if(currentValue !== entry.baseValue) {
       _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      _srh_corebridge_removeArrow(entry);
+      entries.splice(i, 1);
+      continue;
+    }
+    if(_srh_corebridge_textFrameIsBlack(entry.frame)) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '" because text is already black -> remove arrow.');
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
@@ -5495,6 +5658,10 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   _srh_corebridge_flashDebug('Start flashing requested. Raw text="' + String(flashFieldsText == null ? '' : flashFieldsText) + '"');
   var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
   _srh_corebridge_stopFlashing(true);
+  if(doc) {
+    var clearedArrows = _srh_corebridge_clearFlashArrowLayer(doc);
+    if(clearedArrows) _srh_corebridge_flashDebug('Cleared stale flash arrows before starting new monitor. removed=' + clearedArrows);
+  }
   _srhCorebridgeFlashTickCount = 0;
   if(!doc || !names.length) return {requested: names.length, found: 0};
 
@@ -5531,7 +5698,7 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   var red = _srh_corebridge_makeRgb(255, 0, 0);
   for(var e = 0; e < entries.length; e++) {
     try {_srh_corebridge_setTextFrameColor(entries[e].frame, red);} catch(_eFlashInitRed) { }
-    entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame);
+    entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame, entries[e].baseValue);
   }
   _srh_corebridge_flashTick();
   try {
@@ -5985,6 +6152,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var forcedMediaApplied = 0;
     var forcedLaminateApplied = 0;
     var forcedSubstrateApplied = 0;
+    var forcedQuantityApplied = 0;
     var forcedPartsApplied = 0;
     var forcedNotesApplied = 0;
     var fallbackContainerTextApplied = 0;
@@ -6083,6 +6251,18 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eLamSet) { }
       }
     }
+    var derivedQuantity = _readByPath(row, 'Derived.productQty');
+    var quantityFrames = _getTextTargetsByName('Quantity');
+    if((!quantityFrames || !quantityFrames.length)) quantityFrames = _getTextTargetsByName('Quantity Text');
+    if(quantityFrames && quantityFrames.length && derivedQuantity != null) {
+      var quantityValue = _toTextValue(derivedQuantity);
+      for(var qf = 0; qf < quantityFrames.length; qf++) {
+        try {
+          quantityFrames[qf].contents = quantityValue;
+          forcedQuantityApplied++;
+        } catch(_eQtySet) { }
+      }
+    }
     var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
     var substrateFrames = _getTextTargetsByName('Substrate Text');
     if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
@@ -6165,6 +6345,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Media Text updates: ' + forcedMediaApplied +
       '. Forced Laminate Text updates: ' + forcedLaminateApplied +
       '. Forced Substrate Text updates: ' + forcedSubstrateApplied +
+      '. Forced Quantity updates: ' + forcedQuantityApplied +
       '. Forced Parts updates: ' + forcedPartsApplied +
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +

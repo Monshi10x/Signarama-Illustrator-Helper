@@ -1206,7 +1206,14 @@
         ? notesSuccessRow.response.notesByType
         : [];
 
-      const quoteItems = readValueAtPath(quoteData, 'OrderInformation.OrderInformation.H2');
+      function readQuoteLineItems(data) {
+        const direct = readValueAtPath(data, 'OrderInformation.OrderInformation.H2');
+        if(Array.isArray(direct)) return direct;
+        const wrapped = readValueAtPath(data, 'data.OrderInformation.OrderInformation.H2');
+        if(Array.isArray(wrapped)) return wrapped;
+        return [];
+      }
+      const quoteItems = readQuoteLineItems(quoteData);
       const quoteItem = (Array.isArray(quoteItems) && quoteItems.length >= lineItemOrder) ? quoteItems[lineItemOrder - 1] : null;
       const productQty = quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '';
       const lineItemDescriptionHtml = quoteItem && quoteItem.I1 != null ? String(quoteItem.I1) : '';
@@ -1221,26 +1228,31 @@
       const mediaText = Array.isArray(groupedPartTypes['Vinyl -']) ? groupedPartTypes['Vinyl -'].join('\n') : '';
       const laminateText = Array.isArray(groupedPartTypes['Laminate -']) ? groupedPartTypes['Laminate -'].join('\n') : '';
       const substratePrefixes = ['ACM -', 'Acrylic -', 'Aluminium -', 'Mondoclad -', 'Foamed PVC -', 'Corflute -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -'];
+      function titleCaseWords(value) {
+        return String(value == null ? '' : value)
+          .toLowerCase()
+          .replace(/\b([a-z])/g, (m) => m.toUpperCase())
+          .replace(/\bPvc\b/g, 'PVC')
+          .replace(/\bHdpe\b/g, 'HDPE')
+          .replace(/\bAcm\b/g, 'ACM');
+      }
       function deriveSubstrateShortText(prefix, rawValue) {
-        const shortName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
-        const raw = String(rawValue == null ? '' : rawValue).trim();
-        if(!shortName) return '';
+        const materialName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
+        const raw = String(rawValue == null ? '' : rawValue).replace(/\s+/g, ' ').trim();
+        if(!materialName) return '';
 
         let thickness = '';
-        let thicknessFromFetch = false;
         const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
           ? srhGlobalState.corebridgePartSearchEntriesByName
           : {};
         const rawNorm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
         if(rawNorm && byName[rawNorm] && byName[rawNorm].thickness) {
           thickness = String(byName[rawNorm].thickness || '').trim();
-          thicknessFromFetch = !!thickness;
         }
         if(!thickness && rawNorm) {
           const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
           if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) {
             thickness = String(byName[matchedKey].thickness || '').trim();
-            thicknessFromFetch = !!thickness;
           }
         }
         if(!thickness) {
@@ -1253,24 +1265,37 @@
           }
         }
 
-        if(!thickness) return shortName;
-        if(thicknessFromFetch) {
-          const fetchedThickness = /mm$/i.test(thickness) ? thickness : (thickness + 'mm');
-          return fetchedThickness + ' ' + shortName;
+        let thicknessClean = String(thickness || '').replace(/\s+/g, '').trim();
+        thicknessClean = thicknessClean.replace(/mm$/i, '').replace(/[^0-9.]/g, '');
+
+        let finish = raw;
+        if(thicknessClean) {
+          const escapedThickness = thicknessClean.replace(/\./g, '\\.');
+          finish = finish
+            .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\s*mm\\b', 'ig'), ' ')
+            .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\b', 'ig'), ' ');
         }
-        let thicknessClean = String(thickness).replace(/\s+/g, '').trim();
-        if(!thicknessClean) return shortName;
-        thicknessClean = thicknessClean.replace(/mm$/i, '');
-        thicknessClean = thicknessClean.replace(/[^0-9.]/g, '');
-        if(!thicknessClean) return shortName;
-        return thicknessClean + 'mm ' + shortName;
+        const materialPattern = materialName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        finish = finish.replace(new RegExp('\\b' + materialPattern + '\\b', 'ig'), ' ');
+        finish = finish.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+        const parts = [];
+        if(thicknessClean) parts.push(thicknessClean + 'mm');
+        if(finish) parts.push(titleCaseWords(finish));
+        parts.push(titleCaseWords(materialName));
+        return parts.join(' ');
       }
       const substrateRows = [];
+      const substrateSeen = {};
       substratePrefixes.forEach((prefix) => {
         const vals = Array.isArray(groupedPartTypes[prefix]) ? groupedPartTypes[prefix] : [];
         vals.forEach((v) => {
           const shortText = deriveSubstrateShortText(prefix, v);
-          if(shortText) substrateRows.push(shortText);
+          const shortKey = shortText.toLowerCase().replace(/\s+/g, ' ').trim();
+          if(shortText && !substrateSeen[shortKey]) {
+            substrateSeen[shortKey] = true;
+            substrateRows.push(shortText);
+          }
         });
       });
       const substrateText = substrateRows.join('\n');
@@ -1543,6 +1568,8 @@
         const mediaText = String(readValueAtPath(proofPayload, 'Derived.mediaText') || '');
         const laminateText = String(readValueAtPath(proofPayload, 'Derived.laminateText') || '');
         const partsText = String(readValueAtPath(proofPayload, 'Derived.partsNumbered') || '');
+        const quantityText = String(readValueAtPath(proofPayload, 'Derived.productQty') || '');
+        const substrateText = String(readValueAtPath(proofPayload, 'Derived.substrateText') || '');
         const notesText = String(readValueAtPath(proofPayload, 'Derived.notesAll') || '');
         const derivedDate = String(readValueAtPath(proofPayload, 'Derived.todayDate') || '');
         const addrSource = String(readValueAtPath(proofPayload, 'DerivedDebug.installAddressSource') || 'none');
@@ -1552,6 +1579,8 @@
           ' | addressQrPngGenerated=' + (hasQrPng ? 'yes' : 'no') +
           ' | mediaText="' + mediaText + '"' +
           ' | laminateText="' + laminateText + '"' +
+          ' | productQty="' + quantityText + '"' +
+          ' | substrateText="' + substrateText + '"' +
           ' | partsNumbered="' + partsText + '"' +
           ' | notesAll="' + notesText + '"' +
           ' | todayDate=' + derivedDate
@@ -1563,6 +1592,8 @@
           ' qrPng=' + (hasQrPng ? 'yes' : 'no') +
           ' mediaText="' + mediaText + '"' +
           ' laminateText="' + laminateText + '"' +
+          ' productQty="' + quantityText + '"' +
+          ' substrateText="' + substrateText + '"' +
           ' partsNumbered="' + partsText + '"' +
           ' notesAll="' + notesText + '"'
         );
