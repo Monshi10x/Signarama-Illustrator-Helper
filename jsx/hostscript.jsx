@@ -5736,7 +5736,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         .toLowerCase()
         .replace(/[^a-z0-9.]+/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
+        .replace(/^\s+|\s+$/g, '');
     }
     var lines = String(value == null ? '' : value).split(/\r?\n/);
     var out = [];
