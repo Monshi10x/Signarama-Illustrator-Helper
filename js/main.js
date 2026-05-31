@@ -545,9 +545,6 @@
             stopCorebridgeFlashTickPolling('tick error');
             return;
           }
-          if(corebridgeFlashTickPollCount <= 10 || corebridgeFlashTickPollCount % 10 === 0 || /^INACTIVE\|/i.test(tickTxt)) {
-            log('Corebridge flash poll #' + corebridgeFlashTickPollCount + ': ' + tickTxt);
-          }
           if(/^INACTIVE\|/i.test(tickTxt)) {
             stopCorebridgeFlashTickPolling('inactive');
             return;
@@ -555,9 +552,6 @@
           const parts = tickTxt.split('|');
           if(parts.length >= 4 && /^ACTIVE$/i.test(parts[0])) {
             const tickCount = parseInt(parts[2], 10) || 0;
-            if(corebridgeFlashLastTickCount >= 0 && tickCount <= corebridgeFlashLastTickCount) {
-              log('Corebridge flash poll warning: non-incrementing tick count (' + tickCount + ').');
-            }
             corebridgeFlashLastTickCount = tickCount;
           }
         });
@@ -2878,7 +2872,6 @@
       if(refreshDimensionSelectionHintTimer) clearTimeout(refreshDimensionSelectionHintTimer);
       refreshDimensionSelectionHintTimer = setTimeout(function() {
         refreshDimensionSelectionHintTimer = null;
-        log('Dimensions refresh tick.');
         refreshDimensionSelectionHint();
       }, 180);
     }

@@ -5569,13 +5569,11 @@ function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashTickCount++;
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
     if(!_srh_corebridge_ensureFlashStateFromDocument()) {
-      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
       _srh_corebridge_stopFlashing(false);
       return false;
     }
   }
   var entries = _srhCorebridgeFlashState.entries;
-  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | mode=state-check');
   var black = _srh_corebridge_makeRgb(0, 0, 0);
   for(var i = entries.length - 1; i >= 0; i--) {
     var entry = entries[i];
@@ -5588,20 +5586,20 @@ function _srh_corebridge_flashTick() {
     var frameName = '';
     try {frameName = String(entry.frame.name || '');} catch(_eFlashName) {frameName = '';}
     try {currentValue = String(entry.frame.contents == null ? '' : entry.frame.contents);} catch(_eFlashRead) {
-      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' removing entry index=' + i + ' (failed reading contents).');
+      _srh_corebridge_flashDebug('Removing flash entry index=' + i + ' (failed reading contents).');
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
     if(currentValue !== entry.baseValue) {
-      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
+      _srh_corebridge_flashDebug('Resolved flash field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
     if(_srh_corebridge_textFrameIsBlack(entry.frame)) {
-      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '" because text is already black -> remove arrow.');
+      _srh_corebridge_flashDebug('Resolved flash field "' + frameName + '" because text is already black -> remove arrow.');
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
@@ -5616,7 +5614,6 @@ function _srh_corebridge_flashTick() {
     }
   }
   _srhCorebridgeFlashState.isRed = true;
-  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=RED');
   if(!entries.length) _srh_corebridge_stopFlashing(false);
   return !!(entries && entries.length);
 }
@@ -6171,7 +6168,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         if(!keyNorm) continue;
         for(var k = 0; k < aliasNorms.length; k++) {
           var alias = aliasNorms[k];
-          if(keyNorm === alias || keyNorm.indexOf(alias) >= 0 || alias.indexOf(keyNorm) >= 0) {
+          if(keyNorm === alias || keyNorm.indexOf(alias) >= 0) {
             _pushList(frameMap[key]);
             break;
           }
