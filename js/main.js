@@ -1270,7 +1270,10 @@
 
         let finish = raw;
         if(thicknessClean) {
-          finish = finish.replace(new RegExp('(?:^|\\s|x)' + thicknessClean.replace(/\./g, '\\.') + '\\s*mm?\\b', 'ig'), ' ');
+          const escapedThickness = thicknessClean.replace(/\./g, '\\.');
+          finish = finish
+            .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\s*mm\\b', 'ig'), ' ')
+            .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\b', 'ig'), ' ');
         }
         const materialPattern = materialName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
         finish = finish.replace(new RegExp('\\b' + materialPattern + '\\b', 'ig'), ' ');
@@ -1565,6 +1568,8 @@
         const mediaText = String(readValueAtPath(proofPayload, 'Derived.mediaText') || '');
         const laminateText = String(readValueAtPath(proofPayload, 'Derived.laminateText') || '');
         const partsText = String(readValueAtPath(proofPayload, 'Derived.partsNumbered') || '');
+        const quantityText = String(readValueAtPath(proofPayload, 'Derived.productQty') || '');
+        const substrateText = String(readValueAtPath(proofPayload, 'Derived.substrateText') || '');
         const notesText = String(readValueAtPath(proofPayload, 'Derived.notesAll') || '');
         const derivedDate = String(readValueAtPath(proofPayload, 'Derived.todayDate') || '');
         const addrSource = String(readValueAtPath(proofPayload, 'DerivedDebug.installAddressSource') || 'none');
@@ -1574,6 +1579,8 @@
           ' | addressQrPngGenerated=' + (hasQrPng ? 'yes' : 'no') +
           ' | mediaText="' + mediaText + '"' +
           ' | laminateText="' + laminateText + '"' +
+          ' | productQty="' + quantityText + '"' +
+          ' | substrateText="' + substrateText + '"' +
           ' | partsNumbered="' + partsText + '"' +
           ' | notesAll="' + notesText + '"' +
           ' | todayDate=' + derivedDate
@@ -1585,6 +1592,8 @@
           ' qrPng=' + (hasQrPng ? 'yes' : 'no') +
           ' mediaText="' + mediaText + '"' +
           ' laminateText="' + laminateText + '"' +
+          ' productQty="' + quantityText + '"' +
+          ' substrateText="' + substrateText + '"' +
           ' partsNumbered="' + partsText + '"' +
           ' notesAll="' + notesText + '"'
         );
