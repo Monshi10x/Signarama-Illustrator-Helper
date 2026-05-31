@@ -5303,6 +5303,36 @@ function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
   } catch(_eTfClr2) { }
   return false;
 }
+function _srh_corebridge_isBlackColorValue(colorValue) {
+  if(!colorValue) return false;
+  try {
+    var tn = String(colorValue.typename || '');
+    if(tn === 'RGBColor') return Number(colorValue.red) <= 1 && Number(colorValue.green) <= 1 && Number(colorValue.blue) <= 1;
+    if(tn === 'CMYKColor') return Number(colorValue.cyan) <= 1 && Number(colorValue.magenta) <= 1 && Number(colorValue.yellow) <= 1 && Number(colorValue.black) >= 99;
+    if(tn === 'GrayColor') return Number(colorValue.gray) <= 1;
+  } catch(_eBlackColor) { }
+  return false;
+}
+function _srh_corebridge_textFrameIsBlack(textFrame) {
+  if(!textFrame) return false;
+  try {
+    if(textFrame.textRange && textFrame.textRange.characterAttributes) {
+      if(_srh_corebridge_isBlackColorValue(textFrame.textRange.characterAttributes.fillColor)) return true;
+    }
+  } catch(_eTfBlack0) { }
+  try {
+    if(textFrame.characters && textFrame.characters.length) {
+      var checked = 0;
+      for(var i = 0; i < textFrame.characters.length && checked < 5; i++) {
+        try {
+          checked++;
+          if(_srh_corebridge_isBlackColorValue(textFrame.characters[i].characterAttributes.fillColor)) return true;
+        } catch(_eTfBlack1) { }
+      }
+    }
+  } catch(_eTfBlack2) { }
+  return false;
+}
 function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
   if(!doc) return null;
   var layer = null;
@@ -5333,7 +5363,20 @@ function _srh_corebridge_finalizeArrowLayer(doc) {
 }
 function _srh_corebridge_removeArrow(entry) {
   if(!entry || !entry.arrowGroup) return;
+  var arrowLayer = null;
+  try {arrowLayer = entry.arrowGroup.layer;} catch(_eArrowLayerFromGroup) {arrowLayer = null;}
+  if(!arrowLayer && _srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
+    try {arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);} catch(_eArrowLayerFallback) {arrowLayer = null;}
+  }
+  var wasLocked = false;
+  if(arrowLayer) {
+    try {wasLocked = !!arrowLayer.locked;} catch(_eArrowWasLocked) {wasLocked = false;}
+    try {arrowLayer.locked = false;} catch(_eArrowUnlockRm) { }
+  }
   try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
+  if(arrowLayer && wasLocked) {
+    try {arrowLayer.locked = true;} catch(_eArrowRelockRm) { }
+  }
   entry.arrowGroup = null;
 }
 function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
@@ -5363,6 +5406,7 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
 
     group = layer.groupItems.add();
     group.name = 'SRH_FlashArrow';
+    try {group.note = 'SRH_FLASH_ARROW';} catch(_eArrowNote) { }
 
     var shaft = group.pathItems.add();
     shaft.setEntirePath([[tailX, centerY], [tipX, centerY]]);
@@ -5439,6 +5483,12 @@ function _srh_corebridge_flashTick() {
     if(currentValue !== entry.baseValue) {
       _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      _srh_corebridge_removeArrow(entry);
+      entries.splice(i, 1);
+      continue;
+    }
+    if(_srh_corebridge_textFrameIsBlack(entry.frame)) {
+      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '" because text is already black -> remove arrow.');
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
