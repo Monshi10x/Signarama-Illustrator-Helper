@@ -5729,6 +5729,28 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     if(typeof v === 'number' || typeof v === 'boolean') return String(v);
     try {return JSON.stringify(v);} catch(_eJsonTxt) {return String(v);}
   }
+  function _normalizeSubstrateProofText(value) {
+    function _key(line) {
+      return String(line == null ? '' : line)
+        .replace(/\u00a0/g, ' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9.]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    var lines = String(value == null ? '' : value).split(/\r?\n/);
+    var out = [];
+    var seen = {};
+    for(var i = 0; i < lines.length; i++) {
+      var line = String(lines[i] == null ? '' : lines[i]).replace(/^\s+|\s+$/g, '');
+      if(!line) continue;
+      var key = _key(line);
+      if(!key || seen[key]) continue;
+      seen[key] = true;
+      out.push(line);
+    }
+    return out.join('\n');
+  }
   function _readByPath(obj, keyPath) {
     if(!obj || !keyPath) return undefined;
     if(obj.hasOwnProperty && obj.hasOwnProperty(keyPath)) return obj[keyPath];
@@ -6266,7 +6288,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
     var substrateFrames = _getTextTargetsByName('Substrate Text');
     if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
-      var substrateValue = _toTextValue(derivedSubstrate);
+      var substrateValue = _normalizeSubstrateProofText(_toTextValue(derivedSubstrate));
       for(var sf = 0; sf < substrateFrames.length; sf++) {
         try {
           substrateFrames[sf].contents = substrateValue;

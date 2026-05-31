@@ -1236,69 +1236,104 @@
           .replace(/\bHdpe\b/g, 'HDPE')
           .replace(/\bAcm\b/g, 'ACM');
       }
-      function deriveSubstrateShortText(prefix, rawValue) {
-        const materialName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
-        const raw = String(rawValue == null ? '' : rawValue).replace(/\s+/g, ' ').trim();
-        if(!materialName) return '';
-
-        let thickness = '';
-        const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
-          ? srhGlobalState.corebridgePartSearchEntriesByName
-          : {};
-        const rawNorm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
-        if(rawNorm && byName[rawNorm] && byName[rawNorm].thickness) {
-          thickness = String(byName[rawNorm].thickness || '').trim();
-        }
-        if(!thickness && rawNorm) {
-          const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
-          if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) {
-            thickness = String(byName[matchedKey].thickness || '').trim();
-          }
-        }
-        if(!thickness) {
-          const compact = raw.replace(/\s+/g, '');
-          const xParts = compact.split('x');
-          if(xParts.length > 1) thickness = String(xParts[xParts.length - 1] || '').trim();
-          if(!thickness) {
-            const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
-            if(m && m[1]) thickness = m[1];
-          }
-        }
-
-        let thicknessClean = String(thickness || '').replace(/\s+/g, '').trim();
-        thicknessClean = thicknessClean.replace(/mm$/i, '').replace(/[^0-9.]/g, '');
-
-        let finish = raw;
+      function escapeRegExp(value) {
+        return String(value == null ? '' : value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+      function normalizeLooseKey(value) {
+        return String(value == null ? '' : value)
+          .replace(/\u00a0/g, ' ')
+          .toLowerCase()
+          .replace(/&/g, ' and ')
+          .replace(/[^a-z0-9.]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      function cleanThicknessValue(value) {
+        let out = String(value == null ? '' : value).replace(/\s+/g, '').trim();
+        out = out.replace(/mm$/i, '').replace(/[^0-9.]/g, '');
+        return out;
+      }
+      function removeWordsForSubstrateFinish(value, materialName, thicknessClean) {
+        let finish = String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
         if(thicknessClean) {
-          const escapedThickness = thicknessClean.replace(/\./g, '\\.');
+          const escapedThickness = escapeRegExp(thicknessClean);
           finish = finish
             .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\s*mm\\b', 'ig'), ' ')
             .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\b', 'ig'), ' ');
         }
-        const materialPattern = materialName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        finish = finish.replace(new RegExp('\\b' + materialPattern + '\\b', 'ig'), ' ');
+        const materialWords = String(materialName || '').split(/\s+/).filter(Boolean);
+        materialWords.forEach((word) => {
+          finish = finish.replace(new RegExp('\\b' + escapeRegExp(word) + '\\b', 'ig'), ' ');
+        });
         finish = finish.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+        return finish;
+      }
+      function findSubstrateThickness(raw, materialName) {
+        const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
+          ? srhGlobalState.corebridgePartSearchEntriesByName
+          : {};
+        const rawNorm = normalizeLooseKey(raw);
+        const materialNorm = normalizeLooseKey(materialName);
+        const lookupKeys = [];
+        if(rawNorm) lookupKeys.push(rawNorm);
+        if(materialNorm && rawNorm) lookupKeys.push((materialNorm + ' ' + rawNorm).trim());
+        if(materialNorm && rawNorm) lookupKeys.push((materialNorm + ' - ' + rawNorm).trim());
+        for(let i = 0; i < lookupKeys.length; i++) {
+          const key = lookupKeys[i];
+          if(byName[key] && byName[key].thickness) return String(byName[key].thickness || '').trim();
+        }
+        const keys = Object.keys(byName);
+        for(let k = 0; k < keys.length; k++) {
+          const key = normalizeLooseKey(keys[k]);
+          if(!key || !rawNorm) continue;
+          const hasRaw = key.indexOf(rawNorm) >= 0 || rawNorm.indexOf(key) >= 0;
+          const hasMaterial = !materialNorm || key.indexOf(materialNorm) >= 0;
+          if(hasRaw && hasMaterial && byName[keys[k]] && byName[keys[k]].thickness) {
+            return String(byName[keys[k]].thickness || '').trim();
+          }
+        }
+        const compact = String(raw == null ? '' : raw).replace(/\s+/g, '');
+        const xParts = compact.split('x');
+        if(xParts.length > 1) return String(xParts[xParts.length - 1] || '').trim();
+        const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
+        return (m && m[1]) ? m[1] : '';
+      }
+      function deriveSubstrateShortText(prefix, rawValue) {
+        const materialName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
+        const raw = String(rawValue == null ? '' : rawValue).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        if(!materialName) return null;
 
+        const thicknessClean = cleanThicknessValue(findSubstrateThickness(raw, materialName));
+        const finish = removeWordsForSubstrateFinish(raw, materialName, thicknessClean);
+        const materialText = titleCaseWords(materialName);
+        const finishText = finish ? titleCaseWords(finish) : '';
         const parts = [];
         if(thicknessClean) parts.push(thicknessClean + 'mm');
-        if(finish) parts.push(titleCaseWords(finish));
-        parts.push(titleCaseWords(materialName));
-        return parts.join(' ');
+        if(finishText) parts.push(finishText);
+        parts.push(materialText);
+        return {
+          text: parts.join(' '),
+          key: normalizeLooseKey((finishText ? finishText + ' ' : '') + materialText),
+          hasThickness: !!thicknessClean
+        };
       }
       const substrateRows = [];
       const substrateSeen = {};
       substratePrefixes.forEach((prefix) => {
         const vals = Array.isArray(groupedPartTypes[prefix]) ? groupedPartTypes[prefix] : [];
         vals.forEach((v) => {
-          const shortText = deriveSubstrateShortText(prefix, v);
-          const shortKey = shortText.toLowerCase().replace(/\s+/g, ' ').trim();
-          if(shortText && !substrateSeen[shortKey]) {
-            substrateSeen[shortKey] = true;
-            substrateRows.push(shortText);
+          const substrateInfo = deriveSubstrateShortText(prefix, v);
+          if(!substrateInfo || !substrateInfo.text || !substrateInfo.key) return;
+          const existingIndex = substrateSeen[substrateInfo.key];
+          if(existingIndex == null) {
+            substrateSeen[substrateInfo.key] = substrateRows.length;
+            substrateRows.push(substrateInfo);
+          } else if(substrateInfo.hasThickness && !substrateRows[existingIndex].hasThickness) {
+            substrateRows[existingIndex] = substrateInfo;
           }
         });
       });
-      const substrateText = substrateRows.join('\n');
+      const substrateText = substrateRows.map((row) => row.text).join('\n');
 
       const installAddressDetails = extractInstallAddressDetailed(quoteData);
       const installAddress = installAddressDetails.value;
