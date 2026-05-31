@@ -6179,6 +6179,24 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       }
       return out.length ? out : null;
     }
+    function _debugTargetNames(list) {
+      var out = [];
+      if(!list || !list.length) return '[]';
+      for(var i = 0; i < list.length; i++) {
+        var nm = '';
+        try {nm = String(list[i].name || '');} catch(_eDbgName) {nm = '';}
+        var tn = '';
+        try {tn = String(list[i].typename || '');} catch(_eDbgType) {tn = '';}
+        out.push((nm || '(unnamed)') + (tn ? ':' + tn : ''));
+      }
+      return '[' + out.join(', ') + ']';
+    }
+    function _debugValue(value) {
+      var s = String(value == null ? '' : value);
+      s = s.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+      if(s.length > 180) s = s.substring(0, 180) + '...';
+      return s;
+    }
     var allItems = doc.pageItems;
     for(var p = 0; p < allItems.length; p++) {
       var item = allItems[p];
@@ -6221,6 +6239,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var forcedPartsApplied = 0;
     var forcedNotesApplied = 0;
     var fallbackContainerTextApplied = 0;
+    var proofDebugLines = [];
     for(var m = 0; m < mappings.length; m++) {
       var mapRow = mappings[m];
       var sourceValue = _readByPath(row, mapRow.sourceKey);
@@ -6321,6 +6340,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var lineItemFrames = _collectTextTargetsByAliases(['Line Item Number', 'Line Item No', 'Line Item #', 'Line Item']);
     var lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item Number');
     if((!lineItemContainers || !lineItemContainers.length)) lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item');
+    proofDebugLines.push('LineItem value="' + _debugValue(derivedLineItemNumber) + '" frames=' + _debugTargetNames(lineItemFrames) + ' containers=' + _debugTargetNames(lineItemContainers));
     if(lineItemFrames && lineItemFrames.length && derivedLineItemNumber != null) {
       var lineItemValue = _toTextValue(derivedLineItemNumber);
       for(var lif = 0; lif < lineItemFrames.length; lif++) {
@@ -6341,6 +6361,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var itemNumberFrames = _collectTextTargetsByAliases(['Item Number', 'Item No', 'Item #', 'Order Product ID', 'Order Product Id', 'Product ID', 'Product Id']);
     var itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item Number');
     if((!itemNumberContainers || !itemNumberContainers.length)) itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item No');
+    proofDebugLines.push('ItemNumber value="' + _debugValue(derivedItemNumber) + '" frames=' + _debugTargetNames(itemNumberFrames) + ' containers=' + _debugTargetNames(itemNumberContainers));
     if(itemNumberFrames && itemNumberFrames.length && derivedItemNumber != null) {
       var itemNumberValue = _toTextValue(derivedItemNumber);
       for(var inf = 0; inf < itemNumberFrames.length; inf++) {
@@ -6362,6 +6383,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity');
     if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty Text');
     if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty');
+    proofDebugLines.push('Quantity value="' + _debugValue(derivedQuantity) + '" frames=' + _debugTargetNames(quantityFrames) + ' containers=' + _debugTargetNames(quantityContainers));
     if(quantityFrames && quantityFrames.length && derivedQuantity != null) {
       var quantityValue = _toTextValue(derivedQuantity);
       for(var qf = 0; qf < quantityFrames.length; qf++) {
@@ -6379,8 +6401,10 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     }
     var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
     var substrateFrames = _collectTextTargetsByAliases(['Substrate Text', 'Substrate', 'Material', 'Material Text']);
+    proofDebugLines.push('Substrate raw="' + _debugValue(derivedSubstrate) + '" frames=' + _debugTargetNames(substrateFrames));
     if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
       var substrateValue = _normalizeSubstrateProofText(_toTextValue(derivedSubstrate));
+      proofDebugLines.push('Substrate normalized="' + _debugValue(substrateValue) + '"');
       for(var sf = 0; sf < substrateFrames.length; sf++) {
         try {
           substrateFrames[sf].contents = substrateValue;
@@ -6466,7 +6490,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
-      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget +
+      '. Proof debug: ' + proofDebugLines.join(' || ') + '. ' + pageNumberRes +
       '. ' + flashMessage +
       '. ' + String(linkPlacementRes || '');
   } catch(e) {

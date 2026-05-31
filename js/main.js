@@ -1216,7 +1216,8 @@
         return [];
       }
       const quoteItems = readQuoteLineItems(quoteData);
-      const quoteItem = (Array.isArray(quoteItems) && quoteItems.length >= lineItemOrder) ? quoteItems[lineItemOrder - 1] : null;
+      const quoteItemIndex = lineItemOrder - 1;
+      const quoteItem = (Array.isArray(quoteItems) && quoteItemIndex >= 0 && quoteItems.length > quoteItemIndex) ? quoteItems[quoteItemIndex] : null;
       const productQty = quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '';
       const lineItemNumber = String((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : lineItemOrder);
       const lineItemDescriptionHtml = quoteItem && quoteItem.I1 != null ? String(quoteItem.I1) : '';
@@ -1428,7 +1429,21 @@
         },
         DerivedDebug: {
           installAddressSource: installAddressDetails.source,
-          installAddressTrace: installAddressDetails.debug
+          installAddressTrace: installAddressDetails.debug,
+          selectedRow: {
+            LineItemOrder: primaryRow && primaryRow.LineItemOrder != null ? primaryRow.LineItemOrder : null,
+            Id: primaryRow && primaryRow.Id != null ? primaryRow.Id : null,
+            OrderProductId: primaryRow && primaryRow.OrderProductId != null ? primaryRow.OrderProductId : null,
+            OrderProductID: primaryRow && primaryRow.OrderProductID != null ? primaryRow.OrderProductID : null
+          },
+          quoteLineItemSelection: {
+            lineItemOrder: lineItemOrder,
+            quoteItemIndex: quoteItemIndex,
+            quoteItemsCount: Array.isArray(quoteItems) ? quoteItems.length : 0,
+            quoteItemFound: !!quoteItem,
+            quoteItemB0: quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '',
+            productQty: productQty
+          }
         }
       });
     }
@@ -1636,6 +1651,8 @@
         const notesText = String(readValueAtPath(proofPayload, 'Derived.notesAll') || '');
         const derivedDate = String(readValueAtPath(proofPayload, 'Derived.todayDate') || '');
         const addrSource = String(readValueAtPath(proofPayload, 'DerivedDebug.installAddressSource') || 'none');
+        const selectedRowDebug = readValueAtPath(proofPayload, 'DerivedDebug.selectedRow') || {};
+        const quoteLineItemDebug = readValueAtPath(proofPayload, 'DerivedDebug.quoteLineItemSelection') || {};
         appendCorebridgeDataDump(
           '[Derived Debug] installAddress="' + resolvedAddress + '" | source=' + addrSource +
           ' | addressQrSvgGenerated=' + (hasQrSvg ? 'yes' : 'no') +
@@ -1649,6 +1666,11 @@
           ' | partsNumbered="' + partsText + '"' +
           ' | notesAll="' + notesText + '"' +
           ' | todayDate=' + derivedDate
+        );
+        appendCorebridgeDataDump(
+          '[Line/Qty Debug] selectedRow=' + JSON.stringify(selectedRowDebug) +
+          ' | quoteLineItemSelection=' + JSON.stringify(quoteLineItemDebug) +
+          ' | filteredRows=' + (Array.isArray(corebridgeLastFilteredData) ? corebridgeLastFilteredData.length : 0)
         );
         log(
           'Corebridge install address debug: value="' + resolvedAddress + '"' +
@@ -1664,6 +1686,7 @@
           ' partsNumbered="' + partsText + '"' +
           ' notesAll="' + notesText + '"'
         );
+        log('Corebridge line/qty debug: selectedRow=' + JSON.stringify(selectedRowDebug) + ' quoteLineItemSelection=' + JSON.stringify(quoteLineItemDebug));
         const safeDataJson = jsxEscapeDoubleQuoted(JSON.stringify(proofPayload));
         const safeMappingText = jsxEscapeDoubleQuoted(mappingText);
         const flashFieldsText = (corebridgeFlashFields && corebridgeFlashFields.value ? corebridgeFlashFields.value : '').trim();
