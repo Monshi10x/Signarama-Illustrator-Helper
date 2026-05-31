@@ -5265,6 +5265,49 @@ function _srh_corebridge_makeRgb(r, g, b) {
   c.blue = b;
   return c;
 }
+function _srh_corebridge_metaEscape(value) {
+  return String(value == null ? '' : value)
+    .replace(/\\/g, '\\\\')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\|/g, '\\p');
+}
+function _srh_corebridge_metaUnescape(value) {
+  var s = String(value == null ? '' : value);
+  var out = '';
+  for(var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i);
+    if(ch === '\\' && i + 1 < s.length) {
+      var n = s.charAt(++i);
+      if(n === 'n') out += '\n';
+      else if(n === 'r') out += '\r';
+      else if(n === 'p') out += '|';
+      else out += n;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+function _srh_corebridge_flashArrowNote(frameName, baseValue) {
+  return 'SRH_FLASH_ARROW|frame=' + _srh_corebridge_metaEscape(frameName) + '|base=' + _srh_corebridge_metaEscape(baseValue);
+}
+function _srh_corebridge_parseFlashArrowNote(noteText) {
+  var raw = String(noteText == null ? '' : noteText);
+  if(raw.indexOf('SRH_FLASH_ARROW') !== 0) return null;
+  var out = {frameName: '', baseValue: ''};
+  var parts = raw.split('|');
+  for(var i = 1; i < parts.length; i++) {
+    var part = parts[i];
+    var eq = part.indexOf('=');
+    if(eq < 0) continue;
+    var key = part.substring(0, eq);
+    var val = _srh_corebridge_metaUnescape(part.substring(eq + 1));
+    if(key === 'frame') out.frameName = val;
+    else if(key === 'base') out.baseValue = val;
+  }
+  return out;
+}
 function _srh_corebridge_parseFlashFieldNames(rawText) {
   function _trim(v) {return String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');}
   var out = [];
@@ -5303,6 +5346,36 @@ function _srh_corebridge_setTextFrameColor(textFrame, colorValue) {
   } catch(_eTfClr2) { }
   return false;
 }
+function _srh_corebridge_isBlackColorValue(colorValue) {
+  if(!colorValue) return false;
+  try {
+    var tn = String(colorValue.typename || '');
+    if(tn === 'RGBColor') return Number(colorValue.red) <= 1 && Number(colorValue.green) <= 1 && Number(colorValue.blue) <= 1;
+    if(tn === 'CMYKColor') return Number(colorValue.cyan) <= 1 && Number(colorValue.magenta) <= 1 && Number(colorValue.yellow) <= 1 && Number(colorValue.black) >= 99;
+    if(tn === 'GrayColor') return Number(colorValue.gray) <= 1;
+  } catch(_eBlackColor) { }
+  return false;
+}
+function _srh_corebridge_textFrameIsBlack(textFrame) {
+  if(!textFrame) return false;
+  try {
+    if(textFrame.textRange && textFrame.textRange.characterAttributes) {
+      if(_srh_corebridge_isBlackColorValue(textFrame.textRange.characterAttributes.fillColor)) return true;
+    }
+  } catch(_eTfBlack0) { }
+  try {
+    if(textFrame.characters && textFrame.characters.length) {
+      var checked = 0;
+      for(var i = 0; i < textFrame.characters.length && checked < 5; i++) {
+        try {
+          checked++;
+          if(_srh_corebridge_isBlackColorValue(textFrame.characters[i].characterAttributes.fillColor)) return true;
+        } catch(_eTfBlack1) { }
+      }
+    }
+  } catch(_eTfBlack2) { }
+  return false;
+}
 function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
   if(!doc) return null;
   var layer = null;
@@ -5333,10 +5406,23 @@ function _srh_corebridge_finalizeArrowLayer(doc) {
 }
 function _srh_corebridge_removeArrow(entry) {
   if(!entry || !entry.arrowGroup) return;
+  var arrowLayer = null;
+  try {arrowLayer = entry.arrowGroup.layer;} catch(_eArrowLayerFromGroup) {arrowLayer = null;}
+  if(!arrowLayer && _srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
+    try {arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);} catch(_eArrowLayerFallback) {arrowLayer = null;}
+  }
+  var wasLocked = false;
+  if(arrowLayer) {
+    try {wasLocked = !!arrowLayer.locked;} catch(_eArrowWasLocked) {wasLocked = false;}
+    try {arrowLayer.locked = false;} catch(_eArrowUnlockRm) { }
+  }
   try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
+  if(arrowLayer && wasLocked) {
+    try {arrowLayer.locked = true;} catch(_eArrowRelockRm) { }
+  }
   entry.arrowGroup = null;
 }
-function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
+function _srh_corebridge_createArrowForTextFrame(doc, textFrame, baseValue) {
   if(!doc || !textFrame) return null;
   var layer = _srh_corebridge_getArrowLayer(doc, true);
   if(!layer) return null;
@@ -5363,6 +5449,9 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
 
     group = layer.groupItems.add();
     group.name = 'SRH_FlashArrow';
+    var frameNameForNote = '';
+    try {frameNameForNote = String(textFrame.name || '');} catch(_eArrowFrameName) {frameNameForNote = '';}
+    try {group.note = _srh_corebridge_flashArrowNote(frameNameForNote, baseValue);} catch(_eArrowNote) { }
 
     var shaft = group.pathItems.add();
     shaft.setEntirePath([[tailX, centerY], [tipX, centerY]]);
@@ -5393,6 +5482,70 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame) {
     return null;
   }
 }
+function _srh_corebridge_clearFlashArrowLayer(doc) {
+  var layer = _srh_corebridge_getArrowLayer(doc, false);
+  if(!layer) return 0;
+  var removed = 0;
+  var wasLocked = false;
+  try {wasLocked = !!layer.locked;} catch(_eClearLock0) {wasLocked = false;}
+  try {layer.locked = false;} catch(_eClearUnlock) { }
+  try {
+    while(layer.pageItems && layer.pageItems.length) {
+      try {layer.pageItems[0].remove(); removed++;} catch(_eClearItem) {break;}
+    }
+  } catch(_eClearLoop) { }
+  try {
+    if(layer.pageItems && layer.pageItems.length === 0) layer.remove();
+    else if(wasLocked) layer.locked = true;
+  } catch(_eClearFinish) {
+    try {if(wasLocked) layer.locked = true;} catch(_eClearRelock) { }
+  }
+  return removed;
+}
+function _srh_corebridge_findTextFrameByName(doc, frameName) {
+  if(!doc || !frameName) return null;
+  var targetNorm = String(frameName).toLowerCase();
+  var frames = null;
+  try {frames = doc.textFrames;} catch(_eFindTf0) {frames = null;}
+  if(!frames) return null;
+  for(var i = 0; i < frames.length; i++) {
+    var nm = '';
+    try {nm = String(frames[i].name || '');} catch(_eFindTf1) {nm = '';}
+    if(nm && nm.toLowerCase() === targetNorm) return frames[i];
+  }
+  return null;
+}
+function _srh_corebridge_collectFlashEntriesFromLayer(doc) {
+  var entries = [];
+  var layer = _srh_corebridge_getArrowLayer(doc, false);
+  if(!layer) return entries;
+  var groups = null;
+  try {groups = layer.groupItems;} catch(_eCollectGrp0) {groups = null;}
+  if(!groups) return entries;
+  for(var i = 0; i < groups.length; i++) {
+    var group = groups[i];
+    var note = '';
+    var nm = '';
+    try {note = String(group.note || '');} catch(_eCollectNote) {note = '';}
+    try {nm = String(group.name || '');} catch(_eCollectName) {nm = '';}
+    if(note.indexOf('SRH_FLASH_ARROW') !== 0 && nm !== 'SRH_FlashArrow') continue;
+    var meta = _srh_corebridge_parseFlashArrowNote(note) || {frameName: '', baseValue: ''};
+    var frame = _srh_corebridge_findTextFrameByName(doc, meta.frameName);
+    entries.push({frame: frame, baseValue: meta.baseValue, arrowGroup: group, frameName: meta.frameName});
+  }
+  return entries;
+}
+function _srh_corebridge_ensureFlashStateFromDocument() {
+  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) return true;
+  var doc = null;
+  try {if(app.documents.length) doc = app.activeDocument;} catch(_eEnsDoc) {doc = null;}
+  if(!doc) return false;
+  var entries = _srh_corebridge_collectFlashEntriesFromLayer(doc);
+  if(!entries.length) return false;
+  _srhCorebridgeFlashState = {doc: doc, entries: entries, isRed: true};
+  _srh_corebridge_flashDebug('Rebuilt flash state from arrow layer. entries=' + entries.length);
+  return true;
+}
 function _srh_corebridge_stopFlashing(resetToBlack) {
   if(_srhCorebridgeFlashTaskId != null) {
     _srh_corebridge_flashDebug('Stopping flash task id=' + _srhCorebridgeFlashTaskId + ' (resetToBlack=' + (resetToBlack ? 'yes' : 'no') + ')');
@@ -5415,16 +5568,17 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
 function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashTickCount++;
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
-    _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' skipped (no active entries).');
-    _srh_corebridge_stopFlashing(false);
-    return false;
+    if(!_srh_corebridge_ensureFlashStateFromDocument()) {
+      _srh_corebridge_stopFlashing(false);
+      return false;
+    }
   }
   var entries = _srhCorebridgeFlashState.entries;
-  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' starting. entries=' + entries.length + ' | mode=state-check');
   var black = _srh_corebridge_makeRgb(0, 0, 0);
   for(var i = entries.length - 1; i >= 0; i--) {
     var entry = entries[i];
     if(!entry || !entry.frame) {
+      _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
@@ -5432,13 +5586,20 @@ function _srh_corebridge_flashTick() {
     var frameName = '';
     try {frameName = String(entry.frame.name || '');} catch(_eFlashName) {frameName = '';}
     try {currentValue = String(entry.frame.contents == null ? '' : entry.frame.contents);} catch(_eFlashRead) {
-      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' removing entry index=' + i + ' (failed reading contents).');
+      _srh_corebridge_flashDebug('Removing flash entry index=' + i + ' (failed reading contents).');
+      _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
     }
     if(currentValue !== entry.baseValue) {
-      _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' resolved field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
+      _srh_corebridge_flashDebug('Resolved flash field "' + frameName + '". base="' + entry.baseValue + '" current="' + currentValue + '" -> reset BLACK + remove.');
       try {_srh_corebridge_setTextFrameColor(entry.frame, black);} catch(_eFlashDone) { }
+      _srh_corebridge_removeArrow(entry);
+      entries.splice(i, 1);
+      continue;
+    }
+    if(_srh_corebridge_textFrameIsBlack(entry.frame)) {
+      _srh_corebridge_flashDebug('Resolved flash field "' + frameName + '" because text is already black -> remove arrow.');
       _srh_corebridge_removeArrow(entry);
       entries.splice(i, 1);
       continue;
@@ -5453,7 +5614,6 @@ function _srh_corebridge_flashTick() {
     }
   }
   _srhCorebridgeFlashState.isRed = true;
-  _srh_corebridge_flashDebug('Tick #' + _srhCorebridgeFlashTickCount + ' complete. remaining=' + entries.length + ' | activeColorNow=RED');
   if(!entries.length) _srh_corebridge_stopFlashing(false);
   return !!(entries && entries.length);
 }
@@ -5495,6 +5655,10 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   _srh_corebridge_flashDebug('Start flashing requested. Raw text="' + String(flashFieldsText == null ? '' : flashFieldsText) + '"');
   var names = _srh_corebridge_parseFlashFieldNames(flashFieldsText);
   _srh_corebridge_stopFlashing(true);
+  if(doc) {
+    var clearedArrows = _srh_corebridge_clearFlashArrowLayer(doc);
+    if(clearedArrows) _srh_corebridge_flashDebug('Cleared stale flash arrows before starting new monitor. removed=' + clearedArrows);
+  }
   _srhCorebridgeFlashTickCount = 0;
   if(!doc || !names.length) return {requested: names.length, found: 0};
 
@@ -5531,7 +5695,7 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
   var red = _srh_corebridge_makeRgb(255, 0, 0);
   for(var e = 0; e < entries.length; e++) {
     try {_srh_corebridge_setTextFrameColor(entries[e].frame, red);} catch(_eFlashInitRed) { }
-    entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame);
+    entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame, entries[e].baseValue);
   }
   _srh_corebridge_flashTick();
   try {
@@ -5561,6 +5725,28 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     if(typeof v === 'string') return v;
     if(typeof v === 'number' || typeof v === 'boolean') return String(v);
     try {return JSON.stringify(v);} catch(_eJsonTxt) {return String(v);}
+  }
+  function _normalizeSubstrateProofText(value) {
+    function _key(line) {
+      return String(line == null ? '' : line)
+        .replace(/\u00a0/g, ' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9.]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^\s+|\s+$/g, '');
+    }
+    var lines = String(value == null ? '' : value).split(/\r?\n/);
+    var out = [];
+    var seen = {};
+    for(var i = 0; i < lines.length; i++) {
+      var line = String(lines[i] == null ? '' : lines[i]).replace(/^\s+|\s+$/g, '');
+      if(!line) continue;
+      var key = _key(line);
+      if(!key || seen[key]) continue;
+      seen[key] = true;
+      out.push(line);
+    }
+    return out.join('\n');
   }
   function _readByPath(obj, keyPath) {
     if(!obj || !keyPath) return undefined;
@@ -5949,6 +6135,107 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       if(norm && frameMapNormalized[norm] && frameMapNormalized[norm].length) return frameMapNormalized[norm];
       return null;
     }
+    function _normalizeTargetAliasName(value) {
+      return String(value == null ? '' : value)
+        .replace(/\u00a0/g, ' ')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^\s+|\s+$/g, '');
+    }
+    function _itemAncestorMatchesAliases(item, aliasNorms) {
+      var p = null;
+      try {p = item ? item.parent : null;} catch(_eAnc0) {p = null;}
+      var guard = 0;
+      while(p && guard < 30) {
+        guard++;
+        var tn = '';
+        try {tn = String(p.typename || '');} catch(_eAncType) {tn = '';}
+        if(tn === 'Document') return false;
+        var nm = '';
+        try {nm = String(p.name || '');} catch(_eAncName) {nm = '';}
+        var norm = _normalizeTargetAliasName(nm);
+        if(norm) {
+          for(var i = 0; i < aliasNorms.length; i++) {
+            var alias = aliasNorms[i];
+            if(norm === alias || norm.indexOf(alias) >= 0) return true;
+          }
+        }
+        try {p = p.parent;} catch(_eAncNext) {p = null;}
+      }
+      return false;
+    }
+    function _collectTextTargetsByAliases(aliasList) {
+      var out = [];
+      var seen = [];
+      function _pushList(list) {
+        if(!list || !list.length) return;
+        for(var i = 0; i < list.length; i++) {
+          var item = list[i];
+          var already = false;
+          for(var s = 0; s < seen.length; s++) {if(seen[s] === item) {already = true; break;}}
+          if(!already) {seen.push(item); out.push(item);}
+        }
+      }
+      for(var a = 0; a < aliasList.length; a++) _pushList(_getTextTargetsByName(aliasList[a]));
+      if(out.length) return out;
+      var aliasNorms = [];
+      for(var an = 0; an < aliasList.length; an++) {
+        var aliasNorm = _normalizeTargetAliasName(aliasList[an]);
+        if(aliasNorm) aliasNorms.push(aliasNorm);
+      }
+      for(var key in frameMap) {
+        if(!frameMap.hasOwnProperty(key)) continue;
+        var keyNorm = _normalizeTargetAliasName(key);
+        if(!keyNorm) continue;
+        for(var k = 0; k < aliasNorms.length; k++) {
+          var alias = aliasNorms[k];
+          if(keyNorm === alias || keyNorm.indexOf(alias) >= 0) {
+            _pushList(frameMap[key]);
+            break;
+          }
+        }
+      }
+      if(out.length) return out;
+      try {
+        for(var tf = 0; tf < allFrames.length; tf++) {
+          if(_itemAncestorMatchesAliases(allFrames[tf], aliasNorms)) _pushList([allFrames[tf]]);
+        }
+      } catch(_eAncCollect) { }
+      return out.length ? out : null;
+    }
+    function _debugTargetNames(list) {
+      var out = [];
+      if(!list || !list.length) return '[]';
+      for(var i = 0; i < list.length; i++) {
+        var nm = '';
+        try {nm = String(list[i].name || '');} catch(_eDbgName) {nm = '';}
+        var tn = '';
+        try {tn = String(list[i].typename || '');} catch(_eDbgType) {tn = '';}
+        var parents = [];
+        var p = null;
+        try {p = list[i].parent;} catch(_eDbgParent0) {p = null;}
+        var guard = 0;
+        while(p && guard < 5) {
+          guard++;
+          var pType = '';
+          try {pType = String(p.typename || '');} catch(_eDbgParentType) {pType = '';}
+          if(pType === 'Document') break;
+          var pName = '';
+          try {pName = String(p.name || '');} catch(_eDbgParentName) {pName = '';}
+          if(pName) parents.push(pName);
+          try {p = p.parent;} catch(_eDbgParentNext) {p = null;}
+        }
+        out.push((nm || '(unnamed)') + (tn ? ':' + tn : '') + (parents.length ? ' parent=' + parents.join('>') : ''));
+      }
+      return '[' + out.join(', ') + ']';
+    }
+    function _debugValue(value) {
+      var s = String(value == null ? '' : value);
+      s = s.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+      if(s.length > 180) s = s.substring(0, 180) + '...';
+      return s;
+    }
     var allItems = doc.pageItems;
     for(var p = 0; p < allItems.length; p++) {
       var item = allItems[p];
@@ -5985,9 +6272,13 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var forcedMediaApplied = 0;
     var forcedLaminateApplied = 0;
     var forcedSubstrateApplied = 0;
+    var forcedQuantityApplied = 0;
+    var forcedLineItemApplied = 0;
+    var forcedItemNumberApplied = 0;
     var forcedPartsApplied = 0;
     var forcedNotesApplied = 0;
     var fallbackContainerTextApplied = 0;
+    var proofDebugLines = [];
     for(var m = 0; m < mappings.length; m++) {
       var mapRow = mappings[m];
       var sourceValue = _readByPath(row, mapRow.sourceKey);
@@ -6083,10 +6374,76 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eLamSet) { }
       }
     }
+    var derivedLineItemNumber = _readByPath(row, 'Derived.lineItemNumber');
+    if(derivedLineItemNumber == null) derivedLineItemNumber = _readByPath(row, 'LineItemOrder');
+    var lineItemFrames = _collectTextTargetsByAliases(['Line Item Number', 'Line Item No', 'Line Item #', 'Line Item']);
+    var lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item Number');
+    if((!lineItemContainers || !lineItemContainers.length)) lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item');
+    proofDebugLines.push('LineItem value="' + _debugValue(derivedLineItemNumber) + '" frames=' + _debugTargetNames(lineItemFrames) + ' containers=' + _debugTargetNames(lineItemContainers));
+    if(lineItemFrames && lineItemFrames.length && derivedLineItemNumber != null) {
+      var lineItemValue = _toTextValue(derivedLineItemNumber);
+      for(var lif = 0; lif < lineItemFrames.length; lif++) {
+        try {
+          lineItemFrames[lif].contents = lineItemValue;
+          forcedLineItemApplied++;
+        } catch(_eLineItemSet) { }
+      }
+    }
+    if(lineItemContainers && lineItemContainers.length && derivedLineItemNumber != null) {
+      var lineItemValue2 = _toTextValue(derivedLineItemNumber);
+      for(var lic = 0; lic < lineItemContainers.length; lic++) {
+        forcedLineItemApplied += _setTextInContainer(lineItemContainers[lic], lineItemValue2);
+      }
+    }
+    var derivedItemNumber = _readByPath(row, 'Derived.itemNumber');
+    if(derivedItemNumber == null) derivedItemNumber = _readByPath(row, 'Id');
+    var itemNumberFrames = _collectTextTargetsByAliases(['Item Number', 'Item No', 'Item #', 'Order Product ID', 'Order Product Id', 'Product ID', 'Product Id']);
+    var itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item Number');
+    if((!itemNumberContainers || !itemNumberContainers.length)) itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item No');
+    proofDebugLines.push('ItemNumber value="' + _debugValue(derivedItemNumber) + '" frames=' + _debugTargetNames(itemNumberFrames) + ' containers=' + _debugTargetNames(itemNumberContainers));
+    if(itemNumberFrames && itemNumberFrames.length && derivedItemNumber != null) {
+      var itemNumberValue = _toTextValue(derivedItemNumber);
+      for(var inf = 0; inf < itemNumberFrames.length; inf++) {
+        try {
+          itemNumberFrames[inf].contents = itemNumberValue;
+          forcedItemNumberApplied++;
+        } catch(_eItemNumberSet) { }
+      }
+    }
+    if(itemNumberContainers && itemNumberContainers.length && derivedItemNumber != null) {
+      var itemNumberValue2 = _toTextValue(derivedItemNumber);
+      for(var inc = 0; inc < itemNumberContainers.length; inc++) {
+        forcedItemNumberApplied += _setTextInContainer(itemNumberContainers[inc], itemNumberValue2);
+      }
+    }
+    var derivedQuantity = _readByPath(row, 'Derived.productQty');
+    var quantityFrames = _collectTextTargetsByAliases(['Quantity', 'Quantity Text', 'Qty', 'Qty Text', 'Product Quantity', 'Product Qty', 'ProductQty']);
+    var quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity Text');
+    if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity');
+    if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty Text');
+    if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty');
+    proofDebugLines.push('Quantity value="' + _debugValue(derivedQuantity) + '" frames=' + _debugTargetNames(quantityFrames) + ' containers=' + _debugTargetNames(quantityContainers));
+    if(quantityFrames && quantityFrames.length && derivedQuantity != null) {
+      var quantityValue = _toTextValue(derivedQuantity);
+      for(var qf = 0; qf < quantityFrames.length; qf++) {
+        try {
+          quantityFrames[qf].contents = quantityValue;
+          forcedQuantityApplied++;
+        } catch(_eQtySet) { }
+      }
+    }
+    if(quantityContainers && quantityContainers.length && derivedQuantity != null) {
+      var quantityValue2 = _toTextValue(derivedQuantity);
+      for(var qc = 0; qc < quantityContainers.length; qc++) {
+        forcedQuantityApplied += _setTextInContainer(quantityContainers[qc], quantityValue2);
+      }
+    }
     var derivedSubstrate = _readByPath(row, 'Derived.substrateText');
-    var substrateFrames = _getTextTargetsByName('Substrate Text');
+    var substrateFrames = _collectTextTargetsByAliases(['Substrate Text', 'Substrate', 'Material', 'Material Text']);
+    proofDebugLines.push('Substrate raw="' + _debugValue(derivedSubstrate) + '" frames=' + _debugTargetNames(substrateFrames));
     if(substrateFrames && substrateFrames.length && derivedSubstrate != null) {
-      var substrateValue = _toTextValue(derivedSubstrate);
+      var substrateValue = _normalizeSubstrateProofText(_toTextValue(derivedSubstrate));
+      proofDebugLines.push('Substrate normalized="' + _debugValue(substrateValue) + '"');
       for(var sf = 0; sf < substrateFrames.length; sf++) {
         try {
           substrateFrames[sf].contents = substrateValue;
@@ -6165,11 +6522,15 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Media Text updates: ' + forcedMediaApplied +
       '. Forced Laminate Text updates: ' + forcedLaminateApplied +
       '. Forced Substrate Text updates: ' + forcedSubstrateApplied +
+      '. Forced Line Item updates: ' + forcedLineItemApplied +
+      '. Forced Item Number updates: ' + forcedItemNumberApplied +
+      '. Forced Quantity updates: ' + forcedQuantityApplied +
       '. Forced Parts updates: ' + forcedPartsApplied +
       '. Forced Notes updates: ' + forcedNotesApplied +
       '. Fallback container text updates: ' + fallbackContainerTextApplied +
       '. Forced QR placements: ' + forcedQrPlaced +
-      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget + '. ' + pageNumberRes +
+      '. Missing source: ' + missingSource + '. Missing target: ' + missingTarget +
+      '. Proof debug: ' + proofDebugLines.join(' || ') + '. ' + pageNumberRes +
       '. ' + flashMessage +
       '. ' + String(linkPlacementRes || '');
   } catch(e) {
