@@ -6216,6 +6216,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
     var forcedLaminateApplied = 0;
     var forcedSubstrateApplied = 0;
     var forcedQuantityApplied = 0;
+    var forcedLineItemApplied = 0;
+    var forcedItemNumberApplied = 0;
     var forcedPartsApplied = 0;
     var forcedNotesApplied = 0;
     var fallbackContainerTextApplied = 0;
@@ -6314,8 +6316,48 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eLamSet) { }
       }
     }
+    var derivedLineItemNumber = _readByPath(row, 'Derived.lineItemNumber');
+    if(derivedLineItemNumber == null) derivedLineItemNumber = _readByPath(row, 'LineItemOrder');
+    var lineItemFrames = _collectTextTargetsByAliases(['Line Item Number', 'Line Item No', 'Line Item #', 'Line Item']);
+    var lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item Number');
+    if((!lineItemContainers || !lineItemContainers.length)) lineItemContainers = _getPageItemTargetsByName(itemMap, 'Line Item');
+    if(lineItemFrames && lineItemFrames.length && derivedLineItemNumber != null) {
+      var lineItemValue = _toTextValue(derivedLineItemNumber);
+      for(var lif = 0; lif < lineItemFrames.length; lif++) {
+        try {
+          lineItemFrames[lif].contents = lineItemValue;
+          forcedLineItemApplied++;
+        } catch(_eLineItemSet) { }
+      }
+    }
+    if(lineItemContainers && lineItemContainers.length && derivedLineItemNumber != null) {
+      var lineItemValue2 = _toTextValue(derivedLineItemNumber);
+      for(var lic = 0; lic < lineItemContainers.length; lic++) {
+        forcedLineItemApplied += _setTextInContainer(lineItemContainers[lic], lineItemValue2);
+      }
+    }
+    var derivedItemNumber = _readByPath(row, 'Derived.itemNumber');
+    if(derivedItemNumber == null) derivedItemNumber = _readByPath(row, 'Id');
+    var itemNumberFrames = _collectTextTargetsByAliases(['Item Number', 'Item No', 'Item #', 'Order Product ID', 'Order Product Id', 'Product ID', 'Product Id']);
+    var itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item Number');
+    if((!itemNumberContainers || !itemNumberContainers.length)) itemNumberContainers = _getPageItemTargetsByName(itemMap, 'Item No');
+    if(itemNumberFrames && itemNumberFrames.length && derivedItemNumber != null) {
+      var itemNumberValue = _toTextValue(derivedItemNumber);
+      for(var inf = 0; inf < itemNumberFrames.length; inf++) {
+        try {
+          itemNumberFrames[inf].contents = itemNumberValue;
+          forcedItemNumberApplied++;
+        } catch(_eItemNumberSet) { }
+      }
+    }
+    if(itemNumberContainers && itemNumberContainers.length && derivedItemNumber != null) {
+      var itemNumberValue2 = _toTextValue(derivedItemNumber);
+      for(var inc = 0; inc < itemNumberContainers.length; inc++) {
+        forcedItemNumberApplied += _setTextInContainer(itemNumberContainers[inc], itemNumberValue2);
+      }
+    }
     var derivedQuantity = _readByPath(row, 'Derived.productQty');
-    var quantityFrames = _collectTextTargetsByAliases(['Quantity', 'Quantity Text', 'Qty', 'Qty Text', 'Product Quantity', 'Product Qty']);
+    var quantityFrames = _collectTextTargetsByAliases(['Quantity', 'Quantity Text', 'Qty', 'Qty Text', 'Product Quantity', 'Product Qty', 'ProductQty']);
     var quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity Text');
     if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Quantity');
     if((!quantityContainers || !quantityContainers.length)) quantityContainers = _getPageItemTargetsByName(itemMap, 'Qty Text');
@@ -6329,7 +6371,7 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
         } catch(_eQtySet) { }
       }
     }
-    if((!quantityFrames || !quantityFrames.length) && quantityContainers && quantityContainers.length && derivedQuantity != null) {
+    if(quantityContainers && quantityContainers.length && derivedQuantity != null) {
       var quantityValue2 = _toTextValue(derivedQuantity);
       for(var qc = 0; qc < quantityContainers.length; qc++) {
         forcedQuantityApplied += _setTextInContainer(quantityContainers[qc], quantityValue2);
@@ -6417,6 +6459,8 @@ function signarama_helper_corebridge_createProofFromData(pathText, dataJson, map
       '. Forced Media Text updates: ' + forcedMediaApplied +
       '. Forced Laminate Text updates: ' + forcedLaminateApplied +
       '. Forced Substrate Text updates: ' + forcedSubstrateApplied +
+      '. Forced Line Item updates: ' + forcedLineItemApplied +
+      '. Forced Item Number updates: ' + forcedItemNumberApplied +
       '. Forced Quantity updates: ' + forcedQuantityApplied +
       '. Forced Parts updates: ' + forcedPartsApplied +
       '. Forced Notes updates: ' + forcedNotesApplied +

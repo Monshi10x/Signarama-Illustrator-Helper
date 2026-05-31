@@ -660,6 +660,8 @@
     const corebridgeDerivedMappingsPreviewText = [
       'Derived.installAddress -> Address Text',
       'Derived.todayDate -> Date Text',
+      'Derived.lineItemNumber -> Line Item Number',
+      'Derived.itemNumber -> Item Number',
       'Derived.productQty -> Quantity',
       'Derived.lineItemDescription -> Description',
       'Derived.mediaText -> Media Text',
@@ -1183,7 +1185,7 @@
     }
     async function buildCorebridgeProofPayload() {
       const primaryRow = (Array.isArray(corebridgeLastFilteredData) && corebridgeLastFilteredData.length) ? corebridgeLastFilteredData[0] : {};
-      const orderProductId = String(primaryRow && primaryRow.Id != null ? primaryRow.Id : '').trim();
+      const orderProductId = String(primaryRow && primaryRow.Id != null ? primaryRow.Id : (primaryRow && primaryRow.OrderProductId != null ? primaryRow.OrderProductId : (primaryRow && primaryRow.OrderProductID != null ? primaryRow.OrderProductID : ''))).trim();
       const lineItemOrder = parseInt((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : 1, 10) || 1;
 
       const secondary = corebridgeLastSecondaryFetchResults || {};
@@ -1216,6 +1218,7 @@
       const quoteItems = readQuoteLineItems(quoteData);
       const quoteItem = (Array.isArray(quoteItems) && quoteItems.length >= lineItemOrder) ? quoteItems[lineItemOrder - 1] : null;
       const productQty = quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '';
+      const lineItemNumber = String((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : lineItemOrder);
       const lineItemDescriptionHtml = quoteItem && quoteItem.I1 != null ? String(quoteItem.I1) : '';
       const lineItemDescription = htmlToPlainText(lineItemDescriptionHtml);
       const partPeekViews = Array.isArray(quoteItem && quoteItem.PartPeekViews) ? quoteItem.PartPeekViews : [];
@@ -1397,6 +1400,10 @@
         },
         Derived: {
           todayDate: formatDateDdMmYy(new Date()),
+          lineItemNumber: lineItemNumber,
+          lineItemOrder: lineItemNumber,
+          itemNumber: orderProductId,
+          orderProductId: orderProductId,
           lineItemDescription: lineItemDescription,
           lineItemDescriptionHtml: lineItemDescriptionHtml,
           productQty: productQty,
@@ -1455,6 +1462,21 @@
         if(timeoutHandle) clearTimeout(timeoutHandle);
       }
     }
+    function corebridgeRowMatchesItemNumber(row, itemNumber) {
+      const item = String(itemNumber == null ? '' : itemNumber).trim();
+      if(!item) return true;
+      const candidates = [
+        row && row.LineItemOrder,
+        row && row.Id,
+        row && row.OrderProductId,
+        row && row.OrderProductID,
+        row && row.OrderProductNumber,
+        row && row.OrderProductNo,
+        row && row.ProductId,
+        row && row.ProductID
+      ];
+      return candidates.some((value) => String(value == null ? '' : value).trim() === item);
+    }
     async function fetchCorebridgeFilteredData(options) {
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
       const opts = options || {};
@@ -1502,7 +1524,7 @@
         const filteredData = list.filter((row) => {
           const rowInvoice = normalizeCorebridgeInvoiceNumber(row && row.OrderInvoiceNumber);
           if(jobNumber && rowInvoice !== jobNumber) return false;
-          if(itemNumber && String(row.LineItemOrder) !== itemNumber) return false;
+          if(itemNumber && !corebridgeRowMatchesItemNumber(row, itemNumber)) return false;
           return true;
         });
 
@@ -1607,6 +1629,8 @@
         const mediaText = String(readValueAtPath(proofPayload, 'Derived.mediaText') || '');
         const laminateText = String(readValueAtPath(proofPayload, 'Derived.laminateText') || '');
         const partsText = String(readValueAtPath(proofPayload, 'Derived.partsNumbered') || '');
+        const lineItemText = String(readValueAtPath(proofPayload, 'Derived.lineItemNumber') || '');
+        const itemNumberText = String(readValueAtPath(proofPayload, 'Derived.itemNumber') || '');
         const quantityText = String(readValueAtPath(proofPayload, 'Derived.productQty') || '');
         const substrateText = String(readValueAtPath(proofPayload, 'Derived.substrateText') || '');
         const notesText = String(readValueAtPath(proofPayload, 'Derived.notesAll') || '');
@@ -1618,6 +1642,8 @@
           ' | addressQrPngGenerated=' + (hasQrPng ? 'yes' : 'no') +
           ' | mediaText="' + mediaText + '"' +
           ' | laminateText="' + laminateText + '"' +
+          ' | lineItemNumber="' + lineItemText + '"' +
+          ' | itemNumber="' + itemNumberText + '"' +
           ' | productQty="' + quantityText + '"' +
           ' | substrateText="' + substrateText + '"' +
           ' | partsNumbered="' + partsText + '"' +
@@ -1631,6 +1657,8 @@
           ' qrPng=' + (hasQrPng ? 'yes' : 'no') +
           ' mediaText="' + mediaText + '"' +
           ' laminateText="' + laminateText + '"' +
+          ' lineItemNumber="' + lineItemText + '"' +
+          ' itemNumber="' + itemNumberText + '"' +
           ' productQty="' + quantityText + '"' +
           ' substrateText="' + substrateText + '"' +
           ' partsNumbered="' + partsText + '"' +
