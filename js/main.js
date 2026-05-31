@@ -545,9 +545,6 @@
             stopCorebridgeFlashTickPolling('tick error');
             return;
           }
-          if(corebridgeFlashTickPollCount <= 10 || corebridgeFlashTickPollCount % 10 === 0 || /^INACTIVE\|/i.test(tickTxt)) {
-            log('Corebridge flash poll #' + corebridgeFlashTickPollCount + ': ' + tickTxt);
-          }
           if(/^INACTIVE\|/i.test(tickTxt)) {
             stopCorebridgeFlashTickPolling('inactive');
             return;
@@ -555,9 +552,6 @@
           const parts = tickTxt.split('|');
           if(parts.length >= 4 && /^ACTIVE$/i.test(parts[0])) {
             const tickCount = parseInt(parts[2], 10) || 0;
-            if(corebridgeFlashLastTickCount >= 0 && tickCount <= corebridgeFlashLastTickCount) {
-              log('Corebridge flash poll warning: non-incrementing tick count (' + tickCount + ').');
-            }
             corebridgeFlashLastTickCount = tickCount;
           }
         });
@@ -660,6 +654,8 @@
     const corebridgeDerivedMappingsPreviewText = [
       'Derived.installAddress -> Address Text',
       'Derived.todayDate -> Date Text',
+      'Derived.lineItemNumber -> Line Item Number',
+      'Derived.itemNumber -> Item Number',
       'Derived.productQty -> Quantity',
       'Derived.lineItemDescription -> Description',
       'Derived.mediaText -> Media Text',
@@ -1183,8 +1179,11 @@
     }
     async function buildCorebridgeProofPayload() {
       const primaryRow = (Array.isArray(corebridgeLastFilteredData) && corebridgeLastFilteredData.length) ? corebridgeLastFilteredData[0] : {};
-      const orderProductId = String(primaryRow && primaryRow.Id != null ? primaryRow.Id : '').trim();
-      const lineItemOrder = parseInt((primaryRow && primaryRow.LineItemOrder != null) ? primaryRow.LineItemOrder : 1, 10) || 1;
+      const orderProductId = String(primaryRow && primaryRow.Id != null ? primaryRow.Id : (primaryRow && primaryRow.OrderProductId != null ? primaryRow.OrderProductId : (primaryRow && primaryRow.OrderProductID != null ? primaryRow.OrderProductID : ''))).trim();
+      const corebridgeLineItemOrderRaw = primaryRow && primaryRow.lineItemOrder != null
+        ? primaryRow.lineItemOrder
+        : (primaryRow && primaryRow.LineItemOrder != null ? primaryRow.LineItemOrder : '');
+      const lineItemOrder = parseInt(corebridgeLineItemOrderRaw !== '' ? corebridgeLineItemOrderRaw : 1, 10) || 1;
 
       const secondary = corebridgeLastSecondaryFetchResults || {};
       const quoteRows = Array.isArray(secondary.quoteLevel) ? secondary.quoteLevel : [];
@@ -1206,9 +1205,18 @@
         ? notesSuccessRow.response.notesByType
         : [];
 
-      const quoteItems = readValueAtPath(quoteData, 'OrderInformation.OrderInformation.H2');
-      const quoteItem = (Array.isArray(quoteItems) && quoteItems.length >= lineItemOrder) ? quoteItems[lineItemOrder - 1] : null;
+      function readQuoteLineItems(data) {
+        const direct = readValueAtPath(data, 'OrderInformation.OrderInformation.H2');
+        if(Array.isArray(direct)) return direct;
+        const wrapped = readValueAtPath(data, 'data.OrderInformation.OrderInformation.H2');
+        if(Array.isArray(wrapped)) return wrapped;
+        return [];
+      }
+      const quoteItems = readQuoteLineItems(quoteData);
+      const quoteItemIndex = lineItemOrder - 1;
+      const quoteItem = (Array.isArray(quoteItems) && quoteItemIndex >= 0 && quoteItems.length > quoteItemIndex) ? quoteItems[quoteItemIndex] : null;
       const productQty = quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '';
+      const lineItemNumber = String(corebridgeLineItemOrderRaw !== '' ? corebridgeLineItemOrderRaw : lineItemOrder);
       const lineItemDescriptionHtml = quoteItem && quoteItem.I1 != null ? String(quoteItem.I1) : '';
       const lineItemDescription = htmlToPlainText(lineItemDescriptionHtml);
       const partPeekViews = Array.isArray(quoteItem && quoteItem.PartPeekViews) ? quoteItem.PartPeekViews : [];
@@ -1221,59 +1229,116 @@
       const mediaText = Array.isArray(groupedPartTypes['Vinyl -']) ? groupedPartTypes['Vinyl -'].join('\n') : '';
       const laminateText = Array.isArray(groupedPartTypes['Laminate -']) ? groupedPartTypes['Laminate -'].join('\n') : '';
       const substratePrefixes = ['ACM -', 'Acrylic -', 'Aluminium -', 'Mondoclad -', 'Foamed PVC -', 'Corflute -', 'Polycarb -', 'Stainless -', 'HDPE -', 'Signwhite -'];
-      function deriveSubstrateShortText(prefix, rawValue) {
-        const shortName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
-        const raw = String(rawValue == null ? '' : rawValue).trim();
-        if(!shortName) return '';
-
-        let thickness = '';
-        let thicknessFromFetch = false;
+      function titleCaseWords(value) {
+        return String(value == null ? '' : value)
+          .toLowerCase()
+          .replace(/\b([a-z])/g, (m) => m.toUpperCase())
+          .replace(/\bPvc\b/g, 'PVC')
+          .replace(/\bHdpe\b/g, 'HDPE')
+          .replace(/\bAcm\b/g, 'ACM');
+      }
+      function escapeRegExp(value) {
+        return String(value == null ? '' : value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+      function normalizeLooseKey(value) {
+        return String(value == null ? '' : value)
+          .replace(/\u00a0/g, ' ')
+          .toLowerCase()
+          .replace(/&/g, ' and ')
+          .replace(/[^a-z0-9.]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      function cleanThicknessValue(value) {
+        let out = String(value == null ? '' : value).replace(/\s+/g, '').trim();
+        out = out.replace(/mm$/i, '').replace(/[^0-9.]/g, '');
+        return out;
+      }
+      function removeWordsForSubstrateFinish(value, materialName, thicknessClean) {
+        let finish = String(value == null ? '' : value).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        finish = finish
+          .replace(/\([^)]*\)/g, ' ')
+          .replace(/\b\d+(?:\.\d+)?(?:\s*x\s*\d+(?:\.\d+)?)+\b/ig, ' ')
+          .replace(/\b(?:sqm|sq\s*m|m2)\b/ig, ' ');
+        if(thicknessClean) {
+          const escapedThickness = escapeRegExp(thicknessClean);
+          finish = finish
+            .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\s*mm\\b', 'ig'), ' ')
+            .replace(new RegExp('(?:^|\\s|x)' + escapedThickness + '\\b', 'ig'), ' ');
+        }
+        const materialWords = String(materialName || '').split(/\s+/).filter(Boolean);
+        materialWords.forEach((word) => {
+          finish = finish.replace(new RegExp('\\b' + escapeRegExp(word) + '\\b', 'ig'), ' ');
+        });
+        finish = finish.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+        return finish;
+      }
+      function findSubstrateThickness(raw, materialName) {
         const byName = srhGlobalState && srhGlobalState.corebridgePartSearchEntriesByName
           ? srhGlobalState.corebridgePartSearchEntriesByName
           : {};
-        const rawNorm = raw.toLowerCase().replace(/\s+/g, ' ').trim();
-        if(rawNorm && byName[rawNorm] && byName[rawNorm].thickness) {
-          thickness = String(byName[rawNorm].thickness || '').trim();
-          thicknessFromFetch = !!thickness;
+        const rawNorm = normalizeLooseKey(raw);
+        const materialNorm = normalizeLooseKey(materialName);
+        const lookupKeys = [];
+        if(rawNorm) lookupKeys.push(rawNorm);
+        if(materialNorm && rawNorm) lookupKeys.push((materialNorm + ' ' + rawNorm).trim());
+        if(materialNorm && rawNorm) lookupKeys.push((materialNorm + ' - ' + rawNorm).trim());
+        for(let i = 0; i < lookupKeys.length; i++) {
+          const key = lookupKeys[i];
+          if(byName[key] && byName[key].thickness) return String(byName[key].thickness || '').trim();
         }
-        if(!thickness && rawNorm) {
-          const matchedKey = Object.keys(byName).find((k) => k.indexOf(rawNorm) >= 0 || rawNorm.indexOf(k) >= 0);
-          if(matchedKey && byName[matchedKey] && byName[matchedKey].thickness) {
-            thickness = String(byName[matchedKey].thickness || '').trim();
-            thicknessFromFetch = !!thickness;
+        const keys = Object.keys(byName);
+        for(let k = 0; k < keys.length; k++) {
+          const key = normalizeLooseKey(keys[k]);
+          if(!key || !rawNorm) continue;
+          const hasRaw = key.indexOf(rawNorm) >= 0 || rawNorm.indexOf(key) >= 0;
+          const hasMaterial = !materialNorm || key.indexOf(materialNorm) >= 0;
+          if(hasRaw && hasMaterial && byName[keys[k]] && byName[keys[k]].thickness) {
+            return String(byName[keys[k]].thickness || '').trim();
           }
         }
-        if(!thickness) {
-          const compact = raw.replace(/\s+/g, '');
-          const xParts = compact.split('x');
-          if(xParts.length > 1) thickness = String(xParts[xParts.length - 1] || '').trim();
-          if(!thickness) {
-            const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
-            if(m && m[1]) thickness = m[1];
-          }
-        }
+        const compact = String(raw == null ? '' : raw).replace(/\s+/g, '');
+        const xParts = compact.split('x');
+        if(xParts.length > 1) return String(xParts[xParts.length - 1] || '').trim();
+        const m = compact.match(/(\d+(?:\.\d+)?)\s*(?:mm)?$/i);
+        return (m && m[1]) ? m[1] : '';
+      }
+      function deriveSubstrateShortText(prefix, rawValue) {
+        const materialName = String(prefix || '').replace(/\s*-\s*$/, '').trim();
+        const raw = String(rawValue == null ? '' : rawValue).replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+        if(!materialName) return null;
 
-        if(!thickness) return shortName;
-        if(thicknessFromFetch) {
-          const fetchedThickness = /mm$/i.test(thickness) ? thickness : (thickness + 'mm');
-          return fetchedThickness + ' ' + shortName;
-        }
-        let thicknessClean = String(thickness).replace(/\s+/g, '').trim();
-        if(!thicknessClean) return shortName;
-        thicknessClean = thicknessClean.replace(/mm$/i, '');
-        thicknessClean = thicknessClean.replace(/[^0-9.]/g, '');
-        if(!thicknessClean) return shortName;
-        return thicknessClean + 'mm ' + shortName;
+        const thicknessClean = cleanThicknessValue(findSubstrateThickness(raw, materialName));
+        const finish = removeWordsForSubstrateFinish(raw, materialName, thicknessClean);
+        const materialText = titleCaseWords(materialName);
+        const finishText = finish ? titleCaseWords(finish) : '';
+        const parts = [];
+        if(thicknessClean) parts.push(thicknessClean + 'mm');
+        if(finishText) parts.push(finishText);
+        parts.push(materialText);
+        return {
+          text: parts.join(' '),
+          key: normalizeLooseKey((finishText ? finishText + ' ' : '') + materialText),
+          hasThickness: !!thicknessClean
+        };
       }
       const substrateRows = [];
+      const substrateSeen = {};
       substratePrefixes.forEach((prefix) => {
         const vals = Array.isArray(groupedPartTypes[prefix]) ? groupedPartTypes[prefix] : [];
         vals.forEach((v) => {
-          const shortText = deriveSubstrateShortText(prefix, v);
-          if(shortText) substrateRows.push(shortText);
+          const substrateInfo = deriveSubstrateShortText(prefix, v);
+          if(!substrateInfo || !substrateInfo.text || !substrateInfo.key) return;
+          const existingIndex = substrateSeen[substrateInfo.key];
+          if(existingIndex == null) {
+            substrateSeen[substrateInfo.key] = substrateRows.length;
+            substrateRows.push(substrateInfo);
+          } else if(substrateInfo.hasThickness && !substrateRows[existingIndex].hasThickness) {
+            substrateRows[existingIndex] = substrateInfo;
+          }
         });
       });
-      const substrateText = substrateRows.join('\n');
+      const substrateText = substrateRows.map((row) => row.text).join('\n');
 
       const installAddressDetails = extractInstallAddressDetailed(quoteData);
       const installAddress = installAddressDetails.value;
@@ -1333,6 +1398,10 @@
         },
         Derived: {
           todayDate: formatDateDdMmYy(new Date()),
+          lineItemNumber: lineItemNumber,
+          lineItemOrder: lineItemNumber,
+          itemNumber: orderProductId,
+          orderProductId: orderProductId,
           lineItemDescription: lineItemDescription,
           lineItemDescriptionHtml: lineItemDescriptionHtml,
           productQty: productQty,
@@ -1357,7 +1426,23 @@
         },
         DerivedDebug: {
           installAddressSource: installAddressDetails.source,
-          installAddressTrace: installAddressDetails.debug
+          installAddressTrace: installAddressDetails.debug,
+          selectedRow: {
+            lineItemOrder: primaryRow && primaryRow.lineItemOrder != null ? primaryRow.lineItemOrder : null,
+            LineItemOrder: primaryRow && primaryRow.LineItemOrder != null ? primaryRow.LineItemOrder : null,
+            Id: primaryRow && primaryRow.Id != null ? primaryRow.Id : null,
+            OrderProductId: primaryRow && primaryRow.OrderProductId != null ? primaryRow.OrderProductId : null,
+            OrderProductID: primaryRow && primaryRow.OrderProductID != null ? primaryRow.OrderProductID : null
+          },
+          quoteLineItemSelection: {
+            corebridgeLineItemOrderRaw: corebridgeLineItemOrderRaw,
+            lineItemOrder: lineItemOrder,
+            quoteItemIndex: quoteItemIndex,
+            quoteItemsCount: Array.isArray(quoteItems) ? quoteItems.length : 0,
+            quoteItemFound: !!quoteItem,
+            quoteItemB0: quoteItem && quoteItem.B0 != null ? String(quoteItem.B0) : '',
+            productQty: productQty
+          }
         }
       });
     }
@@ -1390,6 +1475,22 @@
       } finally {
         if(timeoutHandle) clearTimeout(timeoutHandle);
       }
+    }
+    function corebridgeRowMatchesItemNumber(row, itemNumber) {
+      const item = String(itemNumber == null ? '' : itemNumber).trim();
+      if(!item) return true;
+      const candidates = [
+        row && row.lineItemOrder,
+        row && row.LineItemOrder,
+        row && row.Id,
+        row && row.OrderProductId,
+        row && row.OrderProductID,
+        row && row.OrderProductNumber,
+        row && row.OrderProductNo,
+        row && row.ProductId,
+        row && row.ProductID
+      ];
+      return candidates.some((value) => String(value == null ? '' : value).trim() === item);
     }
     async function fetchCorebridgeFilteredData(options) {
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
@@ -1438,7 +1539,7 @@
         const filteredData = list.filter((row) => {
           const rowInvoice = normalizeCorebridgeInvoiceNumber(row && row.OrderInvoiceNumber);
           if(jobNumber && rowInvoice !== jobNumber) return false;
-          if(itemNumber && String(row.LineItemOrder) !== itemNumber) return false;
+          if(itemNumber && !corebridgeRowMatchesItemNumber(row, itemNumber)) return false;
           return true;
         });
 
@@ -1543,18 +1644,33 @@
         const mediaText = String(readValueAtPath(proofPayload, 'Derived.mediaText') || '');
         const laminateText = String(readValueAtPath(proofPayload, 'Derived.laminateText') || '');
         const partsText = String(readValueAtPath(proofPayload, 'Derived.partsNumbered') || '');
+        const lineItemText = String(readValueAtPath(proofPayload, 'Derived.lineItemNumber') || '');
+        const itemNumberText = String(readValueAtPath(proofPayload, 'Derived.itemNumber') || '');
+        const quantityText = String(readValueAtPath(proofPayload, 'Derived.productQty') || '');
+        const substrateText = String(readValueAtPath(proofPayload, 'Derived.substrateText') || '');
         const notesText = String(readValueAtPath(proofPayload, 'Derived.notesAll') || '');
         const derivedDate = String(readValueAtPath(proofPayload, 'Derived.todayDate') || '');
         const addrSource = String(readValueAtPath(proofPayload, 'DerivedDebug.installAddressSource') || 'none');
+        const selectedRowDebug = readValueAtPath(proofPayload, 'DerivedDebug.selectedRow') || {};
+        const quoteLineItemDebug = readValueAtPath(proofPayload, 'DerivedDebug.quoteLineItemSelection') || {};
         appendCorebridgeDataDump(
           '[Derived Debug] installAddress="' + resolvedAddress + '" | source=' + addrSource +
           ' | addressQrSvgGenerated=' + (hasQrSvg ? 'yes' : 'no') +
           ' | addressQrPngGenerated=' + (hasQrPng ? 'yes' : 'no') +
           ' | mediaText="' + mediaText + '"' +
           ' | laminateText="' + laminateText + '"' +
+          ' | lineItemNumber="' + lineItemText + '"' +
+          ' | itemNumber="' + itemNumberText + '"' +
+          ' | productQty="' + quantityText + '"' +
+          ' | substrateText="' + substrateText + '"' +
           ' | partsNumbered="' + partsText + '"' +
           ' | notesAll="' + notesText + '"' +
           ' | todayDate=' + derivedDate
+        );
+        appendCorebridgeDataDump(
+          '[Line/Qty Debug] selectedRow=' + JSON.stringify(selectedRowDebug) +
+          ' | quoteLineItemSelection=' + JSON.stringify(quoteLineItemDebug) +
+          ' | filteredRows=' + (Array.isArray(corebridgeLastFilteredData) ? corebridgeLastFilteredData.length : 0)
         );
         log(
           'Corebridge install address debug: value="' + resolvedAddress + '"' +
@@ -1563,9 +1679,14 @@
           ' qrPng=' + (hasQrPng ? 'yes' : 'no') +
           ' mediaText="' + mediaText + '"' +
           ' laminateText="' + laminateText + '"' +
+          ' lineItemNumber="' + lineItemText + '"' +
+          ' itemNumber="' + itemNumberText + '"' +
+          ' productQty="' + quantityText + '"' +
+          ' substrateText="' + substrateText + '"' +
           ' partsNumbered="' + partsText + '"' +
           ' notesAll="' + notesText + '"'
         );
+        log('Corebridge line/qty debug: selectedRow=' + JSON.stringify(selectedRowDebug) + ' quoteLineItemSelection=' + JSON.stringify(quoteLineItemDebug));
         const safeDataJson = jsxEscapeDoubleQuoted(JSON.stringify(proofPayload));
         const safeMappingText = jsxEscapeDoubleQuoted(mappingText);
         const flashFieldsText = (corebridgeFlashFields && corebridgeFlashFields.value ? corebridgeFlashFields.value : '').trim();
@@ -2757,7 +2878,6 @@
       if(refreshDimensionSelectionHintTimer) clearTimeout(refreshDimensionSelectionHintTimer);
       refreshDimensionSelectionHintTimer = setTimeout(function() {
         refreshDimensionSelectionHintTimer = null;
-        log('Dimensions refresh tick.');
         refreshDimensionSelectionHint();
       }, 180);
     }
