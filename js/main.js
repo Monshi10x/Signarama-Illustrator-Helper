@@ -1476,21 +1476,43 @@
         if(timeoutHandle) clearTimeout(timeoutHandle);
       }
     }
+    function corebridgeExtractPrimaryRows(parsed) {
+      if(Array.isArray(parsed)) return parsed;
+      if(!parsed || typeof parsed !== 'object') return [];
+
+      const arrayKeys = ['data', 'Data', 'rows', 'Rows', 'items', 'Items', 'results', 'Results'];
+      for(let i = 0; i < arrayKeys.length; i++) {
+        const rows = parsed[arrayKeys[i]];
+        if(Array.isArray(rows)) return rows;
+      }
+
+      if(parsed.OrderInvoiceNumber != null || parsed.LineItemOrder != null || parsed.OrderId != null || parsed.Id != null) {
+        return [parsed];
+      }
+
+      return [];
+    }
+    function normalizeCorebridgeItemNumber(value) {
+      return String(value == null ? '' : value).trim();
+    }
+    function corebridgeDebugLog(label, value) {
+      let output = '';
+      if(typeof value === 'string') {
+        output = value;
+      } else {
+        try {
+          output = JSON.stringify(value, null, 2);
+        } catch(_eStringify) {
+          output = String(value);
+        }
+      }
+      log('[Corebridge debug] ' + label + ': ' + output);
+    }
     function corebridgeRowMatchesItemNumber(row, itemNumber) {
-      const item = String(itemNumber == null ? '' : itemNumber).trim();
+      const item = normalizeCorebridgeItemNumber(itemNumber);
       if(!item) return true;
-      const candidates = [
-        row && row.lineItemOrder,
-        row && row.LineItemOrder,
-        row && row.Id,
-        row && row.OrderProductId,
-        row && row.OrderProductID,
-        row && row.OrderProductNumber,
-        row && row.OrderProductNo,
-        row && row.ProductId,
-        row && row.ProductID
-      ];
-      return candidates.some((value) => String(value == null ? '' : value).trim() === item);
+      const lineItemOrder = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
+      return lineItemOrder === item;
     }
     async function fetchCorebridgeFilteredData(options) {
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
@@ -1499,6 +1521,13 @@
       const criteria = getCorebridgeCriteriaFromFields();
       const jobNumber = criteria.jobNumber;
       const itemNumber = criteria.itemNumber;
+      corebridgeDebugLog('fetch start', {
+        url: url,
+        rawJobNumber: corebridgeJobNumber && corebridgeJobNumber.value ? corebridgeJobNumber.value : '',
+        normalizedJobNumber: jobNumber,
+        rawItemNumber: corebridgeItemNumber && corebridgeItemNumber.value ? corebridgeItemNumber.value : '',
+        normalizedItemNumber: itemNumber
+      });
       if(opts.showLoading !== false) renderCorebridgeDataDump('Loading...\n' + url);
       setCorebridgeFetchLoading(true);
       corebridgeFetchPromise = (async () => {
@@ -1532,16 +1561,38 @@
         if(!res && lastErr) throw lastErr;
         if(!res) throw new Error('No response from primary data endpoint.');
         const text = await res.text();
+        corebridgeDebugLog('fetch response status', res.status + ' ' + res.statusText);
+        corebridgeDebugLog('fetch raw response text', text);
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
         const parsed = JSON.parse(text);
-        const list = Array.isArray(parsed) ? parsed : [parsed];
-        const filteredData = list.filter((row) => {
-          const rowInvoice = normalizeCorebridgeInvoiceNumber(row && row.OrderInvoiceNumber);
-          if(jobNumber && rowInvoice !== jobNumber) return false;
-          if(itemNumber && !corebridgeRowMatchesItemNumber(row, itemNumber)) return false;
-          return true;
+        corebridgeDebugLog('fetch parsed response', parsed);
+        const list = corebridgeExtractPrimaryRows(parsed);
+        corebridgeDebugLog('extracted primary rows', {rowCount: list.length, rows: list});
+        const filterDebugRows = [];
+        const filteredData = list.filter((row, index) => {
+          const rowInvoiceRaw = row && row.OrderInvoiceNumber;
+          const rowInvoice = normalizeCorebridgeInvoiceNumber(rowInvoiceRaw);
+          const rowLineItemOrder = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
+          const invoiceMatches = !jobNumber || rowInvoice === jobNumber;
+          const itemMatches = !itemNumber || rowLineItemOrder === itemNumber;
+          filterDebugRows.push({
+            index: index,
+            Id: row && row.Id,
+            OrderId: row && row.OrderId,
+            OrderInvoiceNumber: rowInvoiceRaw,
+            normalizedOrderInvoiceNumber: rowInvoice,
+            enteredJobNumber: jobNumber,
+            invoiceMatches: invoiceMatches,
+            LineItemOrder: rowLineItemOrder,
+            enteredItemNumber: itemNumber,
+            itemMatches: itemMatches,
+            included: invoiceMatches && itemMatches
+          });
+          return invoiceMatches && itemMatches;
         });
+        corebridgeDebugLog('filter comparison rows', filterDebugRows);
+        corebridgeDebugLog('filtered result', {rowCount: filteredData.length, rows: filteredData});
 
         corebridgeLastFilteredData = filteredData;
         corebridgeHasFetchedData = true;
