@@ -1492,6 +1492,26 @@
 
       return [];
     }
+    function corebridgeParsePrimaryResponseText(text) {
+      const rawText = String(text == null ? '' : text);
+      let parsed = JSON.parse(rawText);
+
+      if(typeof parsed === 'string') {
+        const trimmed = parsed.trim();
+        if(trimmed && (/^[\[{]/).test(trimmed)) {
+          parsed = JSON.parse(trimmed);
+        } else if(trimmed.indexOf('[object Object]') !== -1) {
+          throw new Error(
+            'Corebridge primary endpoint returned a stringified object list instead of JSON rows: "' +
+            trimmed.slice(0, 160) +
+            (trimmed.length > 160 ? '…' : '') +
+            '". The localhost proxy/server must return the raw array/object as JSON, not String(rows) + " Entries".'
+          );
+        }
+      }
+
+      return parsed;
+    }
     function normalizeCorebridgeItemNumber(value) {
       return String(value == null ? '' : value).trim();
     }
@@ -1565,10 +1585,17 @@
         corebridgeDebugLog('fetch raw response text', text);
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
-        const parsed = JSON.parse(text);
+        const parsed = corebridgeParsePrimaryResponseText(text);
         corebridgeDebugLog('fetch parsed response', parsed);
         const list = corebridgeExtractPrimaryRows(parsed);
         corebridgeDebugLog('extracted primary rows', {rowCount: list.length, rows: list});
+        if(!list.length) {
+          corebridgeDebugLog('empty row extraction warning', {
+            parsedType: parsed === null ? 'null' : typeof parsed,
+            parsedKeys: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed) : [],
+            message: 'No Corebridge rows were found in the primary endpoint response.'
+          });
+        }
         const filterDebugRows = [];
         const filteredData = list.filter((row, index) => {
           const rowInvoiceRaw = row && row.OrderInvoiceNumber;
