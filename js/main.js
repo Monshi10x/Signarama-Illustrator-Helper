@@ -1476,21 +1476,30 @@
         if(timeoutHandle) clearTimeout(timeoutHandle);
       }
     }
+    function corebridgeExtractPrimaryRows(parsed) {
+      if(Array.isArray(parsed)) return parsed;
+      if(!parsed || typeof parsed !== 'object') return [];
+
+      const arrayKeys = ['data', 'Data', 'rows', 'Rows', 'items', 'Items', 'results', 'Results'];
+      for(let i = 0; i < arrayKeys.length; i++) {
+        const rows = parsed[arrayKeys[i]];
+        if(Array.isArray(rows)) return rows;
+      }
+
+      if(parsed.OrderInvoiceNumber != null || parsed.LineItemOrder != null || parsed.OrderId != null || parsed.Id != null) {
+        return [parsed];
+      }
+
+      return [];
+    }
+    function normalizeCorebridgeItemNumber(value) {
+      return String(value == null ? '' : value).trim();
+    }
     function corebridgeRowMatchesItemNumber(row, itemNumber) {
-      const item = String(itemNumber == null ? '' : itemNumber).trim();
+      const item = normalizeCorebridgeItemNumber(itemNumber);
       if(!item) return true;
-      const candidates = [
-        row && row.lineItemOrder,
-        row && row.LineItemOrder,
-        row && row.Id,
-        row && row.OrderProductId,
-        row && row.OrderProductID,
-        row && row.OrderProductNumber,
-        row && row.OrderProductNo,
-        row && row.ProductId,
-        row && row.ProductID
-      ];
-      return candidates.some((value) => String(value == null ? '' : value).trim() === item);
+      const lineItemOrder = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
+      return lineItemOrder === item;
     }
     async function fetchCorebridgeFilteredData(options) {
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
@@ -1535,7 +1544,7 @@
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
         const parsed = JSON.parse(text);
-        const list = Array.isArray(parsed) ? parsed : [parsed];
+        const list = corebridgeExtractPrimaryRows(parsed);
         const filteredData = list.filter((row) => {
           const rowInvoice = normalizeCorebridgeInvoiceNumber(row && row.OrderInvoiceNumber);
           if(jobNumber && rowInvoice !== jobNumber) return false;
