@@ -5612,6 +5612,9 @@ function _srh_corebridge_flashTick() {
     _srh_corebridge_pauseFlashForDocumentChange();
     return true;
   }
+  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.pausedForDocumentChange) {
+    _srh_corebridge_scheduleFlashTaskIfNeeded();
+  }
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
     if(!_srh_corebridge_ensureFlashStateFromDocument()) {
       _srh_corebridge_stopFlashing(false);

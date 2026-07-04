@@ -537,12 +537,12 @@
     function startCorebridgeFlashTickPolling() {
       stopCorebridgeFlashTickPolling('restart');
       corebridgeFlashTickPollCount = 0;
-      log('Corebridge flash poll start (state check every 500ms).');
+      log('Corebridge flash poll start (safe tick every 500ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
         if(corebridgeFlashTickPollInFlight) return;
         corebridgeFlashTickPollInFlight = true;
         corebridgeFlashTickPollCount++;
-        callJSX('((typeof signarama_helper_corebridge_flashGetState === "function") ? signarama_helper_corebridge_flashGetState : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashGetState === "function") ? $.global.signarama_helper_corebridge_flashGetState : function(){return "ERROR|flashGetState missing";}))()', (tickRes) => {
+        callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
           corebridgeFlashTickPollInFlight = false;
           const tickTxt = String(tickRes || '').trim();
           if(/^ERROR\|/i.test(tickTxt)) {
