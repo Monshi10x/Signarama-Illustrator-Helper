@@ -161,6 +161,7 @@
   let corebridgeFlashTickPollTimer = null;
   let corebridgeFlashTickPollCount = 0;
   let corebridgeFlashLastTickCount = -1;
+  let corebridgeFlashTickPollInFlight = false;
   let coloursPendingApplyFns = [];
   let coloursHasPendingChanges = false;
   let isLargeArtboard = false;
@@ -531,14 +532,18 @@
       }
       if(reason) log('Corebridge flash poll stop: ' + reason);
       corebridgeFlashLastTickCount = -1;
+      corebridgeFlashTickPollInFlight = false;
     }
     function startCorebridgeFlashTickPolling() {
       stopCorebridgeFlashTickPolling('restart');
       corebridgeFlashTickPollCount = 0;
-      log('Corebridge flash poll start (300ms).');
+      log('Corebridge flash poll start (safe tick every 500ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
+        if(corebridgeFlashTickPollInFlight) return;
+        corebridgeFlashTickPollInFlight = true;
         corebridgeFlashTickPollCount++;
         callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
+          corebridgeFlashTickPollInFlight = false;
           const tickTxt = String(tickRes || '').trim();
           if(/^ERROR\|/i.test(tickTxt)) {
             log('Corebridge flash tick error: ' + tickTxt);
@@ -555,7 +560,7 @@
             corebridgeFlashLastTickCount = tickCount;
           }
         });
-      }, 300);
+      }, 500);
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
