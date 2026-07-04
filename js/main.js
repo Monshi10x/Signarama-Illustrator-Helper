@@ -161,6 +161,7 @@
   let corebridgeFlashTickPollTimer = null;
   let corebridgeFlashTickPollCount = 0;
   let corebridgeFlashLastTickCount = -1;
+  let corebridgeFlashTickPollInFlight = false;
   let coloursPendingApplyFns = [];
   let coloursHasPendingChanges = false;
   let isLargeArtboard = false;
@@ -524,6 +525,7 @@
     const corebridgeDerivedMappingsPreview = document.querySelector('textarea[data-corebridge-derived-mappings]');
     const corebridgeDumpHost = $('corebridgeDataDumpHost');
     const corebridgeFetchStatus = $('corebridgeFetchStatus');
+    const corebridgeLookup = $('corebridgeLookup');
     function stopCorebridgeFlashTickPolling(reason) {
       if(corebridgeFlashTickPollTimer) {
         clearInterval(corebridgeFlashTickPollTimer);
@@ -531,14 +533,18 @@
       }
       if(reason) log('Corebridge flash poll stop: ' + reason);
       corebridgeFlashLastTickCount = -1;
+      corebridgeFlashTickPollInFlight = false;
     }
     function startCorebridgeFlashTickPolling() {
       stopCorebridgeFlashTickPolling('restart');
       corebridgeFlashTickPollCount = 0;
-      log('Corebridge flash poll start (300ms).');
+      log('Corebridge flash poll start (safe tick every 500ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
+        if(corebridgeFlashTickPollInFlight) return;
+        corebridgeFlashTickPollInFlight = true;
         corebridgeFlashTickPollCount++;
         callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
+          corebridgeFlashTickPollInFlight = false;
           const tickTxt = String(tickRes || '').trim();
           if(/^ERROR\|/i.test(tickTxt)) {
             log('Corebridge flash tick error: ' + tickTxt);
@@ -555,7 +561,74 @@
             corebridgeFlashLastTickCount = tickCount;
           }
         });
-      }, 300);
+      }, 500);
+    }
+
+    function selectCorebridgeInputText(el) {
+      if(!el || typeof el.select !== 'function') return;
+      setTimeout(() => {
+        try {el.select();} catch(_eSelectCorebridgeInput) { }
+      }, 0);
+    }
+    [corebridgeJobNumber, corebridgeItemNumber].forEach((el) => {
+      if(!el) return;
+      el.addEventListener('focus', () => selectCorebridgeInputText(el));
+      el.addEventListener('click', () => selectCorebridgeInputText(el));
+    });
+    function corebridgeFirstValue(row, keys) {
+      if(!row || !keys || !keys.length) return '';
+      for(let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if(row[key] != null && String(row[key]).trim() !== '') return String(row[key]).trim();
+      }
+      return '';
+    }
+    function corebridgeLookupRowValues(row) {
+      const jobNumber = normalizeCorebridgeInvoiceNumber(corebridgeFirstValue(row, ['OrderInvoiceNumber', 'InvoiceNumber', 'JobNumber', 'OrderNumber']));
+      const itemNumber = normalizeCorebridgeItemNumber(corebridgeFirstValue(row, ['LineItemOrder', 'lineItemOrder', 'ItemNumber', 'LineItemNumber']));
+      const companyName = corebridgeFirstValue(row, ['CompanyName', 'companyName', 'AccountName', 'CustomerName', 'CustomerCompanyName']);
+      const productNumber = corebridgeFirstValue(row, ['ProductNumber', 'productNumber', 'ProductNo', 'PartNumber', 'PartNo', 'SKU', 'ProductName', 'Name', 'Id', 'OrderProductId', 'OrderProductID']);
+      return {jobNumber: jobNumber, itemNumber: itemNumber, companyName: companyName, productNumber: productNumber};
+    }
+    function renderCorebridgeLookup(rows) {
+      if(!corebridgeLookup) return;
+      const list = Array.isArray(rows) ? rows.slice() : [];
+      corebridgeLookup.innerHTML = '';
+      if(!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'corebridge-lookup-empty';
+        empty.textContent = 'Fetched jobs will appear here.';
+        corebridgeLookup.appendChild(empty);
+        return;
+      }
+      list.sort((a, b) => {
+        const av = corebridgeLookupRowValues(a);
+        const bv = corebridgeLookupRowValues(b);
+        return [av.companyName, av.jobNumber, av.itemNumber, av.productNumber].join(' ').localeCompare([bv.companyName, bv.jobNumber, bv.itemNumber, bv.productNumber].join(' '), undefined, {numeric: true, sensitivity: 'base'});
+      });
+      list.forEach((row) => {
+        const vals = corebridgeLookupRowValues(row);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'corebridge-lookup-row';
+        btn.title = [vals.jobNumber, vals.itemNumber, vals.companyName, vals.productNumber].filter(Boolean).join(' | ');
+        [vals.jobNumber || '-', vals.itemNumber || '-', vals.companyName || '-', vals.productNumber || '-'].forEach((text) => {
+          const cell = document.createElement('span');
+          cell.className = 'corebridge-lookup-cell';
+          cell.textContent = text;
+          btn.appendChild(cell);
+        });
+        btn.addEventListener('click', () => {
+          if(corebridgeJobNumber) corebridgeJobNumber.value = vals.jobNumber;
+          if(corebridgeItemNumber) corebridgeItemNumber.value = vals.itemNumber;
+          $all('.corebridge-lookup-row.selected').forEach((el) => el.classList.remove('selected'));
+          btn.classList.add('selected');
+          invalidateCorebridgeFetchCache();
+          if(corebridgeJobNumber) corebridgeJobNumber.dispatchEvent(new Event('input', {bubbles: true}));
+          if(corebridgeItemNumber) corebridgeItemNumber.dispatchEvent(new Event('input', {bubbles: true}));
+        });
+        corebridgeLookup.appendChild(btn);
+      });
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
@@ -646,6 +719,7 @@
       }
     }
     preloadCorebridgePartSearchEntries();
+    let corebridgeLastAllData = [];
     let corebridgeLastFilteredData = [];
     let corebridgeLastSecondaryFetchResults = null;
     let corebridgeHasFetchedData = false;
@@ -1621,6 +1695,8 @@
         corebridgeDebugLog('filter comparison rows', filterDebugRows);
         corebridgeDebugLog('filtered result', {rowCount: filteredData.length, rows: filteredData});
 
+        corebridgeLastAllData = list;
+        renderCorebridgeLookup(list);
         corebridgeLastFilteredData = filteredData;
         corebridgeHasFetchedData = true;
         corebridgeLastFetchCriteria = {jobNumber: jobNumber, itemNumber: itemNumber};
