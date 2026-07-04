@@ -98,8 +98,9 @@
       border:1px solid #333;
       border-radius:10px;
       background:#101010;
-      max-height:150px;
-      overflow:auto;
+      max-height:300px;
+      overflow-x:hidden;
+      overflow-y:auto;
       box-shadow: inset 0px 1px 2px rgba(255,255,255,0.08);
     }
     .corebridge-lookup-empty {
@@ -116,11 +117,13 @@
       color:#eee;
       cursor:pointer;
       display:grid;
-      grid-template-columns:10% 10% 30% 50%;
+      grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) minmax(0, 3fr) minmax(0, 5fr);
       gap:8px;
       padding:8px 10px;
       text-align:left;
       font-size:12px;
+      box-sizing:border-box;
+      overflow-x:hidden;
     }
     .corebridge-lookup-row:last-child { border-bottom:0; }
     .corebridge-lookup-row:hover, .corebridge-lookup-row:focus {
@@ -135,6 +138,7 @@
       overflow:hidden;
       text-overflow:ellipsis;
       white-space:nowrap;
+      min-width:0;
     }
     .btn:active { transform: translateY(1px); }
     .btnText { font-weight:800; }
