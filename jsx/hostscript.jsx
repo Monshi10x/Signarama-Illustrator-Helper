@@ -5547,18 +5547,33 @@ function _srh_corebridge_activeDocumentMatchesFlashState() {
   try {stateName = String(_srhCorebridgeFlashState.doc.fullName && _srhCorebridgeFlashState.doc.fullName.fsName ? _srhCorebridgeFlashState.doc.fullName.fsName : _srhCorebridgeFlashState.doc.name);} catch(_eFlashDocCmp2) {stateName = '';}
   return !!(activeName && stateName && activeName === stateName);
 }
-function _srh_corebridge_abortFlashForDocumentChange() {
-  _srh_corebridge_flashDebug('Active document changed while Corebridge flash monitor was running; cancelling monitor to avoid blocking Illustrator input.');
+function _srh_corebridge_pauseFlashForDocumentChange() {
+  _srh_corebridge_flashDebug('Active document changed while Corebridge flash monitor was running; pausing monitor to avoid blocking Illustrator input.');
   if(_srhCorebridgeFlashTaskId != null) {
     try {app.cancelTask(_srhCorebridgeFlashTaskId);} catch(_eFlashDocCancel) { }
     _srhCorebridgeFlashTaskId = null;
   }
-  _srhCorebridgeFlashState = null;
+  if(_srhCorebridgeFlashState) _srhCorebridgeFlashState.pausedForDocumentChange = true;
+}
+function _srh_corebridge_scheduleFlashTaskIfNeeded() {
+  if(_srhCorebridgeFlashTaskId != null) return true;
+  if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) return false;
+  if(!_srh_corebridge_activeDocumentMatchesFlashState()) return false;
+  try {
+    var tickTaskCode = '((typeof signarama_helper_corebridge_flashTickTaskRunner === "function") ? signarama_helper_corebridge_flashTickTaskRunner() : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTaskRunner === "function") ? $.global.signarama_helper_corebridge_flashTickTaskRunner() : ((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask() : "ERROR|flash tick task missing")))';
+    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
+    if(_srhCorebridgeFlashState) _srhCorebridgeFlashState.pausedForDocumentChange = false;
+    _srh_corebridge_flashDebug('Flash task scheduled/resumed.');
+    return true;
+  } catch(_eScheduleFlashTask) {
+    _srhCorebridgeFlashTaskId = null;
+    return false;
+  }
 }
 function _srh_corebridge_ensureFlashStateFromDocument() {
   if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) {
     if(!_srh_corebridge_activeDocumentMatchesFlashState()) {
-      _srh_corebridge_abortFlashForDocumentChange();
+      _srh_corebridge_pauseFlashForDocumentChange();
       return false;
     }
     return true;
@@ -5594,8 +5609,8 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
 function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashTickCount++;
   if(_srhCorebridgeFlashState && !_srh_corebridge_activeDocumentMatchesFlashState()) {
-    _srh_corebridge_abortFlashForDocumentChange();
-    return false;
+    _srh_corebridge_pauseFlashForDocumentChange();
+    return true;
   }
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
     if(!_srh_corebridge_ensureFlashStateFromDocument()) {
@@ -5666,8 +5681,12 @@ try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridg
 function signarama_helper_corebridge_flashGetState() {
   try {
     if(_srhCorebridgeFlashState && !_srh_corebridge_activeDocumentMatchesFlashState()) {
-      _srh_corebridge_abortFlashForDocumentChange();
-      return 'STATE|0|0|' + _srhCorebridgeFlashTickCount + '|BLACK|-1|DOC_CHANGED';
+      _srh_corebridge_pauseFlashForDocumentChange();
+      var pausedRemaining = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries) ? _srhCorebridgeFlashState.entries.length : 0;
+      return 'STATE|' + (pausedRemaining ? 1 : 0) + '|' + pausedRemaining + '|' + _srhCorebridgeFlashTickCount + '|PAUSED|-1|DOC_CHANGED';
+    }
+    if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.pausedForDocumentChange) {
+      _srh_corebridge_scheduleFlashTaskIfNeeded();
     }
     var active = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) ? 1 : 0;
     var remaining = active ? _srhCorebridgeFlashState.entries.length : 0;
@@ -5732,12 +5751,7 @@ function _srh_corebridge_startFlashing(doc, flashFieldsText) {
     entries[e].arrowGroup = _srh_corebridge_createArrowForTextFrame(doc, entries[e].frame, entries[e].baseValue);
   }
   _srh_corebridge_flashTick();
-  try {
-    var tickTaskCode = '((typeof signarama_helper_corebridge_flashTickTaskRunner === "function") ? signarama_helper_corebridge_flashTickTaskRunner() : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTaskRunner === "function") ? $.global.signarama_helper_corebridge_flashTickTaskRunner() : ((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask() : "ERROR|flash tick task missing")))';
-    _srhCorebridgeFlashTaskId = app.scheduleTask(tickTaskCode, 300, true);
-  } catch(_eScheduleFlash) {
-    _srhCorebridgeFlashTaskId = null;
-  }
+  _srh_corebridge_scheduleFlashTaskIfNeeded();
   _srh_corebridge_flashDebug('Flash state primed.');
   return {requested: names.length, found: entries.length};
 }
