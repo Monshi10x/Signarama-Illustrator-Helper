@@ -171,6 +171,7 @@
   let isApplyingPanelSettings = false;
   let schedulePanelSettingsSave = null;
   let scheduleDimensionSelectionHintRefresh = null;
+  let scheduleCorebridgeInitialFetch = null;
 
   function jsxEscapeDoubleQuoted(text) {
     return String(text)
@@ -340,6 +341,9 @@
       }
       if(tabId === 'tab-dimensions' && typeof scheduleDimensionSelectionHintRefresh === 'function') {
         scheduleDimensionSelectionHintRefresh();
+      }
+      if(tabId === 'tab-corebridge' && typeof scheduleCorebridgeInitialFetch === 'function') {
+        scheduleCorebridgeInitialFetch();
       }
     }
     activateTabFn = activate;
@@ -587,8 +591,8 @@
       const jobNumber = normalizeCorebridgeInvoiceNumber(corebridgeFirstValue(row, ['OrderInvoiceNumber', 'InvoiceNumber', 'JobNumber', 'OrderNumber']));
       const itemNumber = normalizeCorebridgeItemNumber(corebridgeFirstValue(row, ['LineItemOrder', 'lineItemOrder', 'ItemNumber', 'LineItemNumber']));
       const companyName = corebridgeFirstValue(row, ['CompanyName', 'companyName', 'AccountName', 'CustomerName', 'CustomerCompanyName']);
-      const productNumber = corebridgeFirstValue(row, ['ProductNumber', 'productNumber', 'ProductNo', 'PartNumber', 'PartNo', 'SKU', 'ProductName', 'Name', 'Id', 'OrderProductId', 'OrderProductID']);
-      return {jobNumber: jobNumber, itemNumber: itemNumber, companyName: companyName, productNumber: productNumber};
+      const productName = corebridgeFirstValue(row, ['ProductName', 'productName', 'ProductDescription', 'Description', 'Name', 'PartName', 'ItemName']);
+      return {jobNumber: jobNumber, itemNumber: itemNumber, companyName: companyName, productName: productName};
     }
     function renderCorebridgeLookup(rows) {
       if(!corebridgeLookup) return;
@@ -604,15 +608,15 @@
       list.sort((a, b) => {
         const av = corebridgeLookupRowValues(a);
         const bv = corebridgeLookupRowValues(b);
-        return [av.companyName, av.jobNumber, av.itemNumber, av.productNumber].join(' ').localeCompare([bv.companyName, bv.jobNumber, bv.itemNumber, bv.productNumber].join(' '), undefined, {numeric: true, sensitivity: 'base'});
+        return [av.companyName, av.jobNumber, av.itemNumber, av.productName].join(' ').localeCompare([bv.companyName, bv.jobNumber, bv.itemNumber, bv.productName].join(' '), undefined, {numeric: true, sensitivity: 'base'});
       });
       list.forEach((row) => {
         const vals = corebridgeLookupRowValues(row);
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'corebridge-lookup-row';
-        btn.title = [vals.jobNumber, vals.itemNumber, vals.companyName, vals.productNumber].filter(Boolean).join(' | ');
-        [vals.jobNumber || '-', vals.itemNumber || '-', vals.companyName || '-', vals.productNumber || '-'].forEach((text) => {
+        btn.title = [vals.jobNumber, vals.itemNumber, vals.companyName, vals.productName].filter(Boolean).join(' | ');
+        [vals.jobNumber || '-', vals.itemNumber || '-', vals.companyName || '-', vals.productName || '-'].forEach((text) => {
           const cell = document.createElement('span');
           cell.className = 'corebridge-lookup-cell';
           cell.textContent = text;
@@ -721,6 +725,7 @@
     preloadCorebridgePartSearchEntries();
     let corebridgeLastAllData = [];
     let corebridgeLastFilteredData = [];
+    let corebridgeInitialFetchStarted = false;
     let corebridgeLastSecondaryFetchResults = null;
     let corebridgeHasFetchedData = false;
     let corebridgeLastFetchCriteria = {jobNumber: "", itemNumber: ""};
@@ -1747,6 +1752,23 @@
         throw err;
       }
     }
+    async function executeCorebridgeInitialFetch() {
+      if(corebridgeInitialFetchStarted) return;
+      corebridgeInitialFetchStarted = true;
+      try {
+        await fetchCorebridgeFilteredData({showLoading: true, renderDump: false, executeSecondaryFetches: false});
+        log('Corebridge initial lookup data pulled.');
+      } catch(err) {
+        corebridgeInitialFetchStarted = false;
+        log('Corebridge initial lookup pull failed: ' + ((err && err.message) ? err.message : err));
+      }
+    }
+    scheduleCorebridgeInitialFetch = function() {
+      setTimeout(executeCorebridgeInitialFetch, 0);
+    };
+    if(document.querySelector('.tab[data-tab="tab-corebridge"].active') || (document.querySelector('.tab[data-tab="tab-corebridge"]') && !document.getElementById('tab-corebridge').classList.contains('hidden'))) {
+      scheduleCorebridgeInitialFetch();
+    }
     if(corebridgePullData) {
       corebridgePullData.onclick = async () => {
         try {
@@ -1768,7 +1790,7 @@
     if(corebridgeCreateProofFromData) {
       async function runCorebridgeProofCreation(mode) {
         const criteriaNow = getCorebridgeCriteriaFromFields();
-        if(corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
+        if(mode === 'selected' || corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
           try {
             await executeCorebridgePullData({toastOnSuccess: false, toastOnError: true});
           } catch(_eAutoPull) {
