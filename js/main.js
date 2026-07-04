@@ -161,6 +161,7 @@
   let corebridgeFlashTickPollTimer = null;
   let corebridgeFlashTickPollCount = 0;
   let corebridgeFlashLastTickCount = -1;
+  let corebridgeFlashTickPollInFlight = false;
   let coloursPendingApplyFns = [];
   let coloursHasPendingChanges = false;
   let isLargeArtboard = false;
@@ -531,31 +532,35 @@
       }
       if(reason) log('Corebridge flash poll stop: ' + reason);
       corebridgeFlashLastTickCount = -1;
+      corebridgeFlashTickPollInFlight = false;
     }
     function startCorebridgeFlashTickPolling() {
       stopCorebridgeFlashTickPolling('restart');
       corebridgeFlashTickPollCount = 0;
-      log('Corebridge flash poll start (300ms).');
+      log('Corebridge flash poll start (state check every 500ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
+        if(corebridgeFlashTickPollInFlight) return;
+        corebridgeFlashTickPollInFlight = true;
         corebridgeFlashTickPollCount++;
-        callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
+        callJSX('((typeof signarama_helper_corebridge_flashGetState === "function") ? signarama_helper_corebridge_flashGetState : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashGetState === "function") ? $.global.signarama_helper_corebridge_flashGetState : function(){return "ERROR|flashGetState missing";}))()', (tickRes) => {
+          corebridgeFlashTickPollInFlight = false;
           const tickTxt = String(tickRes || '').trim();
           if(/^ERROR\|/i.test(tickTxt)) {
-            log('Corebridge flash tick error: ' + tickTxt);
-            stopCorebridgeFlashTickPolling('tick error');
-            return;
-          }
-          if(/^INACTIVE\|/i.test(tickTxt)) {
-            stopCorebridgeFlashTickPolling('inactive');
+            log('Corebridge flash state error: ' + tickTxt);
+            stopCorebridgeFlashTickPolling('state error');
             return;
           }
           const parts = tickTxt.split('|');
-          if(parts.length >= 4 && /^ACTIVE$/i.test(parts[0])) {
-            const tickCount = parseInt(parts[2], 10) || 0;
+          if(parts.length >= 6 && /^STATE$/i.test(parts[0])) {
+            const active = parseInt(parts[1], 10) || 0;
+            const tickCount = parseInt(parts[3], 10) || 0;
             corebridgeFlashLastTickCount = tickCount;
+            if(!active) {
+              stopCorebridgeFlashTickPolling(parts[6] === 'DOC_CHANGED' ? 'document changed' : 'inactive');
+            }
           }
         });
-      }, 300);
+      }, 500);
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
