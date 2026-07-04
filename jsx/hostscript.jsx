@@ -5535,8 +5535,34 @@ function _srh_corebridge_collectFlashEntriesFromLayer(doc) {
   }
   return entries;
 }
+function _srh_corebridge_activeDocumentMatchesFlashState() {
+  if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.doc) return true;
+  var activeDoc = null;
+  try {if(app.documents.length) activeDoc = app.activeDocument;} catch(_eFlashActiveDoc) {activeDoc = null;}
+  if(!activeDoc) return false;
+  try {if(activeDoc === _srhCorebridgeFlashState.doc) return true;} catch(_eFlashDocCmp0) { }
+  var activeName = '';
+  var stateName = '';
+  try {activeName = String(activeDoc.fullName && activeDoc.fullName.fsName ? activeDoc.fullName.fsName : activeDoc.name);} catch(_eFlashDocCmp1) {activeName = '';}
+  try {stateName = String(_srhCorebridgeFlashState.doc.fullName && _srhCorebridgeFlashState.doc.fullName.fsName ? _srhCorebridgeFlashState.doc.fullName.fsName : _srhCorebridgeFlashState.doc.name);} catch(_eFlashDocCmp2) {stateName = '';}
+  return !!(activeName && stateName && activeName === stateName);
+}
+function _srh_corebridge_abortFlashForDocumentChange() {
+  _srh_corebridge_flashDebug('Active document changed while Corebridge flash monitor was running; cancelling monitor to avoid blocking Illustrator input.');
+  if(_srhCorebridgeFlashTaskId != null) {
+    try {app.cancelTask(_srhCorebridgeFlashTaskId);} catch(_eFlashDocCancel) { }
+    _srhCorebridgeFlashTaskId = null;
+  }
+  _srhCorebridgeFlashState = null;
+}
 function _srh_corebridge_ensureFlashStateFromDocument() {
-  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) return true;
+  if(_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) {
+    if(!_srh_corebridge_activeDocumentMatchesFlashState()) {
+      _srh_corebridge_abortFlashForDocumentChange();
+      return false;
+    }
+    return true;
+  }
   var doc = null;
   try {if(app.documents.length) doc = app.activeDocument;} catch(_eEnsDoc) {doc = null;}
   if(!doc) return false;
@@ -5567,6 +5593,10 @@ function _srh_corebridge_stopFlashing(resetToBlack) {
 }
 function _srh_corebridge_flashTick() {
   _srhCorebridgeFlashTickCount++;
+  if(_srhCorebridgeFlashState && !_srh_corebridge_activeDocumentMatchesFlashState()) {
+    _srh_corebridge_abortFlashForDocumentChange();
+    return false;
+  }
   if(!_srhCorebridgeFlashState || !_srhCorebridgeFlashState.entries || !_srhCorebridgeFlashState.entries.length) {
     if(!_srh_corebridge_ensureFlashStateFromDocument()) {
       _srh_corebridge_stopFlashing(false);
@@ -5635,6 +5665,10 @@ function signarama_helper_corebridge_flashTickTask() {
 try {this.signarama_helper_corebridge_flashTickTask = signarama_helper_corebridge_flashTickTask;} catch(_eFlashTaskBind) { }
 function signarama_helper_corebridge_flashGetState() {
   try {
+    if(_srhCorebridgeFlashState && !_srh_corebridge_activeDocumentMatchesFlashState()) {
+      _srh_corebridge_abortFlashForDocumentChange();
+      return 'STATE|0|0|' + _srhCorebridgeFlashTickCount + '|BLACK|-1|DOC_CHANGED';
+    }
     var active = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.entries && _srhCorebridgeFlashState.entries.length) ? 1 : 0;
     var remaining = active ? _srhCorebridgeFlashState.entries.length : 0;
     var colorName = (_srhCorebridgeFlashState && _srhCorebridgeFlashState.isRed) ? 'RED' : 'BLACK';
