@@ -10,7 +10,7 @@
       --signarama-red:#c8102e;
     }
     html, body { height:100%; }
-    body { margin:0; background:#1f1f1f; display:flex; flex-direction:column; min-width:280px; min-height:380px; }
+    body { margin:0; background:#1f1f1f; display:flex; flex-direction:column; min-width:280px; min-height:380px; height:100vh; overflow:hidden; }
     header { padding:12px; font-weight:800; border-bottom:1px solid #333; background:#121212; display:flex; align-items:center; justify-content:space-between; }
     .brand { display:flex; align-items:center; gap:8px; }
     .brand-logo {
@@ -58,7 +58,7 @@
                   4px 6px 8px rgba(0,0,0,0.35),
                   0 0px 1px rgba(0,0,0,0.6);
     }
-    .content { flex:1; overflow:auto; }
+    .content { flex:1; min-height:0; overflow:auto; }
     .wrap { padding:12px; display:grid; gap:10px; }
 
     .btn {
@@ -76,6 +76,61 @@
       text-align:left;
     }
     .btn:hover { background:#242424; }
+
+    .btn.danger {
+      background:var(--signarama-red);
+      border-color:#8f0d23;
+      color:#fff;
+    }
+    .btn.danger:hover { background:#a80e28; }
+    .corebridge-proof-actions {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+    }
+    .corebridge-proof-actions .btn { height:100%; }
+    .corebridge-lookup {
+      border:1px solid #333;
+      border-radius:10px;
+      background:#101010;
+      max-height:150px;
+      overflow:auto;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.08);
+    }
+    .corebridge-lookup-empty {
+      padding:8px 10px;
+      font-size:12px;
+      color:#8e8e8e;
+    }
+    .corebridge-lookup-row {
+      appearance:none;
+      width:100%;
+      border:0;
+      border-bottom:1px solid #252525;
+      background:#151515;
+      color:#eee;
+      cursor:pointer;
+      display:grid;
+      grid-template-columns:.7fr .55fr 1.25fr .9fr;
+      gap:8px;
+      padding:8px 10px;
+      text-align:left;
+      font-size:12px;
+    }
+    .corebridge-lookup-row:last-child { border-bottom:0; }
+    .corebridge-lookup-row:hover, .corebridge-lookup-row:focus {
+      background:#202020;
+      outline:none;
+    }
+    .corebridge-lookup-row.selected {
+      background:#2a1118;
+      box-shadow:inset 3px 0 0 var(--signarama-red);
+    }
+    .corebridge-lookup-cell {
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
     .btn:active { transform: translateY(1px); }
     .btnText { font-weight:800; }
     .btnMeta { display:flex; align-items:center; gap:10px; }
@@ -510,7 +565,7 @@
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
-    <button class="tab" data-tab="tab-corebridge" type="button">Corebridge</button>
+    <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
@@ -1028,6 +1083,9 @@
             <input id="corebridgeItemNumber" type="text" inputmode="numeric" placeholder="Line item order (e.g. 1)">
           </label>
         </div>
+        <div id="corebridgeLookup" class="corebridge-lookup" aria-label="Fetched Corebridge jobs">
+          <div class="corebridge-lookup-empty">Fetched jobs will appear here.</div>
+        </div>
         <div class="row" style="margin-top:10px;">
           <label class="fld" style="flex:1;">
             <span>Proof Path</span>
@@ -1035,14 +1093,16 @@
           </label>
           <button class="btn2" id="btnCorebridgeOpenProof" type="button">open</button>
         </div>
-        <button class="btn" id="btnCorebridgeCreateProofFromData" type="button">
-          <span class="btnText">Create Proof for Item</span>
-          <span class="info" data-tip="Opens the proof file and applies mappings to named text frames in the opened document. If data is not loaded yet, it pulls data first.">i</span>
-        </button>
-        <button class="btn" id="btnCorebridgeCreateProofForSelected" type="button">
-          <span class="btnText">Create Proof for Selected</span>
-          <span class="info" data-tip="Runs Create Proof for Item, then scales selected artwork for A4 proof and places it inside 'Artwork Placement Area'.">i</span>
-        </button>
+        <div class="corebridge-proof-actions">
+          <button class="btn" id="btnCorebridgeCreateProofFromData" type="button">
+            <span class="btnText">Create Empty Proof</span>
+            <span class="info" data-tip="Opens the proof file and applies mappings to named text frames in the opened document. If data is not loaded yet, it pulls data first.">i</span>
+          </button>
+          <button class="btn danger" id="btnCorebridgeCreateProofForSelected" type="button">
+            <span class="btnText">Create Proof for Selected</span>
+            <span class="info" data-tip="Runs Create Empty Proof, then scales selected artwork for A4 proof and places it inside 'Artwork Placement Area'.">i</span>
+          </button>
+        </div>
         <button class="btn" id="btnCopyOutlineScaleA4" type="button">
           <span class="btnText">Scale Artwork for Proof (A4)</span>
           <span class="btnMeta">
