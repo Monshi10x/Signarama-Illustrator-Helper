@@ -89,6 +89,11 @@
       gap:8px;
     }
     .corebridge-proof-actions .btn { height:100%; }
+    .corebridge-lookup-tools {
+      display:grid;
+      gap:4px;
+    }
+    .corebridge-lookup-tools .fld { gap:4px; }
     .corebridge-lookup {
       border:1px solid #333;
       border-radius:10px;
@@ -111,7 +116,7 @@
       color:#eee;
       cursor:pointer;
       display:grid;
-      grid-template-columns:.7fr .55fr 1.25fr .9fr;
+      grid-template-columns:10% 10% 30% 50%;
       gap:8px;
       padding:8px 10px;
       text-align:left;
@@ -1083,8 +1088,14 @@
             <input id="corebridgeItemNumber" type="text" inputmode="numeric" placeholder="Line item order (e.g. 1)">
           </label>
         </div>
-        <div id="corebridgeLookup" class="corebridge-lookup" aria-label="Fetched Corebridge jobs">
-          <div class="corebridge-lookup-empty">Fetched jobs will appear here.</div>
+        <div class="corebridge-lookup-tools">
+          <label class="fld">
+            <span>Lookup</span>
+            <input id="corebridgeLookupSearch" type="text" placeholder="Search fetched jobs...">
+          </label>
+          <div id="corebridgeLookup" class="corebridge-lookup" aria-label="Fetched Corebridge jobs">
+            <div class="corebridge-lookup-empty">Fetched jobs will appear here.</div>
+          </div>
         </div>
         <div class="row" style="margin-top:10px;">
           <label class="fld" style="flex:1;">

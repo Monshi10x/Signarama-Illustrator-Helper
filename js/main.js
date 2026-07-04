@@ -530,6 +530,7 @@
     const corebridgeDumpHost = $('corebridgeDataDumpHost');
     const corebridgeFetchStatus = $('corebridgeFetchStatus');
     const corebridgeLookup = $('corebridgeLookup');
+    const corebridgeLookupSearch = $('corebridgeLookupSearch');
     function stopCorebridgeFlashTickPolling(reason) {
       if(corebridgeFlashTickPollTimer) {
         clearInterval(corebridgeFlashTickPollTimer);
@@ -594,14 +595,26 @@
       const productName = corebridgeFirstValue(row, ['ProductName', 'productName', 'ProductDescription', 'Description', 'Name', 'PartName', 'ItemName']);
       return {jobNumber: jobNumber, itemNumber: itemNumber, companyName: companyName, productName: productName};
     }
+    function corebridgeLookupSearchMatches(vals, query) {
+      const q = String(query == null ? '' : query).trim().toLowerCase();
+      if(!q) return true;
+      const haystack = [vals.jobNumber, vals.itemNumber, vals.companyName, vals.productName].join(' ').toLowerCase();
+      const tokens = q.split(/\s+/).filter(Boolean);
+      for(let i = 0; i < tokens.length; i++) {
+        if(haystack.indexOf(tokens[i]) === -1) return false;
+      }
+      return true;
+    }
     function renderCorebridgeLookup(rows) {
       if(!corebridgeLookup) return;
-      const list = Array.isArray(rows) ? rows.slice() : [];
+      const source = Array.isArray(rows) ? rows.slice() : [];
+      const query = corebridgeLookupSearch ? corebridgeLookupSearch.value : '';
+      const list = source.filter((row) => corebridgeLookupSearchMatches(corebridgeLookupRowValues(row), query));
       corebridgeLookup.innerHTML = '';
-      if(!list.length) {
+      if(!source.length || !list.length) {
         const empty = document.createElement('div');
         empty.className = 'corebridge-lookup-empty';
-        empty.textContent = 'Fetched jobs will appear here.';
+        empty.textContent = !source.length ? 'Fetched jobs will appear here.' : 'No lookup rows match your search.';
         corebridgeLookup.appendChild(empty);
         return;
       }
@@ -633,6 +646,9 @@
         });
         corebridgeLookup.appendChild(btn);
       });
+    }
+    if(corebridgeLookupSearch) {
+      corebridgeLookupSearch.addEventListener('input', () => renderCorebridgeLookup(corebridgeLastAllData));
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
