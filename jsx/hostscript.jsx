@@ -8082,46 +8082,202 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
     try {docRef.selection = null;} catch(_eNestCmp10) { }
     return restored;
   }
-  function _nestPlaceSvgOnActiveArtboard(docRef, svgMarkup) {
-    var tmpFileRef = null;
-    var placedItem = null;
-    try {
-      var tmpFolderRef = Folder.temp;
-      if(!tmpFolderRef || !tmpFolderRef.exists) return false;
-      var uniqueRef = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
-      tmpFileRef = new File(tmpFolderRef.fsName + '/srh-nest-output-' + uniqueRef + '.svg');
-      tmpFileRef.encoding = 'UTF-8';
-      if(!tmpFileRef.open('w')) return false;
-      tmpFileRef.write(String(svgMarkup == null ? '' : svgMarkup));
-      tmpFileRef.close();
-
-      placedItem = docRef.placedItems.add();
-      placedItem.file = tmpFileRef;
-      _nestFitItemToActiveArtboard(docRef, placedItem);
-      try {placedItem.embed();} catch(_eNestEmbed1) { }
-      try {
-        var embeddedSelectionRef = null;
-        try {embeddedSelectionRef = docRef.selection;} catch(_eNestEmbedSel0) {embeddedSelectionRef = null;}
-        if(embeddedSelectionRef && embeddedSelectionRef.length === 1) {
-          _nestRestoreCompounds(docRef, embeddedSelectionRef[0]);
-        } else if(embeddedSelectionRef && embeddedSelectionRef.length > 1) {
-          for(var es = 0; es < embeddedSelectionRef.length; es++) {
-            try {_nestRestoreCompounds(docRef, embeddedSelectionRef[es]);} catch(_eNestEmbedSel1) { }
-          }
+  function _nestAttr(textRef, nameRef) {
+    var reRef = new RegExp(nameRef + '\\s*=\\s*("([^"]*)"|\'([^\']*)\')', 'i');
+    var mRef = reRef.exec(String(textRef || ''));
+    if(!mRef) return '';
+    return String(mRef[2] != null ? mRef[2] : (mRef[3] != null ? mRef[3] : ''));
+  }
+  function _nestIdentityMatrix() {
+    return {a: 1, b: 0, c: 0, d: 1, e: 0, f: 0};
+  }
+  function _nestMultiplyMatrix(m1, m2) {
+    return {
+      a: m1.a * m2.a + m1.c * m2.b,
+      b: m1.b * m2.a + m1.d * m2.b,
+      c: m1.a * m2.c + m1.c * m2.d,
+      d: m1.b * m2.c + m1.d * m2.d,
+      e: m1.a * m2.e + m1.c * m2.f + m1.e,
+      f: m1.b * m2.e + m1.d * m2.f + m1.f
+    };
+  }
+  function _nestParseTransform(transformText) {
+    var out = _nestIdentityMatrix();
+    var text = String(transformText || '');
+    var re = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+    var m = null;
+    while((m = re.exec(text)) !== null) {
+      var kind = String(m[1] || '').toLowerCase();
+      var nums = String(m[2] || '').match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g) || [];
+      for(var ni = 0; ni < nums.length; ni++) nums[ni] = Number(nums[ni] || 0);
+      var next = _nestIdentityMatrix();
+      if(kind === 'translate') {
+        next.e = Number(nums[0] || 0);
+        next.f = Number(nums.length > 1 ? nums[1] : 0);
+      } else if(kind === 'rotate') {
+        var angle = Number(nums[0] || 0) * Math.PI / 180;
+        var cos = Math.cos(angle), sin = Math.sin(angle);
+        var rot = {a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0};
+        if(nums.length > 2) {
+          var tx = Number(nums[1] || 0), ty = Number(nums[2] || 0);
+          next = _nestMultiplyMatrix(_nestMultiplyMatrix({a:1,b:0,c:0,d:1,e:tx,f:ty}, rot), {a:1,b:0,c:0,d:1,e:-tx,f:-ty});
+        } else {
+          next = rot;
         }
-      } catch(_eNestEmbed2) { }
-      return true;
-    } catch(_eNestPlace1) {
-      try {
-        if(placedItem) {
-          try {placedItem.remove();} catch(_eNestRm0) { }
-        }
-      } catch(_eNestRm1) { }
-      return false;
-    } finally {
-      try {if(tmpFileRef && tmpFileRef.opened) tmpFileRef.close();} catch(_eNestTmpClose1) { }
-      try {if(tmpFileRef && tmpFileRef.exists) tmpFileRef.remove();} catch(_eNestTmpRm0) { }
+      } else if(kind === 'matrix' && nums.length >= 6) {
+        next = {a: nums[0], b: nums[1], c: nums[2], d: nums[3], e: nums[4], f: nums[5]};
+      } else if(kind === 'scale') {
+        next.a = Number(nums[0] || 1);
+        next.d = Number(nums.length > 1 ? nums[1] : nums[0] || 1);
+      }
+      out = _nestMultiplyMatrix(out, next);
     }
+    return out;
+  }
+  function _nestApplySvgMatrix(matrixRef, xRef, yRef) {
+    return {
+      x: matrixRef.a * xRef + matrixRef.c * yRef + matrixRef.e,
+      y: matrixRef.b * xRef + matrixRef.d * yRef + matrixRef.f
+    };
+  }
+  function _nestSvgToAiPoint(matrixRef, xRef, yRef) {
+    var pRef = _nestApplySvgMatrix(matrixRef, xRef, yRef);
+    return [pRef.x, -pRef.y];
+  }
+  function _nestPathTokens(dRef) {
+    return String(dRef || '').match(/[a-zA-Z]|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g) || [];
+  }
+  function _nestIsCommandToken(tokenRef) {
+    return /^[a-zA-Z]$/.test(String(tokenRef || ''));
+  }
+  function _nestDrawPathD(docRef, groupRef, dRef, matrixRef) {
+    var tokens = _nestPathTokens(dRef);
+    if(!tokens.length) return 0;
+    var idx = 0;
+    var cmd = '';
+    var curX = 0, curY = 0;
+    var subpaths = [];
+    var current = null;
+    function _readNum() {return Number(tokens[idx++] || 0);}
+    function _startSubpath(x, y) {
+      current = {anchors: [], lefts: [], rights: [], closed: false};
+      var pt = _nestSvgToAiPoint(matrixRef, x, y);
+      current.anchors.push(pt);
+      current.lefts.push([pt[0], pt[1]]);
+      current.rights.push([pt[0], pt[1]]);
+      subpaths.push(current);
+      curX = x; curY = y;
+    }
+    function _lineTo(x, y) {
+      if(!current) _startSubpath(x, y);
+      var pt = _nestSvgToAiPoint(matrixRef, x, y);
+      current.anchors.push(pt);
+      current.lefts.push([pt[0], pt[1]]);
+      current.rights.push([pt[0], pt[1]]);
+      curX = x; curY = y;
+    }
+    function _curveTo(x1, y1, x2, y2, x, y) {
+      if(!current) _startSubpath(x, y);
+      var c1 = _nestSvgToAiPoint(matrixRef, x1, y1);
+      var c2 = _nestSvgToAiPoint(matrixRef, x2, y2);
+      var pt = _nestSvgToAiPoint(matrixRef, x, y);
+      if(current.rights.length) current.rights[current.rights.length - 1] = c1;
+      current.anchors.push(pt);
+      current.lefts.push(c2);
+      current.rights.push([pt[0], pt[1]]);
+      curX = x; curY = y;
+    }
+    while(idx < tokens.length) {
+      if(_nestIsCommandToken(tokens[idx])) cmd = String(tokens[idx++]);
+      if(!cmd) break;
+      var lower = cmd.toLowerCase();
+      if(cmd !== cmd.toUpperCase()) break; // Nest output generated by this panel uses absolute path commands.
+      if(lower === 'm') {
+        while(idx + 1 < tokens.length && !_nestIsCommandToken(tokens[idx])) _startSubpath(_readNum(), _readNum());
+      } else if(lower === 'l') {
+        while(idx + 1 < tokens.length && !_nestIsCommandToken(tokens[idx])) _lineTo(_readNum(), _readNum());
+      } else if(lower === 'c') {
+        while(idx + 5 < tokens.length && !_nestIsCommandToken(tokens[idx])) _curveTo(_readNum(), _readNum(), _readNum(), _readNum(), _readNum(), _readNum());
+      } else if(lower === 'z') {
+        if(current) current.closed = true;
+      } else {
+        break;
+      }
+    }
+    var made = 0;
+    for(var si = 0; si < subpaths.length; si++) {
+      var sp = subpaths[si];
+      if(!sp || sp.anchors.length < 2) continue;
+      try {
+        var pathRef = docRef.activeLayer.pathItems.add();
+        pathRef.setEntirePath(sp.anchors);
+        pathRef.closed = !!sp.closed;
+        pathRef.filled = true;
+        pathRef.stroked = false;
+        try {
+          var fill = new RGBColor(); fill.red = 17; fill.green = 17; fill.blue = 17; pathRef.fillColor = fill;
+        } catch(_eNestDrawFill0) { }
+        for(var pi = 0; pi < pathRef.pathPoints.length && pi < sp.anchors.length; pi++) {
+          try {pathRef.pathPoints[pi].leftDirection = sp.lefts[pi];} catch(_eNestDrawLeft0) { }
+          try {pathRef.pathPoints[pi].rightDirection = sp.rights[pi];} catch(_eNestDrawRight0) { }
+          try {pathRef.pathPoints[pi].pointType = PointType.CORNER;} catch(_eNestDrawPointType0) { }
+        }
+        try {pathRef.move(groupRef, ElementPlacement.PLACEATEND);} catch(_eNestDrawMove0) { }
+        made++;
+      } catch(_eNestDrawPath0) { }
+    }
+    return made;
+  }
+  function _nestDrawRect(docRef, groupRef, tagRef, matrixRef) {
+    var x = Number(_nestAttr(tagRef, 'x') || 0);
+    var y = Number(_nestAttr(tagRef, 'y') || 0);
+    var w = Number(_nestAttr(tagRef, 'width') || 0);
+    var h = Number(_nestAttr(tagRef, 'height') || 0);
+    if(!(w > 0) || !(h > 0)) return 0;
+    var d = 'M ' + x + ' ' + y + ' L ' + (x + w) + ' ' + y + ' L ' + (x + w) + ' ' + (y + h) + ' L ' + x + ' ' + (y + h) + ' Z';
+    return _nestDrawPathD(docRef, groupRef, d, matrixRef);
+  }
+  function _nestDrawSvgMarkupOnActiveLayer(docRef, svgMarkup) {
+    var rootGroup = null;
+    var made = 0;
+    try {
+      rootGroup = docRef.activeLayer.groupItems.add();
+      rootGroup.name = 'SRH_NEST_RESULT';
+      var stack = [_nestIdentityMatrix()];
+      var tagRe = /<\/?\s*(g|path|rect)\b[^>]*>/ig;
+      var m = null;
+      while((m = tagRe.exec(String(svgMarkup || ''))) !== null) {
+        var tag = String(m[0] || '');
+        var tagName = String(m[1] || '').toLowerCase();
+        var closing = /^<\//.test(tag);
+        if(tagName === 'g') {
+          if(closing) {if(stack.length > 1) stack.pop();}
+          else {
+            var parentMatrix = stack[stack.length - 1];
+            stack.push(_nestMultiplyMatrix(parentMatrix, _nestParseTransform(_nestAttr(tag, 'transform'))));
+          }
+        } else if(!closing && tagName === 'path') {
+          var pathMatrix = _nestMultiplyMatrix(stack[stack.length - 1], _nestParseTransform(_nestAttr(tag, 'transform')));
+          made += _nestDrawPathD(docRef, rootGroup, _nestAttr(tag, 'd'), pathMatrix);
+        } else if(!closing && tagName === 'rect') {
+          var rectMatrix = _nestMultiplyMatrix(stack[stack.length - 1], _nestParseTransform(_nestAttr(tag, 'transform')));
+          made += _nestDrawRect(docRef, rootGroup, tag, rectMatrix);
+        }
+      }
+      if(made > 0) {
+        _nestFitItemToActiveArtboard(docRef, rootGroup);
+        try {rootGroup.selected = true;} catch(_eNestDrawSel0) { }
+        return true;
+      }
+      try {rootGroup.remove();} catch(_eNestDrawRm0) { }
+      return false;
+    } catch(_eNestDrawSvg0) {
+      try {if(rootGroup) rootGroup.remove();} catch(_eNestDrawRm1) { }
+      return false;
+    }
+  }
+  function _nestPlaceSvgOnActiveArtboard(docRef, svgMarkup) {
+    return _nestDrawSvgMarkupOnActiveLayer(docRef, svgMarkup);
   }
   if(!app.documents.length) return 'Error: No open document.';
   if(!_nestLooksLikeSvgText(svgText)) return 'Error: Invalid SVG text.';
@@ -8130,7 +8286,7 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
     var normalized = String(svgText == null ? '' : svgText);
     if(normalized.indexOf('<?xml') !== 0) normalized = '<?xml version="1.0" encoding="UTF-8"?>\n' + normalized;
     if(_nestPlaceSvgOnActiveArtboard(doc, normalized)) return 'Nested SVG placed on the active artboard.';
-    return 'Error: Illustrator could not place the generated SVG file.';
+    return 'Error: Illustrator could not draw paths from the generated SVG.';
   } catch(e) {
     return 'Error: ' + e;
   }
