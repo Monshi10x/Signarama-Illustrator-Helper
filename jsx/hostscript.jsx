@@ -7335,6 +7335,16 @@ function _srh_nest_markSourceItems(items) {
   }
   return ids;
 }
+function _srh_nest_markSheetSourceItems(items) {
+  var ids = [];
+  if(!items) return ids;
+  for(var i = 0; i < items.length; i++) {
+    var id = 'srh-nest-bin-' + i;
+    try {items[i].name = id;} catch(_eNestMarkBin0) { }
+    ids.push(id);
+  }
+  return ids;
+}
 function _srh_nest_findPageItemByName(container, itemName) {
   if(!container || !itemName) return null;
   try {
@@ -7362,9 +7372,11 @@ function signarama_helper_nest_captureSelectionBounds() {
 
   var widthPt = _srh_nest_docPtToActualPt(bounds.width, scaleFactor);
   var heightPt = _srh_nest_docPtToActualPt(bounds.height, scaleFactor);
+  var binSourceIds = _srh_nest_markSheetSourceItems(items);
   return _srh_nest_jsonResponse(true, {
     itemCount: items.length,
     scaleFactor: scaleFactor,
+    binSourceIds: binSourceIds,
     widthPt: widthPt,
     heightPt: heightPt,
     widthMm: _srh_pt2mm(widthPt),
@@ -7380,6 +7392,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
   if(selectionItems.length !== 1) return _srh_nest_jsonResponse(false, {error: 'Select exactly one shape to use as the bin.'});
 
   var sourceItem = selectionItems[0];
+  var binSourceIds = _srh_nest_markSheetSourceItems(selectionItems);
   var sourceBounds = _srh_nest_unionBounds(selectionItems);
   if(!sourceBounds) return _srh_nest_jsonResponse(false, {error: 'Could not read selection bounds.'});
 
@@ -7533,6 +7546,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
       scaleFactor: scaleFactor,
       widthPt: actualWidthPt,
       heightPt: actualHeightPt,
+      binSourceIds: binSourceIds,
       widthMm: _srh_pt2mm(actualWidthPt),
       heightMm: _srh_pt2mm(actualHeightPt),
       originalAppearance: originalAppearance,
@@ -7890,6 +7904,8 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
   var snapshotLayerName = String(opts.snapshotLayerName || 'SRH_NEST_SOURCE_SNAPSHOT');
   var snapshotIds = opts.snapshotIds || [];
   var binSize = opts.binSize || {};
+  var sheetMode = String(opts.sheetMode || 'manual');
+  var binSourceIds = opts.binSourceIds || [];
   var root = null;
   var made = 0;
   var placedIds = {};
@@ -7905,6 +7921,26 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
     var m = s.match(/srh-nest-part-\d+/);
     return m ? m[0] : s;
   }
+  function _collectNamedItems(ids) {
+    var out = [];
+    if(!ids || !ids.length) return out;
+    for(var ni = 0; ni < ids.length; ni++) {
+      var id = String(ids[ni] || '');
+      if(!id) continue;
+      var item = _srh_nest_findPageItemByName(doc, id);
+      if(item) out.push(item);
+    }
+    return out;
+  }
+  function _activeViewCenter(ab) {
+    try {
+      if(doc.views && doc.views.length && doc.views[0].centerPoint && doc.views[0].centerPoint.length >= 2) {
+        return [Number(doc.views[0].centerPoint[0]), Number(doc.views[0].centerPoint[1])];
+      }
+    } catch(_eNestNativeView0) { }
+    if(ab) return [(Number(ab[0]) + Number(ab[2])) / 2, (Number(ab[1]) + Number(ab[3])) / 2];
+    return [0, 0];
+  }
   try {
     var abIndex = 0;
     try {abIndex = doc.artboards.getActiveArtboardIndex();} catch(_eNestNativeAb0) {abIndex = 0;}
@@ -7912,9 +7948,24 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
     var margin = _srh_mm2ptDoc(10);
     var originLeft = ab ? (Number(ab[0]) + margin) : 0;
     var originTop = ab ? (Number(ab[1]) - margin) : 0;
+    var selectedBinItems = (sheetMode === 'shape' || sheetMode === 'selection') ? _collectNamedItems(binSourceIds) : [];
+    var selectedBinBounds = selectedBinItems.length ? _srh_nest_unionBounds(selectedBinItems) : null;
+    if(sheetMode === 'shape' || sheetMode === 'selection') {
+      if(!selectedBinBounds) return 'Error: Could not find the selected sheet source artwork to use as the placement bin.';
+      originLeft = Number(selectedBinBounds.left || 0);
+      originTop = Number(selectedBinBounds.top || 0);
+    } else if(Number(binSize.widthPt || 0) > 0 && Number(binSize.heightPt || 0) > 0) {
+      var center = _activeViewCenter(ab);
+      originLeft = Number(center[0]) - (Number(binSize.widthPt || 0) / 2);
+      originTop = Number(center[1]) + (Number(binSize.heightPt || 0) / 2);
+    }
     root = doc.activeLayer.groupItems.add();
     root.name = 'SRH_NEST_RESULT';
-    if(Number(binSize.widthPt || 0) > 0 && Number(binSize.heightPt || 0) > 0) {
+    if(sheetMode === 'shape' || sheetMode === 'selection') {
+      for(var bsi = 0; bsi < selectedBinItems.length; bsi++) {
+        try {selectedBinItems[bsi].move(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeBinMoveSelected0) { }
+      }
+    } else if(Number(binSize.widthPt || 0) > 0 && Number(binSize.heightPt || 0) > 0) {
       try {
         var binRect = doc.activeLayer.pathItems.rectangle(originTop, originLeft, Number(binSize.widthPt), Number(binSize.heightPt));
         binRect.filled = false;

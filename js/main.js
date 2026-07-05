@@ -2071,6 +2071,7 @@
       latestOutputSvg: '',
       latestOutputSvgPath: '',
       latestBinSize: null,
+      latestSheetMode: 'manual',
       startTimeMs: 0,
       heartbeatTimer: null,
       latestProgress: 0,
@@ -2701,6 +2702,7 @@
       nestState.latestOutputSvg = '';
       nestState.latestOutputSvgPath = '';
       nestState.latestBinSize = source.binSize || null;
+      nestState.latestSheetMode = String((sizeModeField && sizeModeField.value) || 'manual');
       lastSavedProgressPct = -1;
       clearNestBackup();
       resetNestMetrics();
@@ -2922,6 +2924,7 @@
         nestState.latestOutputSvg = '';
         nestState.latestOutputSvgPath = '';
         nestState.latestBinSize = null;
+        nestState.latestSheetMode = 'manual';
         clearNestBackup();
         updatePartsSummary();
         resetNestMetrics();
@@ -3036,6 +3039,7 @@
         nestState.latestOutputSvg = '';
         nestState.latestOutputSvgPath = '';
         nestState.latestBinSize = null;
+        nestState.latestSheetMode = 'manual';
         clearNestBackup();
         resetNestMetrics();
         updateButtons();
@@ -3088,7 +3092,11 @@
             placements: nestState.latestPlacement,
             snapshotLayerName: (nestState.partsMeta && nestState.partsMeta.snapshotLayerName) || 'SRH_NEST_SOURCE_SNAPSHOT',
             snapshotIds: snapshotIds,
-            binSize: (nestState.latestBinSize || {})
+            binSize: (nestState.latestBinSize || {}),
+            sheetMode: nestState.latestSheetMode || 'manual',
+            binSourceIds: ((nestState.latestSheetMode === 'shape' && nestState.selectionBin && nestState.selectionBin.binSourceIds)
+              ? nestState.selectionBin.binSourceIds
+              : ((nestState.latestSheetMode === 'selection' && nestState.selectionSize && nestState.selectionSize.binSourceIds) ? nestState.selectionSize.binSourceIds : []))
           };
           const safePayload = jsxEscapeDoubleQuoted(JSON.stringify(nativePayload));
           logNest('Placing original loaded artwork from raw placement data.');
