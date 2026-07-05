@@ -2469,6 +2469,22 @@
       out.setAttribute('width', String(sourceWidthPt));
       out.setAttribute('height', String(sourceHeightPt));
 
+      function stampPartIdentity(node, sourcePartId) {
+        if(!node || !sourcePartId) return;
+        if(node.setAttribute) {
+          node.setAttribute('data-srh-part-id', sourcePartId);
+          const existingClass = String(node.getAttribute('class') || '').trim();
+          if(existingClass.split(/\s+/).indexOf(sourcePartId) < 0) {
+            node.setAttribute('class', (existingClass ? (existingClass + ' ') : '') + sourcePartId);
+          }
+        }
+        if(node.childNodes && node.childNodes.length) {
+          Array.prototype.slice.call(node.childNodes).forEach((childNode) => {
+            if(childNode && childNode.tagName) stampPartIdentity(childNode, sourcePartId);
+          });
+        }
+      }
+
       let rawPartIndex = 0;
       const topLevelPartNodes = [];
       Array.prototype.slice.call(partSvg.childNodes).forEach((child) => {
@@ -2480,6 +2496,7 @@
           if(!cloned.getAttribute('id')) cloned.setAttribute('id', sourcePartId);
           const existingClass = String(cloned.getAttribute('class') || '').trim();
           cloned.setAttribute('class', (existingClass ? (existingClass + ' ') : '') + sourcePartId);
+          stampPartIdentity(cloned, sourcePartId);
           topLevelPartNodes.push(cloned);
           rawPartIndex += 1;
         }
@@ -2524,6 +2541,7 @@
             wrapper.setAttribute('data-srh-part-id', sourcePartId);
             wrapper.setAttribute('id', sourcePartId);
             wrapper.setAttribute('class', sourcePartId);
+            stampPartIdentity(partNode, sourcePartId);
           }
           wrapper.setAttribute('transform', normalizeTransform);
           wrapper.appendChild(partNode);
@@ -2534,7 +2552,11 @@
         out.setAttribute('data-srh-part-normalization-note', normalizationNote);
       } else {
         if(partsScaleGroup.parentNode === out) out.removeChild(partsScaleGroup);
-        topLevelPartNodes.forEach((partNode) => out.appendChild(partNode));
+        topLevelPartNodes.forEach((partNode) => {
+          const sourcePartId = partNode.getAttribute && (partNode.getAttribute('data-srh-part-id') || partNode.getAttribute('id') || '');
+          if(sourcePartId) stampPartIdentity(partNode, sourcePartId);
+          out.appendChild(partNode);
+        });
       }
 
       if(mode === 'shape') {
