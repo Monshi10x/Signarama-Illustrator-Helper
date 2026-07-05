@@ -9,8 +9,8 @@
       color:#eee;
       --signarama-red:#c8102e;
     }
-    html, body { height:100%; }
-    body { margin:0; background:#1f1f1f; display:flex; flex-direction:column; min-width:280px; min-height:380px; height:100vh; overflow:hidden; }
+    html, body { width:100%; height:100%; min-height:0; overflow:hidden; }
+    body { margin:0; background:#1f1f1f; display:flex; flex-direction:column; min-width:280px; min-height:0; height:100%; max-height:none; overflow:hidden; box-sizing:border-box; }
     header { padding:12px; font-weight:800; border-bottom:1px solid #333; background:#121212; display:flex; align-items:center; justify-content:space-between; }
     .brand { display:flex; align-items:center; gap:8px; }
     .brand-logo {
@@ -58,7 +58,7 @@
                   4px 6px 8px rgba(0,0,0,0.35),
                   0 0px 1px rgba(0,0,0,0.6);
     }
-    .content { flex:1; min-height:0; overflow:auto; }
+    .content { flex:1 1 0; min-height:0; max-height:none; overflow:auto; }
     .wrap { padding:12px; display:grid; gap:10px; }
 
     .btn {
@@ -1512,6 +1512,25 @@
               </select>
             </label>
           </div>
+
+          <div id="nestManualSizeFields" class="grid2" style="margin-top:10px;">
+            <label class="fld">
+              <span>Sheet width (mm)</span>
+              <input id="nestBinWidthMm" type="number" step="0.1" value="2440">
+            </label>
+            <label class="fld">
+              <span>Sheet height (mm)</span>
+              <input id="nestBinHeightMm" type="number" step="0.1" value="1220">
+            </label>
+          </div>
+
+          <div id="nestSelectionSizeFields" class="hidden" style="margin-top:10px;">
+            <div id="nestSelectionSizeSummary" class="nest-inline-status">Current selection bounds will be read when nesting starts.</div>
+          </div>
+
+          <div id="nestSelectionShapeFields" class="hidden" style="margin-top:10px;">
+            <div id="nestSelectionShapeSummary" class="nest-inline-status">Current selection shape will be read when nesting starts.</div>
+          </div>
         </div>
 
         <div style="margin-top:12px; padding:12px; border:1px solid rgba(255,255,255,0.08); border-radius:12px; background:rgba(255,255,255,0.02);">
@@ -1573,30 +1592,6 @@
           </label>
         </div>
 
-        <div id="nestManualSizeFields" class="grid2" style="margin-top:10px;">
-          <label class="fld">
-            <span>Sheet width (mm)</span>
-            <input id="nestBinWidthMm" type="number" step="0.1" value="2440">
-          </label>
-          <label class="fld">
-            <span>Sheet height (mm)</span>
-            <input id="nestBinHeightMm" type="number" step="0.1" value="1220">
-          </label>
-        </div>
-
-        <div id="nestSelectionSizeFields" class="hidden" style="margin-top:10px;">
-          <div class="nest-actions">
-            <button id="btnNestCaptureSelectionSize" class="btn2" type="button">Use Current Selection Size</button>
-          </div>
-          <div id="nestSelectionSizeSummary" class="nest-inline-status">No selection size captured.</div>
-        </div>
-
-        <div id="nestSelectionShapeFields" class="hidden" style="margin-top:10px;">
-          <div class="nest-actions">
-            <button id="btnNestCaptureSelectionShape" class="btn2" type="button">Use Current Selection Shape</button>
-          </div>
-          <div id="nestSelectionShapeSummary" class="nest-inline-status">No selection shape captured.</div>
-        </div>
 
         <div class="grid2" style="margin-top:10px;">
           <label class="fld">
