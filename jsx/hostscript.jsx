@@ -7080,29 +7080,6 @@ function _srh_nest_docPtToActualPt(pt, scaleFactor) {
   if(!(sf > 0)) sf = _srh_getScaleFactor();
   return Number(pt || 0) * sf;
 }
-function _srh_nest_exportDocToSvgText(doc, exportFile, artboardRange) {
-  var svgOptions = null;
-  var svgText = '';
-  svgOptions = new ExportOptionsSVG();
-  try {svgOptions.embedRasterImages = true;} catch(_eNestSvg0) { }
-  try {svgOptions.fontSubsetting = SVGFontSubsetting.None;} catch(_eNestSvg1) { }
-  try {svgOptions.fontType = SVGFontType.OUTLINEFONT;} catch(_eNestSvg2) { }
-  try {svgOptions.cssProperties = SVGCSSPropertyLocation.PRESENTATIONATTRIBUTES;} catch(_eNestSvg3) { }
-  try {svgOptions.documentEncoding = SVGDocumentEncoding.UTF8;} catch(_eNestSvg4) { }
-  try {svgOptions.coordinatePrecision = 3;} catch(_eNestSvg5) { }
-  try {svgOptions.preserveEditability = false;} catch(_eNestSvg6) { }
-  if(artboardRange) {
-    try {svgOptions.saveMultipleArtboards = true;} catch(_eNestSvg7) { }
-    try {svgOptions.artboardRange = String(artboardRange);} catch(_eNestSvg8) { }
-  }
-  doc.exportFile(exportFile, ExportType.SVG, svgOptions);
-  if(exportFile.open('r')) {
-    svgText = exportFile.read();
-    exportFile.close();
-  }
-  return String(svgText || '');
-}
-
 function _srh_nest_captureLayerStates(doc) {
   var states = [];
   if(!doc || !doc.layers) return states;
@@ -7146,17 +7123,6 @@ function _srh_nest_prepareCurrentDocExport(doc, layerName, widthPt, heightPt, ma
   return ctx;
 }
 
-function _srh_nest_showOnlyExportLayer(ctx) {
-  if(!ctx || !ctx.doc || !ctx.layer) return;
-  try {ctx.layer.locked = false; ctx.layer.visible = true;} catch(_eNestShowExport0) { }
-  try {
-    for(var i = 0; i < ctx.doc.layers.length; i++) {
-      var lyr = ctx.doc.layers[i];
-      if(lyr !== ctx.layer) {try {lyr.visible = false;} catch(_eNestShowExport1) { }}
-    }
-  } catch(_eNestShowExport2) { }
-}
-
 function _srh_nest_cleanupCurrentDocExport(ctx) {
   if(!ctx || !ctx.doc) return;
   var doc = ctx.doc;
@@ -7171,6 +7137,97 @@ function _srh_nest_cleanupCurrentDocExport(ctx) {
   try {doc.artboards.setActiveArtboardIndex(ctx.previousArtboardIndex || 0);} catch(_eNestCleanAb1) { }
   try {if(ctx.previousActiveLayer) doc.activeLayer = ctx.previousActiveLayer;} catch(_eNestCleanLayer1) { }
   try {if(ctx.previousSelection) doc.selection = ctx.previousSelection;} catch(_eNestCleanSel1) { }
+}
+
+
+function _srh_nest_svgNum(value) {
+  var n = Number(value || 0);
+  if(!isFinite(n)) n = 0;
+  return String(Math.round(n * 1000) / 1000);
+}
+function _srh_nest_svgEscape(value) {
+  return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function _srh_nest_svgPoint(pair, originLeft, originTop) {
+  return {
+    x: Number(pair && pair.length ? pair[0] : 0) - originLeft,
+    y: originTop - Number(pair && pair.length > 1 ? pair[1] : 0)
+  };
+}
+function _srh_nest_pointsEqual(a, b) {
+  if(!a || !b) return false;
+  return Math.abs(Number(a[0] || 0) - Number(b[0] || 0)) < 0.001 && Math.abs(Number(a[1] || 0) - Number(b[1] || 0)) < 0.001;
+}
+function _srh_nest_pathItemToSvgPath(pathRef, originLeft, originTop) {
+  if(!pathRef) return '';
+  var points = null;
+  try {points = pathRef.pathPoints;} catch(_eNestSvgPath0) {points = null;}
+  if(!points || points.length < 1) return '';
+  var d = [];
+  var first = _srh_nest_svgPoint(points[0].anchor, originLeft, originTop);
+  d.push('M ' + _srh_nest_svgNum(first.x) + ' ' + _srh_nest_svgNum(first.y));
+  for(var i = 0; i < points.length; i++) {
+    var nextIndex = i + 1;
+    var isClosing = false;
+    if(nextIndex >= points.length) {
+      try {if(pathRef.closed) {nextIndex = 0; isClosing = true;} else break;} catch(_eNestSvgPathClosed0) {break;}
+    }
+    var cur = points[i];
+    var next = points[nextIndex];
+    var nextAnchor = _srh_nest_svgPoint(next.anchor, originLeft, originTop);
+    var curved = false;
+    try {curved = !_srh_nest_pointsEqual(cur.rightDirection, cur.anchor) || !_srh_nest_pointsEqual(next.leftDirection, next.anchor);} catch(_eNestSvgPathCurve0) {curved = false;}
+    if(curved) {
+      var c1 = _srh_nest_svgPoint(cur.rightDirection, originLeft, originTop);
+      var c2 = _srh_nest_svgPoint(next.leftDirection, originLeft, originTop);
+      d.push('C ' + _srh_nest_svgNum(c1.x) + ' ' + _srh_nest_svgNum(c1.y) + ' ' + _srh_nest_svgNum(c2.x) + ' ' + _srh_nest_svgNum(c2.y) + ' ' + _srh_nest_svgNum(nextAnchor.x) + ' ' + _srh_nest_svgNum(nextAnchor.y));
+    } else if(!isClosing) {
+      d.push('L ' + _srh_nest_svgNum(nextAnchor.x) + ' ' + _srh_nest_svgNum(nextAnchor.y));
+    }
+  }
+  try {if(pathRef.closed) d.push('Z');} catch(_eNestSvgPathClosed1) { }
+  if(d.length < 2) return '';
+  return '<path d="' + _srh_nest_svgEscape(d.join(' ')) + '" fill="#111111" stroke="none" fill-rule="evenodd"/>';
+}
+function _srh_nest_itemToSvgMarkup(itemRef, originLeft, originTop) {
+  if(!itemRef) return '';
+  var tn = '';
+  try {tn = String(itemRef.typename || '');} catch(_eNestSvgItem0) {tn = '';}
+  if(tn === 'PathItem') return _srh_nest_pathItemToSvgPath(itemRef, originLeft, originTop);
+  var parts = [];
+  try {
+    if(tn === 'CompoundPathItem' && itemRef.pathItems && itemRef.pathItems.length) {
+      for(var cp = 0; cp < itemRef.pathItems.length; cp++) {
+        var cpMarkup = _srh_nest_pathItemToSvgPath(itemRef.pathItems[cp], originLeft, originTop);
+        if(cpMarkup) parts.push(cpMarkup);
+      }
+      return parts.length ? ('<g fill-rule="evenodd">' + parts.join('') + '</g>') : '';
+    }
+  } catch(_eNestSvgItem1) { }
+  try {
+    if(itemRef.pageItems && itemRef.pageItems.length) {
+      for(var pi = 0; pi < itemRef.pageItems.length; pi++) {
+        var childMarkup = _srh_nest_itemToSvgMarkup(itemRef.pageItems[pi], originLeft, originTop);
+        if(childMarkup) parts.push(childMarkup);
+      }
+    }
+  } catch(_eNestSvgItem2) { }
+  return parts.length ? ('<g>' + parts.join('') + '</g>') : '';
+}
+function _srh_nest_buildSvgFromItems(items, bounds, marginPt) {
+  if(!items || !items.length || !bounds) return '';
+  var margin = Number(marginPt || 0);
+  var originLeft = Number(bounds.left || 0) - margin;
+  var originTop = Number(bounds.top || 0) + margin;
+  var width = Math.max(1, Number(bounds.width || 0) + margin * 2);
+  var height = Math.max(1, Number(bounds.height || 0) + margin * 2);
+  var body = [];
+  for(var i = 0; i < items.length; i++) {
+    var markup = _srh_nest_itemToSvgMarkup(items[i], originLeft, originTop);
+    if(markup) body.push(markup);
+  }
+  if(!body.length) return '';
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 ' + _srh_nest_svgNum(width) + ' ' + _srh_nest_svgNum(height) + '" width="' + _srh_nest_svgNum(width) + '" height="' + _srh_nest_svgNum(height) + '">' + body.join('') + '</svg>';
 }
 
 function signarama_helper_nest_captureSelectionBounds() {
@@ -7213,7 +7270,6 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
   var marginPt = _srh_mm2pt(10);
   var exportCtx = null;
-  var tempFile = null;
   var debugSteps = [];
   function _nestColorToCss(colorRef) {
     if(!colorRef) return '';
@@ -7348,13 +7404,9 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
       } catch(_eNestBinArtboard0) { }
     }
 
-    var unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
-    tempFile = new File(Folder.temp.fsName + '/srh-nest-bin-' + unique + '.svg');
-    tempFile.encoding = 'UTF-8';
-
-    _srh_nest_showOnlyExportLayer(exportCtx);
-    var svgText = _srh_nest_exportDocToSvgText(sourceDoc, tempFile, exportCtx ? exportCtx.artboardRange : '');
-    if(!svgText) return _srh_nest_jsonResponse(false, {error: 'Illustrator returned an empty SVG export for the selected bin shape.', debug: debugSteps});
+    var svgText = _srh_nest_buildSvgFromItems(tempItems, tempBounds, marginPt);
+    _dbg('buildSvgFromCurrentDocShape', String(svgText ? svgText.length : 0));
+    if(!svgText) return _srh_nest_jsonResponse(false, {error: 'Could not build SVG path data from the selected bin shape.', debug: debugSteps});
 
     return _srh_nest_jsonResponse(true, {
       itemCount: 1,
@@ -7370,7 +7422,6 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
   } catch(e) {
     return _srh_nest_jsonResponse(false, {error: String(e), debug: debugSteps});
   } finally {
-    try {if(tempFile && tempFile.exists) tempFile.remove();} catch(_eNestBinFile0) { }
     try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestBinClose0) { }
   }
 }
@@ -7391,7 +7442,6 @@ function signarama_helper_nest_captureSelectionAsSvg() {
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
   var marginPt = _srh_mm2pt(10);
   var exportCtx = null;
-  var tempFile = null;
   var debugSteps = [];
 
   function _dbg(step, extra) {
@@ -7691,40 +7741,9 @@ function signarama_helper_nest_captureSelectionAsSvg() {
       }
     }
 
-    var unique = '';
-    try {
-      unique = (new Date().getTime()) + '_' + Math.floor(Math.random() * 100000);
-      _dbg('uniqueToken', unique);
-    } catch(_eNestUnique0) {
-      return _srh_nest_jsonResponse(false, {error: 'Failed generating export token: ' + String(_eNestUnique0), debug: debugSteps});
-    }
-
-    var tempFolder = null;
-    try {
-      tempFolder = Folder.temp;
-      _dbg('tempFolder', tempFolder ? String(tempFolder.fsName || tempFolder.fullName || '[unknown]') : '[null]');
-    } catch(_eNestTempFolder0) {
-      return _srh_nest_jsonResponse(false, {error: 'Failed resolving temp folder: ' + String(_eNestTempFolder0), debug: debugSteps});
-    }
-    if(!tempFolder) return _srh_nest_jsonResponse(false, {error: 'Temp folder unavailable.', debug: debugSteps});
-
-    try {
-      tempFile = new File(tempFolder.fsName + '/srh-nest-' + unique + '.svg');
-      tempFile.encoding = 'UTF-8';
-      _dbg('exportSvg', tempFile.fsName);
-    } catch(_eNestTempFile0) {
-      return _srh_nest_jsonResponse(false, {error: 'Failed creating temp SVG file: ' + String(_eNestTempFile0), debug: debugSteps});
-    }
-
-    var svgText = '';
-    try {
-      _srh_nest_showOnlyExportLayer(exportCtx);
-      svgText = _srh_nest_exportDocToSvgText(sourceDoc, tempFile, exportCtx ? exportCtx.artboardRange : '');
-      _dbg('exportSvgDone', String(svgText ? svgText.length : 0));
-    } catch(_eNestExport0) {
-      return _srh_nest_jsonResponse(false, {error: 'SVG export failed: ' + String(_eNestExport0), debug: debugSteps});
-    }
-    if(!svgText) return _srh_nest_jsonResponse(false, {error: 'Illustrator returned an empty SVG export.', debug: debugSteps});
+    var svgText = _srh_nest_buildSvgFromItems(tempItems, tempBounds, marginPt);
+    _dbg('buildSvgFromCurrentDocParts', String(svgText ? svgText.length : 0));
+    if(!svgText) return _srh_nest_jsonResponse(false, {error: 'Could not build SVG path data from the selected parts.', debug: debugSteps});
 
     return _srh_nest_jsonResponse(true, {
       itemCount: selectionItems.length,
@@ -7743,7 +7762,6 @@ function signarama_helper_nest_captureSelectionAsSvg() {
   } catch(e) {
     return _srh_nest_jsonResponse(false, {error: String(e), debug: debugSteps});
   } finally {
-    try {if(tempFile && tempFile.exists) tempFile.remove();} catch(_eNestFile0) { }
     try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestClose0) { }
   }
 }
