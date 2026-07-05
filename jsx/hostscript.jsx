@@ -7158,6 +7158,51 @@ function _srh_nest_pointsEqual(a, b) {
   if(!a || !b) return false;
   return Math.abs(Number(a[0] || 0) - Number(b[0] || 0)) < 0.001 && Math.abs(Number(a[1] || 0) - Number(b[1] || 0)) < 0.001;
 }
+
+function _srh_nest_colorToSvgCss(colorRef) {
+  if(!colorRef) return '';
+  try {
+    var tn = String(colorRef.typename || '');
+    if(tn === 'NoColor') return 'none';
+    if(typeof _srh_colorToRgb === 'function') {
+      var rgb = _srh_colorToRgb(colorRef);
+      if(rgb) {
+        return 'rgb(' + Math.max(0, Math.min(255, Math.round(Number(rgb.r || 0)))) + ',' + Math.max(0, Math.min(255, Math.round(Number(rgb.g || 0)))) + ',' + Math.max(0, Math.min(255, Math.round(Number(rgb.b || 0)))) + ')';
+      }
+    }
+    if(tn === 'RGBColor') return 'rgb(' + Math.round(Number(colorRef.red || 0)) + ',' + Math.round(Number(colorRef.green || 0)) + ',' + Math.round(Number(colorRef.blue || 0)) + ')';
+    if(tn === 'GrayColor') {
+      var g = Math.round(255 * (1 - (Number(colorRef.gray || 0) / 100)));
+      return 'rgb(' + g + ',' + g + ',' + g + ')';
+    }
+  } catch(_eNestSvgColor0) { }
+  return '';
+}
+function _srh_nest_pathStyleAttrs(pathRef) {
+  var attrs = [];
+  var filled = false;
+  var stroked = false;
+  try {filled = !!pathRef.filled;} catch(_eNestSvgStyle0) {filled = false;}
+  try {stroked = !!pathRef.stroked;} catch(_eNestSvgStyle1) {stroked = false;}
+  if(filled) {
+    var fillCss = '';
+    try {fillCss = _srh_nest_colorToSvgCss(pathRef.fillColor);} catch(_eNestSvgStyle2) {fillCss = '';}
+    attrs.push('fill="' + _srh_nest_svgEscape(fillCss || '#111111') + '"');
+  } else {
+    attrs.push('fill="none"');
+  }
+  if(stroked) {
+    var strokeCss = '';
+    try {strokeCss = _srh_nest_colorToSvgCss(pathRef.strokeColor);} catch(_eNestSvgStyle3) {strokeCss = '';}
+    attrs.push('stroke="' + _srh_nest_svgEscape(strokeCss || '#111111') + '"');
+    try {attrs.push('stroke-width="' + _srh_nest_svgNum(Number(pathRef.strokeWidth || 1)) + '"');} catch(_eNestSvgStyle4) { }
+  } else {
+    attrs.push('stroke="none"');
+  }
+  try {attrs.push('opacity="' + _srh_nest_svgNum(Number(pathRef.opacity || 100) / 100) + '"');} catch(_eNestSvgStyle5) { }
+  return attrs.join(' ');
+}
+
 function _srh_nest_pathItemToSvgPath(pathRef, originLeft, originTop) {
   if(!pathRef) return '';
   var points = null;
@@ -7187,7 +7232,7 @@ function _srh_nest_pathItemToSvgPath(pathRef, originLeft, originTop) {
   }
   try {if(pathRef.closed) d.push('Z');} catch(_eNestSvgPathClosed1) { }
   if(d.length < 2) return '';
-  return '<path d="' + _srh_nest_svgEscape(d.join(' ')) + '" fill="#111111" stroke="none" fill-rule="evenodd"/>';
+  return '<path d="' + _srh_nest_svgEscape(d.join(' ')) + '" ' + _srh_nest_pathStyleAttrs(pathRef) + ' fill-rule="evenodd"/>';
 }
 function _srh_nest_itemToSvgMarkup(itemRef, originLeft, originTop) {
   if(!itemRef) return '';
@@ -8150,7 +8195,54 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
   function _nestIsCommandToken(tokenRef) {
     return /^[a-zA-Z]$/.test(String(tokenRef || ''));
   }
-  function _nestDrawPathD(docRef, groupRef, dRef, matrixRef) {
+  function _nestCssColorToRgb(cssRef) {
+    var css = String(cssRef || '').replace(/^\s+|\s+$/g, '');
+    if(!css || css.toLowerCase() === 'none') return null;
+    var rgb = new RGBColor();
+    var m = null;
+    if(css.charAt(0) === '#') {
+      var hex = css.substring(1);
+      if(hex.length === 3) hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2);
+      if(hex.length === 6) {
+        rgb.red = parseInt(hex.substring(0, 2), 16);
+        rgb.green = parseInt(hex.substring(2, 4), 16);
+        rgb.blue = parseInt(hex.substring(4, 6), 16);
+        return rgb;
+      }
+    }
+    m = /rgb\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i.exec(css);
+    if(m) {
+      rgb.red = Math.max(0, Math.min(255, Math.round(Number(m[1] || 0))));
+      rgb.green = Math.max(0, Math.min(255, Math.round(Number(m[2] || 0))));
+      rgb.blue = Math.max(0, Math.min(255, Math.round(Number(m[3] || 0))));
+      return rgb;
+    }
+    if(css.toLowerCase() === 'black') {rgb.red = 0; rgb.green = 0; rgb.blue = 0; return rgb;}
+    if(css.toLowerCase() === 'white') {rgb.red = 255; rgb.green = 255; rgb.blue = 255; return rgb;}
+    return null;
+  }
+  function _nestApplySvgElementStyle(pathRef, tagRef) {
+    if(!pathRef) return;
+    var fillText = _nestAttr(tagRef, 'fill');
+    var strokeText = _nestAttr(tagRef, 'stroke');
+    var strokeWidthText = _nestAttr(tagRef, 'stroke-width');
+    var opacityText = _nestAttr(tagRef, 'opacity');
+    if(!fillText && !strokeText) fillText = '#111111';
+    if(fillText && String(fillText).toLowerCase() !== 'none') {
+      try {pathRef.filled = true; var fill = _nestCssColorToRgb(fillText); if(fill) pathRef.fillColor = fill;} catch(_eNestStyleFill0) { }
+    } else {
+      try {pathRef.filled = false;} catch(_eNestStyleFill1) { }
+    }
+    if(strokeText && String(strokeText).toLowerCase() !== 'none') {
+      try {pathRef.stroked = true; var stroke = _nestCssColorToRgb(strokeText); if(stroke) pathRef.strokeColor = stroke;} catch(_eNestStyleStroke0) { }
+      try {if(strokeWidthText) pathRef.strokeWidth = Number(strokeWidthText || 1);} catch(_eNestStyleStroke1) { }
+    } else {
+      try {pathRef.stroked = false;} catch(_eNestStyleStroke2) { }
+    }
+    try {if(opacityText) pathRef.opacity = Math.max(0, Math.min(100, Number(opacityText) * 100));} catch(_eNestStyleOpacity0) { }
+  }
+
+  function _nestDrawPathD(docRef, groupRef, dRef, matrixRef, styleTagRef) {
     var tokens = _nestPathTokens(dRef);
     if(!tokens.length) return 0;
     var idx = 0;
@@ -8212,11 +8304,7 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
         var pathRef = docRef.activeLayer.pathItems.add();
         pathRef.setEntirePath(sp.anchors);
         pathRef.closed = !!sp.closed;
-        pathRef.filled = true;
-        pathRef.stroked = false;
-        try {
-          var fill = new RGBColor(); fill.red = 17; fill.green = 17; fill.blue = 17; pathRef.fillColor = fill;
-        } catch(_eNestDrawFill0) { }
+        _nestApplySvgElementStyle(pathRef, styleTagRef || '');
         for(var pi = 0; pi < pathRef.pathPoints.length && pi < sp.anchors.length; pi++) {
           try {pathRef.pathPoints[pi].leftDirection = sp.lefts[pi];} catch(_eNestDrawLeft0) { }
           try {pathRef.pathPoints[pi].rightDirection = sp.rights[pi];} catch(_eNestDrawRight0) { }
@@ -8235,7 +8323,7 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
     var h = Number(_nestAttr(tagRef, 'height') || 0);
     if(!(w > 0) || !(h > 0)) return 0;
     var d = 'M ' + x + ' ' + y + ' L ' + (x + w) + ' ' + y + ' L ' + (x + w) + ' ' + (y + h) + ' L ' + x + ' ' + (y + h) + ' Z';
-    return _nestDrawPathD(docRef, groupRef, d, matrixRef);
+    return _nestDrawPathD(docRef, groupRef, d, matrixRef, tagRef);
   }
   function _nestDrawSvgMarkupOnActiveLayer(docRef, svgMarkup) {
     var rootGroup = null;
@@ -8258,7 +8346,7 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
           }
         } else if(!closing && tagName === 'path') {
           var pathMatrix = _nestMultiplyMatrix(stack[stack.length - 1], _nestParseTransform(_nestAttr(tag, 'transform')));
-          made += _nestDrawPathD(docRef, rootGroup, _nestAttr(tag, 'd'), pathMatrix);
+          made += _nestDrawPathD(docRef, rootGroup, _nestAttr(tag, 'd'), pathMatrix, tag);
         } else if(!closing && tagName === 'rect') {
           var rectMatrix = _nestMultiplyMatrix(stack[stack.length - 1], _nestParseTransform(_nestAttr(tag, 'transform')));
           made += _nestDrawRect(docRef, rootGroup, tag, rectMatrix);
