@@ -558,18 +558,18 @@
           corebridgeFlashTickPollInFlight = false;
           const tickTxt = String(tickRes || '').trim();
           if(/^ERROR\|/i.test(tickTxt)) {
-            log('Corebridge flash tick error: ' + tickTxt);
-            stopCorebridgeFlashTickPolling('tick error');
-            return;
-          }
-          if(/^INACTIVE\|/i.test(tickTxt)) {
-            stopCorebridgeFlashTickPolling('inactive');
+            log('Corebridge flash state error: ' + tickTxt);
+            stopCorebridgeFlashTickPolling('state error');
             return;
           }
           const parts = tickTxt.split('|');
-          if(parts.length >= 4 && /^ACTIVE$/i.test(parts[0])) {
-            const tickCount = parseInt(parts[2], 10) || 0;
+          if(parts.length >= 6 && /^STATE$/i.test(parts[0])) {
+            const active = parseInt(parts[1], 10) || 0;
+            const tickCount = parseInt(parts[3], 10) || 0;
             corebridgeFlashLastTickCount = tickCount;
+            if(!active) {
+              stopCorebridgeFlashTickPolling(parts[6] === 'DOC_CHANGED' ? 'document changed' : 'inactive');
+            }
           }
         });
       }, 500);
