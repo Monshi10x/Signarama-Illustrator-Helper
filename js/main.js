@@ -2070,6 +2070,7 @@
       latestResultSvgList: null,
       latestOutputSvg: '',
       latestOutputSvgPath: '',
+      latestBinSize: null,
       startTimeMs: 0,
       heartbeatTimer: null,
       latestProgress: 0,
@@ -2699,6 +2700,7 @@
       nestState.latestResultSvgList = null;
       nestState.latestOutputSvg = '';
       nestState.latestOutputSvgPath = '';
+      nestState.latestBinSize = source.binSize || null;
       lastSavedProgressPct = -1;
       clearNestBackup();
       resetNestMetrics();
@@ -2919,6 +2921,7 @@
         nestState.latestResultSvgList = null;
         nestState.latestOutputSvg = '';
         nestState.latestOutputSvgPath = '';
+        nestState.latestBinSize = null;
         clearNestBackup();
         updatePartsSummary();
         resetNestMetrics();
@@ -3032,6 +3035,7 @@
         nestState.latestResultSvgList = null;
         nestState.latestOutputSvg = '';
         nestState.latestOutputSvgPath = '';
+        nestState.latestBinSize = null;
         clearNestBackup();
         resetNestMetrics();
         updateButtons();
@@ -3045,15 +3049,55 @@
           return;
         }
         const loadingToast = showToast('Placing nested result into Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        const placementItems = nestState.latestPlacement ? nestState.latestPlacement.reduce((sum, bin) => sum + (bin && bin.length ? bin.length : 0), 0) : 0;
+        const snapshotIds = (nestState.partsMeta && nestState.partsMeta.snapshotIds) || [];
+        const canPlaceNativeOriginals = !!(nestState.latestPlacement && nestState.latestPlacement.length && snapshotIds.length);
         const placementDebug = {
           placementBins: nestState.latestPlacement ? nestState.latestPlacement.length : 0,
-          placementItems: nestState.latestPlacement ? nestState.latestPlacement.reduce((sum, bin) => sum + (bin && bin.length ? bin.length : 0), 0) : 0,
-          snapshotIds: (nestState.partsMeta && nestState.partsMeta.snapshotIds) || [],
-          usingPlacementSvg: true
+          placementItems: placementItems,
+          snapshotIds: snapshotIds,
+          usingNativeOriginals: canPlaceNativeOriginals,
+          usingPlacementSvg: !canPlaceNativeOriginals
         };
         logNest('Place debug: ' + JSON.stringify(placementDebug));
-        // Use SVGnest's generated placement SVG for now because it preserves the engine's exact bin geometry.
-        // The log above includes source metadata so native-original placement can be diagnosed without changing geometry.
+        function copyNestDebugLog() {
+          const debugText = logEl ? String(logEl.textContent || '') : '';
+          if(!debugText) return;
+          copyTextToClipboard('NEST DEBUG LOG\n' + debugText).then(() => {
+            logNest('Copied nest debug log to clipboard.');
+          }).catch((copyErr) => {
+            logNest('Debug log clipboard copy failed: ' + (copyErr && copyErr.message ? copyErr.message : copyErr));
+          });
+        }
+        function finishPlaceResult(res, successFallback) {
+          if(loadingToast) loadingToast.close();
+          const text = String(res || '');
+          const isError = /^error:/i.test(text);
+          copyNestDebugLog();
+          if(isError) {
+            showToast(text, {type: 'error', title: 'Nest'});
+            logNest('Place result failed: ' + text);
+            return false;
+          }
+          showToast(text || successFallback, {type: 'success', title: 'Nest'});
+          logNest(text || successFallback);
+          return true;
+        }
+        if(canPlaceNativeOriginals) {
+          const nativePayload = {
+            placements: nestState.latestPlacement,
+            snapshotLayerName: (nestState.partsMeta && nestState.partsMeta.snapshotLayerName) || 'SRH_NEST_SOURCE_SNAPSHOT',
+            snapshotIds: snapshotIds,
+            binSize: (nestState.latestBinSize || {})
+          };
+          const safePayload = jsxEscapeDoubleQuoted(JSON.stringify(nativePayload));
+          logNest('Placing original loaded artwork from raw placement data.');
+          callNestJsx('signarama_helper_nest_placeNativeNestPlacement', '"' + safePayload + '"', (res) => {
+            finishPlaceResult(res, 'Nested original artwork placed on the active artboard.');
+          });
+          return;
+        }
+        logNest('Native original placement metadata was not available; falling back to generated SVG placement.');
         let outputSvg = String(nestState.latestOutputSvg || '');
         try {
           if(!outputSvg && nestState.latestOutputSvgPath) {
@@ -3080,24 +3124,7 @@
         }
         const safeSvg = jsxEscapeDoubleQuoted(outputSvg);
         callNestJsx('signarama_helper_nest_placeSvgOnActiveArtboard', '"' + safeSvg + '"', (res) => {
-          if(loadingToast) loadingToast.close();
-          const text = String(res || '');
-          const isError = /^error:/i.test(text);
-          const debugText = logEl ? String(logEl.textContent || '') : '';
-          if(debugText) {
-            copyTextToClipboard('NEST DEBUG LOG\n' + debugText).then(() => {
-              logNest('Copied nest debug log to clipboard.');
-            }).catch((copyErr) => {
-              logNest('Debug log clipboard copy failed: ' + (copyErr && copyErr.message ? copyErr.message : copyErr));
-            });
-          }
-          if(isError) {
-            showToast(text, {type: 'error', title: 'Nest'});
-            logNest('Place result failed: ' + text);
-            return;
-          }
-          showToast(text || 'Nested SVG placed in Illustrator. Debug log copied to clipboard.', {type: 'success', title: 'Nest'});
-          logNest(text || 'Placed nested SVG on active artboard.');
+          finishPlaceResult(res, 'Nested SVG placed on the active artboard.');
         });
       });
     }

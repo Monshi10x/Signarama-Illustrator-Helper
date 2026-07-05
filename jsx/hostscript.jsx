@@ -7892,12 +7892,18 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
   var binSize = opts.binSize || {};
   var root = null;
   var made = 0;
+  var placedIds = {};
   var snapLayer = null;
   try {snapLayer = doc.layers.getByName(snapshotLayerName); snapLayer.locked = false; snapLayer.visible = true;} catch(_eNestNativeLayer0) {snapLayer = null;}
   function _normRect(rect) {
     if(!rect || rect.length !== 4) return null;
     var l = Number(rect[0]), t = Number(rect[1]), r = Number(rect[2]), b = Number(rect[3]);
     return [Math.min(l, r), Math.max(t, b), Math.max(l, r), Math.min(t, b)];
+  }
+  function _normalizeSourcePartId(rawId) {
+    var s = String(rawId || '');
+    var m = s.match(/srh-nest-part-\d+/);
+    return m ? m[0] : s;
   }
   try {
     var abIndex = 0;
@@ -7922,10 +7928,11 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
       var binList = placements[bi] || [];
       for(var pi = 0; pi < binList.length; pi++) {
         var place = binList[pi] || {};
-        var sid = String(place.sourcePartId || '');
-        if(!sid && typeof place.source !== 'undefined' && snapshotIds[Number(place.source)] !== undefined) sid = String(snapshotIds[Number(place.source)] || '');
-        if(!sid && typeof place.id !== 'undefined' && snapshotIds[Number(place.id)] !== undefined) sid = String(snapshotIds[Number(place.id)] || '');
-        if(!sid) continue;
+        var sid = _normalizeSourcePartId(place.sourcePartId || '');
+        if(!sid && typeof place.source !== 'undefined' && snapshotIds[Number(place.source)] !== undefined) sid = _normalizeSourcePartId(snapshotIds[Number(place.source)] || '');
+        if(!sid && typeof place.id !== 'undefined' && snapshotIds[Number(place.id)] !== undefined) sid = _normalizeSourcePartId(snapshotIds[Number(place.id)] || '');
+        if(!sid || placedIds[sid]) continue;
+        placedIds[sid] = true;
         var src = _srh_nest_findPageItemByName(doc, sid);
         if(!src) src = _srh_nest_findSnapshotGroup(doc, snapshotLayerName, sid);
         if(!src) continue;
