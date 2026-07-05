@@ -7275,6 +7275,52 @@ function _srh_nest_buildSvgFromItems(items, bounds, marginPt) {
   return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 ' + _srh_nest_svgNum(width) + ' ' + _srh_nest_svgNum(height) + '" width="' + _srh_nest_svgNum(width) + '" height="' + _srh_nest_svgNum(height) + '">' + body.join('') + '</svg>';
 }
 
+
+function _srh_nest_removeLayerByName(doc, layerName) {
+  if(!doc || !doc.layers) return;
+  for(var i = doc.layers.length - 1; i >= 0; i--) {
+    try {
+      if(String(doc.layers[i].name || '') === String(layerName || '')) {
+        doc.layers[i].locked = false;
+        doc.layers[i].visible = true;
+        doc.layers[i].remove();
+      }
+    } catch(_eNestRmLayer0) { }
+  }
+}
+function _srh_nest_createSourceSnapshot(doc, items, scaleFactor) {
+  var layerName = 'SRH_NEST_SOURCE_SNAPSHOT';
+  var ids = [];
+  if(!doc || !items || !items.length) return {layerName: '', ids: ids};
+  _srh_nest_removeLayerByName(doc, layerName);
+  var snapLayer = null;
+  try {snapLayer = doc.layers.add(); snapLayer.name = layerName; snapLayer.visible = true; snapLayer.locked = false;} catch(_eNestSnap0) {snapLayer = null;}
+  if(!snapLayer) return {layerName: '', ids: ids};
+  for(var i = 0; i < items.length; i++) {
+    var id = 'srh-nest-part-' + i;
+    try {
+      var grp = snapLayer.groupItems.add();
+      grp.name = id;
+      var dup = items[i].duplicate(grp, ElementPlacement.PLACEATEND);
+      try {if(scaleFactor > 1.0001) _srh_nest_scaleItem(dup || grp, scaleFactor * 100);} catch(_eNestSnapScale0) { }
+      ids.push(id);
+    } catch(_eNestSnap1) {
+      ids.push('');
+    }
+  }
+  try {snapLayer.visible = false;} catch(_eNestSnapHide0) { }
+  return {layerName: layerName, ids: ids};
+}
+function _srh_nest_findSnapshotGroup(doc, layerName, groupName) {
+  if(!doc || !layerName || !groupName) return null;
+  var layer = null;
+  try {layer = doc.layers.getByName(layerName);} catch(_eNestFindSnap0) {layer = null;}
+  if(!layer) return null;
+  try {layer.locked = false; layer.visible = true;} catch(_eNestFindSnap1) { }
+  try {return layer.groupItems.getByName(groupName);} catch(_eNestFindSnap2) { }
+  return null;
+}
+
 function signarama_helper_nest_captureSelectionBounds() {
   if(!app.documents.length) return _srh_nest_jsonResponse(false, {error: 'No open document.'});
   var doc = app.activeDocument;
@@ -7485,6 +7531,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
 
   var actualWidthPt = _srh_nest_docPtToActualPt(sourceBounds.width, scaleFactor);
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
+  var snapshotInfo = _srh_nest_createSourceSnapshot(sourceDoc, selectionItems, scaleFactor);
   var marginPt = _srh_mm2pt(10);
   var exportCtx = null;
   var debugSteps = [];
@@ -7801,6 +7848,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
         width: _srh_pt2mm(actualWidthPt),
         height: _srh_pt2mm(actualHeightPt)
       },
+      snapshotLayerName: snapshotInfo.layerName,
+      snapshotIds: snapshotInfo.ids,
       debug: debugSteps,
       svgText: svgText
     });
@@ -7810,6 +7859,74 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestClose0) { }
   }
 }
+
+function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var opts = {};
+  try {opts = JSON.parse(String(jsonText || '{}'));} catch(_eNestNativeJson0) {return 'Error: Invalid native placement payload.';}
+  var doc = app.activeDocument;
+  var placements = opts.placements || [];
+  var snapshotLayerName = String(opts.snapshotLayerName || 'SRH_NEST_SOURCE_SNAPSHOT');
+  var snapshotIds = opts.snapshotIds || [];
+  var binSize = opts.binSize || {};
+  var root = null;
+  var made = 0;
+  var snapLayer = null;
+  try {snapLayer = doc.layers.getByName(snapshotLayerName); snapLayer.locked = false; snapLayer.visible = true;} catch(_eNestNativeLayer0) {snapLayer = null;}
+  if(!snapLayer) return 'Error: Nest source snapshot was not found. Load parts again before placing.';
+  function _normRect(rect) {
+    if(!rect || rect.length !== 4) return null;
+    var l = Number(rect[0]), t = Number(rect[1]), r = Number(rect[2]), b = Number(rect[3]);
+    return [Math.min(l, r), Math.max(t, b), Math.max(l, r), Math.min(t, b)];
+  }
+  try {
+    var abIndex = 0;
+    try {abIndex = doc.artboards.getActiveArtboardIndex();} catch(_eNestNativeAb0) {abIndex = 0;}
+    var ab = _normRect(doc.artboards[abIndex].artboardRect);
+    var margin = _srh_mm2ptDoc(10);
+    var originLeft = ab ? (Number(ab[0]) + margin) : 0;
+    var originTop = ab ? (Number(ab[1]) - margin) : 0;
+    root = doc.activeLayer.groupItems.add();
+    root.name = 'SRH_NEST_RESULT';
+    if(Number(binSize.widthPt || 0) > 0 && Number(binSize.heightPt || 0) > 0) {
+      try {
+        var binRect = doc.activeLayer.pathItems.rectangle(originTop, originLeft, Number(binSize.widthPt), Number(binSize.heightPt));
+        binRect.filled = false;
+        binRect.stroked = true;
+        binRect.strokeWidth = 1;
+        try {var c = new RGBColor(); c.red = 200; c.green = 16; c.blue = 46; binRect.strokeColor = c;} catch(_eNestNativeBinColor0) { }
+        try {binRect.move(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeBinMove0) { }
+      } catch(_eNestNativeBin0) { }
+    }
+    for(var bi = 0; bi < placements.length; bi++) {
+      var binList = placements[bi] || [];
+      for(var pi = 0; pi < binList.length; pi++) {
+        var place = binList[pi] || {};
+        var sid = String(place.sourcePartId || '');
+        if(!sid && typeof place.source !== 'undefined' && snapshotIds[Number(place.source)] !== undefined) sid = String(snapshotIds[Number(place.source)] || '');
+        if(!sid && typeof place.id !== 'undefined' && snapshotIds[Number(place.id)] !== undefined) sid = String(snapshotIds[Number(place.id)] || '');
+        if(!sid) continue;
+        var src = _srh_nest_findSnapshotGroup(doc, snapshotLayerName, sid);
+        if(!src) continue;
+        var dup = null;
+        try {dup = src.duplicate(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeDup0) {dup = null;}
+        if(!dup) continue;
+        try {dup.rotate(-Number(place.rotation || 0), true, true, true, true, Transformation.TOPLEFT);} catch(_eNestNativeRot0) { }
+        try {dup.position = [originLeft + Number(place.x || 0), originTop - Number(place.y || 0)];} catch(_eNestNativePos0) { }
+        made++;
+      }
+    }
+    try {snapLayer.visible = false;} catch(_eNestNativeHide0) { }
+    if(made > 0) {try {root.selected = true;} catch(_eNestNativeSel0) { } return 'Nested original artwork placed on the active artboard.';}
+    try {if(root) root.remove();} catch(_eNestNativeRm0) { }
+    return 'Error: No original snapshot artwork could be placed.';
+  } catch(e) {
+    try {if(root) root.remove();} catch(_eNestNativeRm1) { }
+    try {if(snapLayer) snapLayer.visible = false;} catch(_eNestNativeHide1) { }
+    return 'Error: ' + e;
+  }
+}
+
 function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
   function _nestLooksLikeSvgText(v) {
     var s = String(v == null ? '' : v);
@@ -8387,6 +8504,8 @@ try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_nest_cap
 try {this.signarama_helper_nest_captureSelectionAsSvg = signarama_helper_nest_captureSelectionAsSvg;} catch(_eNestExp3) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_nest_placeSvgOnActiveArtboard = signarama_helper_nest_placeSvgOnActiveArtboard;} catch(_eNestExp4) { }
 try {this.signarama_helper_nest_placeSvgOnActiveArtboard = signarama_helper_nest_placeSvgOnActiveArtboard;} catch(_eNestExp5) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_nest_placeNativeNestPlacement = signarama_helper_nest_placeNativeNestPlacement;} catch(_eNestExp6) { }
+try {this.signarama_helper_nest_placeNativeNestPlacement = signarama_helper_nest_placeNativeNestPlacement;} catch(_eNestExp7) { }
 
 
 

@@ -3004,7 +3004,29 @@
           showToast('Run a nest first so there is a result to place.', {type: 'warn', title: 'Nest'});
           return;
         }
-        const loadingToast = showToast('Placing nested SVG into Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        const loadingToast = showToast('Placing nested result into Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        if(nestState.latestPlacement && nestState.partsMeta && nestState.partsMeta.snapshotLayerName) {
+          const nativePayload = {
+            placements: nestState.latestPlacement,
+            snapshotLayerName: nestState.partsMeta.snapshotLayerName || '',
+            snapshotIds: nestState.partsMeta.snapshotIds || [],
+            binSize: getBinSize() || null
+          };
+          const safePayload = jsxEscapeDoubleQuoted(JSON.stringify(nativePayload));
+          callNestJsx('signarama_helper_nest_placeNativeNestPlacement', '"' + safePayload + '"', (res) => {
+            if(loadingToast) loadingToast.close();
+            const text = String(res || '');
+            const isError = /^error:/i.test(text);
+            if(isError) {
+              showToast(text, {type: 'error', title: 'Nest'});
+              logNest('Place native result failed: ' + text);
+              return;
+            }
+            showToast(text || 'Nested original artwork placed in Illustrator.', {type: 'success', title: 'Nest'});
+            logNest(text || 'Placed nested original artwork on active artboard.');
+          });
+          return;
+        }
         let outputSvg = String(nestState.latestOutputSvg || '');
         try {
           if(!outputSvg && nestState.latestOutputSvgPath) {
