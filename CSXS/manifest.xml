@@ -42,6 +42,10 @@
               <Width>420</Width>
               <Height>600</Height>
             </MinSize>
+            <MaxSize>
+              <Width>2000</Width>
+              <Height>3000</Height>
+            </MaxSize>
           </Geometry>
         </UI>
       </DispatchInfo>
