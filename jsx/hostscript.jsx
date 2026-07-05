@@ -7813,13 +7813,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
             try {if(partGroup.pageItems[pk]) partKids.push(partGroup.pageItems[pk]);} catch(_eNestPartItem0) { }
           }
           _dbg('extractNativePaths[' + i + ']', String(partKids.length));
-          for(pk = partKids.length - 1; pk >= 0; pk--) {
-            try {
-              partKids[pk].move(targetLayer, ElementPlacement.PLACEATEND);
-              extractedItemCount++;
-            } catch(_eNestMoveOut0) { }
-          }
-          try {partGroup.remove();} catch(_eNestPartRm0) { }
+          if(partKids.length) extractedItemCount++;
         } catch(_eNestExtract0) {
           _dbg('extractNativePathsFailed[' + i + ']', String(_eNestExtract0));
         }
@@ -7830,11 +7824,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     }
 
     var tempItems = [];
-    var tempItemSource = targetLayer || sourceDoc;
-    for(i = 0; i < tempItemSource.pageItems.length; i++) {
-      try {
-        if(tempItemSource.pageItems[i]) tempItems.push(tempItemSource.pageItems[i]);
-      } catch(_eNestItem0) { }
+    for(i = 0; i < partGroups.length; i++) {
+      try {if(partGroups[i] && partGroups[i].pageItems && partGroups[i].pageItems.length) tempItems.push(partGroups[i]);} catch(_eNestItem0) { }
     }
     _dbg('tempItems', String(tempItems.length));
     var tempBounds = _srh_nest_unionBounds(tempItems);
