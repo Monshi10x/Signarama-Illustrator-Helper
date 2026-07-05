@@ -649,9 +649,25 @@
 						srhMark('result-display-dispatch', {binCount: best.placements ? best.placements.length : 0});
 						if(typeof window !== 'undefined' && window.__srhSvgNestUsePlacementOnlyCallback){
 							srhLog('SVGnest: returning raw placement data instead of rendered SVG.');
+							var enrichedPlacements = best.placements;
+							try{
+								enrichedPlacements = best.placements.map(function(binList){
+									return binList.map(function(place){
+										var copy = {};
+										for(var key in place){ if(place.hasOwnProperty(key)){ copy[key] = place[key]; } }
+										var treePart = tree && tree[place.id] ? tree[place.id] : null;
+										if(treePart){
+											copy.source = treePart.source;
+											copy.sourcePartId = treePart.sourcePartId || '';
+										}
+										return copy;
+									});
+								});
+							}
+							catch(_eEnrichPlacement){ enrichedPlacements = best.placements; }
 							displayCallback({
 								placementOnly: true,
-								placements: best.placements
+								placements: enrichedPlacements
 							}, placedArea/totalArea, numPlacedParts, numParts);
 						}
 						else{
