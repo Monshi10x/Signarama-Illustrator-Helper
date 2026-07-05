@@ -2046,8 +2046,6 @@
     const manualSizeWrap = $('nestManualSizeFields');
     const selectionSizeWrap = $('nestSelectionSizeFields');
     const selectionShapeWrap = $('nestSelectionShapeFields');
-    const captureSelectionSizeBtn = $('btnNestCaptureSelectionSize');
-    const captureSelectionShapeBtn = $('btnNestCaptureSelectionShape');
     const partsSummary = $('nestPartsSummary');
     const selectionSummary = $('nestSelectionSizeSummary');
     const selectionShapeSummary = $('nestSelectionShapeSummary');
@@ -2977,13 +2975,6 @@
         return;
       }
       startNest();
-    }
-
-    if(captureSelectionSizeBtn) {
-      captureSelectionSizeBtn.addEventListener('click', () => captureSelectionSize());
-    }
-    if(captureSelectionShapeBtn) {
-      captureSelectionShapeBtn.addEventListener('click', () => captureSelectionShape());
     }
 
     startBtn.addEventListener('click', captureCurrentSheetSourceThenStart);
