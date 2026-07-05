@@ -2899,49 +2899,94 @@
       });
     });
 
-    if(captureSelectionSizeBtn) {
-      captureSelectionSizeBtn.addEventListener('click', () => {
-        const loadingToast = showToast('Reading selection bounds from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
-        callNestJsx('signarama_helper_nest_captureSelectionBounds', '', (res) => {
-          if(loadingToast) loadingToast.close();
-          const payload = parseNestJson(res);
-          if(!payload.ok) {
-            showToast(payload.error || 'Failed to capture selection bounds.', {type: 'error', title: 'Nest'});
-            logNest('Capture size failed: ' + (payload.error || res));
-            return;
-          }
-          nestState.selectionSize = payload;
-          updateSelectionSummary();
-          updateSheetMetric();
-          setNestStatus('Selection size captured.');
-          logNest('Captured sheet size from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
-        });
-      });
-    }
-    if(captureSelectionShapeBtn) {
-      captureSelectionShapeBtn.addEventListener('click', () => {
-        const loadingToast = showToast('Reading selection shape from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
-        callNestJsx('signarama_helper_nest_captureSelectionShapeAsSvg', '', (res) => {
-          if(loadingToast) loadingToast.close();
-          const payload = parseNestJson(res);
-          if(!payload.ok) {
-            showToast(payload.error || 'Failed to capture selection shape.', {type: 'error', title: 'Nest'});
-            logNest('Capture shape failed: ' + (payload.error || res));
-            if(payload.debug && payload.debug.length) {
-              payload.debug.forEach((line) => logNest('Debug: ' + line));
-            }
-            return;
-          }
-          nestState.selectionBin = payload;
-          updateSelectionShapeSummary();
-          updateSheetMetric();
-          setNestStatus('Selection shape captured.');
-          logNest('Captured bin shape from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
-        });
+    function captureSelectionSize(options) {
+      const opts = options || {};
+      const loadingToast = opts.silent ? null : showToast('Reading selection bounds from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+      callNestJsx('signarama_helper_nest_captureSelectionBounds', '', (res) => {
+        if(loadingToast) loadingToast.close();
+        const payload = parseNestJson(res);
+        if(!payload.ok) {
+          if(!opts.silent) showToast(payload.error || 'Failed to capture selection bounds.', {type: 'error', title: 'Nest'});
+          logNest('Capture size failed: ' + (payload.error || res));
+          if(opts.done) opts.done(false, payload);
+          return;
+        }
+        nestState.selectionSize = payload;
+        updateSelectionSummary();
+        updateSheetMetric();
+        setNestStatus('Selection size captured.');
+        logNest('Captured sheet size from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
+        if(opts.done) opts.done(true, payload);
       });
     }
 
-    startBtn.addEventListener('click', startNest);
+    function captureSelectionShape(options) {
+      const opts = options || {};
+      const loadingToast = opts.silent ? null : showToast('Reading selection shape from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+      callNestJsx('signarama_helper_nest_captureSelectionShapeAsSvg', '', (res) => {
+        if(loadingToast) loadingToast.close();
+        const payload = parseNestJson(res);
+        if(!payload.ok) {
+          if(!opts.silent) showToast(payload.error || 'Failed to capture selection shape.', {type: 'error', title: 'Nest'});
+          logNest('Capture shape failed: ' + (payload.error || res));
+          if(payload.debug && payload.debug.length) {
+            payload.debug.forEach((line) => logNest('Debug: ' + line));
+          }
+          if(opts.done) opts.done(false, payload);
+          return;
+        }
+        nestState.selectionBin = payload;
+        updateSelectionShapeSummary();
+        updateSheetMetric();
+        setNestStatus('Selection shape captured.');
+        logNest('Captured bin shape from selection: ' + payload.widthMm.toFixed(2) + ' x ' + payload.heightMm.toFixed(2) + ' mm (scaleFactor=' + Number(payload.scaleFactor || 1) + ').');
+        if(opts.done) opts.done(true, payload);
+      });
+    }
+
+    function captureCurrentSheetSourceThenStart() {
+      const mode = String((sizeModeField && sizeModeField.value) || 'manual');
+      if(mode === 'selection') {
+        const loadingToast = showToast('Reading current selection bounds from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        captureSelectionSize({
+          silent: true,
+          done: (ok, payload) => {
+            if(loadingToast) loadingToast.close();
+            if(!ok) {
+              showToast((payload && payload.error) || 'Select artwork to use as the sheet bounds before nesting.', {type: 'error', title: 'Nest'});
+              return;
+            }
+            startNest();
+          }
+        });
+        return;
+      }
+      if(mode === 'shape') {
+        const loadingToast = showToast('Reading current selection shape from Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
+        captureSelectionShape({
+          silent: true,
+          done: (ok, payload) => {
+            if(loadingToast) loadingToast.close();
+            if(!ok) {
+              showToast((payload && payload.error) || 'Select one shape to use as the sheet before nesting.', {type: 'error', title: 'Nest'});
+              return;
+            }
+            startNest();
+          }
+        });
+        return;
+      }
+      startNest();
+    }
+
+    if(captureSelectionSizeBtn) {
+      captureSelectionSizeBtn.addEventListener('click', () => captureSelectionSize());
+    }
+    if(captureSelectionShapeBtn) {
+      captureSelectionShapeBtn.addEventListener('click', () => captureSelectionShape());
+    }
+
+    startBtn.addEventListener('click', captureCurrentSheetSourceThenStart);
     if(stopBtn) {
       stopBtn.addEventListener('click', () => {
         stopNest();
