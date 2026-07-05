@@ -3005,28 +3005,15 @@
           return;
         }
         const loadingToast = showToast('Placing nested result into Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
-        if(nestState.latestPlacement && nestState.partsMeta && nestState.partsMeta.snapshotIds) {
-          const nativePayload = {
-            placements: nestState.latestPlacement,
-            snapshotLayerName: nestState.partsMeta.snapshotLayerName || '',
-            snapshotIds: nestState.partsMeta.snapshotIds || [],
-            binSize: getBinSize() || null
-          };
-          const safePayload = jsxEscapeDoubleQuoted(JSON.stringify(nativePayload));
-          callNestJsx('signarama_helper_nest_placeNativeNestPlacement', '"' + safePayload + '"', (res) => {
-            if(loadingToast) loadingToast.close();
-            const text = String(res || '');
-            const isError = /^error:/i.test(text);
-            if(isError) {
-              showToast(text, {type: 'error', title: 'Nest'});
-              logNest('Place original result failed: ' + text);
-              return;
-            }
-            showToast(text || 'Nested original artwork placed in Illustrator.', {type: 'success', title: 'Nest'});
-            logNest(text || 'Moved original artwork into the nested result.');
-          });
-          return;
-        }
+        const placementDebug = {
+          placementBins: nestState.latestPlacement ? nestState.latestPlacement.length : 0,
+          placementItems: nestState.latestPlacement ? nestState.latestPlacement.reduce((sum, bin) => sum + (bin && bin.length ? bin.length : 0), 0) : 0,
+          snapshotIds: (nestState.partsMeta && nestState.partsMeta.snapshotIds) || [],
+          usingPlacementSvg: true
+        };
+        logNest('Place debug: ' + JSON.stringify(placementDebug));
+        // Use SVGnest's generated placement SVG for now because it preserves the engine's exact bin geometry.
+        // The log above includes source metadata so native-original placement can be diagnosed without changing geometry.
         let outputSvg = String(nestState.latestOutputSvg || '');
         try {
           if(!outputSvg && nestState.latestOutputSvgPath) {
@@ -3056,12 +3043,20 @@
           if(loadingToast) loadingToast.close();
           const text = String(res || '');
           const isError = /^error:/i.test(text);
+          const debugText = logEl ? String(logEl.textContent || '') : '';
+          if(debugText) {
+            copyTextToClipboard('NEST DEBUG LOG\n' + debugText).then(() => {
+              logNest('Copied nest debug log to clipboard.');
+            }).catch((copyErr) => {
+              logNest('Debug log clipboard copy failed: ' + (copyErr && copyErr.message ? copyErr.message : copyErr));
+            });
+          }
           if(isError) {
             showToast(text, {type: 'error', title: 'Nest'});
             logNest('Place result failed: ' + text);
             return;
           }
-          showToast(text || 'Nested SVG placed in Illustrator.', {type: 'success', title: 'Nest'});
+          showToast(text || 'Nested SVG placed in Illustrator. Debug log copied to clipboard.', {type: 'success', title: 'Nest'});
           logNest(text || 'Placed nested SVG on active artboard.');
         });
       });
