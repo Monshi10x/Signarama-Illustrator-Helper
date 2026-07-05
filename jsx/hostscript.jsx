@@ -7268,7 +7268,10 @@ function _srh_nest_buildSvgFromItems(items, bounds, marginPt) {
   var height = Math.max(1, Number(bounds.height || 0) + margin * 2);
   var body = [];
   for(var i = 0; i < items.length; i++) {
-    var markup = _srh_nest_itemToSvgMarkup(items[i], originLeft, originTop);
+    var itemBounds = _srh_nest_unionBounds([items[i]]);
+    var itemOriginLeft = itemBounds ? Number(itemBounds.left || 0) : originLeft;
+    var itemOriginTop = itemBounds ? Number(itemBounds.top || 0) : originTop;
+    var markup = _srh_nest_itemToSvgMarkup(items[i], itemOriginLeft, itemOriginTop);
     if(markup) body.push(markup);
   }
   if(!body.length) return '';
@@ -7318,6 +7321,32 @@ function _srh_nest_findSnapshotGroup(doc, layerName, groupName) {
   if(!layer) return null;
   try {layer.locked = false; layer.visible = true;} catch(_eNestFindSnap1) { }
   try {return layer.groupItems.getByName(groupName);} catch(_eNestFindSnap2) { }
+  return null;
+}
+
+
+function _srh_nest_markSourceItems(items) {
+  var ids = [];
+  if(!items) return ids;
+  for(var i = 0; i < items.length; i++) {
+    var id = 'srh-nest-part-' + i;
+    try {items[i].name = id;} catch(_eNestMark0) { }
+    ids.push(id);
+  }
+  return ids;
+}
+function _srh_nest_findPageItemByName(container, itemName) {
+  if(!container || !itemName) return null;
+  try {
+    if(container.pageItems && container.pageItems.length) {
+      for(var i = 0; i < container.pageItems.length; i++) {
+        var item = container.pageItems[i];
+        try {if(String(item.name || '') === String(itemName)) return item;} catch(_eNestFindItem0) { }
+        var found = _srh_nest_findPageItemByName(item, itemName);
+        if(found) return found;
+      }
+    }
+  } catch(_eNestFindItem1) { }
   return null;
 }
 
@@ -7531,7 +7560,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
 
   var actualWidthPt = _srh_nest_docPtToActualPt(sourceBounds.width, scaleFactor);
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
-  var snapshotInfo = _srh_nest_createSourceSnapshot(sourceDoc, selectionItems, scaleFactor);
+  var sourceIds = _srh_nest_markSourceItems(selectionItems);
+  var snapshotInfo = {layerName: '', ids: sourceIds};
   var marginPt = _srh_mm2pt(10);
   var exportCtx = null;
   var debugSteps = [];
@@ -7873,7 +7903,6 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
   var made = 0;
   var snapLayer = null;
   try {snapLayer = doc.layers.getByName(snapshotLayerName); snapLayer.locked = false; snapLayer.visible = true;} catch(_eNestNativeLayer0) {snapLayer = null;}
-  if(!snapLayer) return 'Error: Nest source snapshot was not found. Load parts again before placing.';
   function _normRect(rect) {
     if(!rect || rect.length !== 4) return null;
     var l = Number(rect[0]), t = Number(rect[1]), r = Number(rect[2]), b = Number(rect[3]);
@@ -7906,13 +7935,16 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
         if(!sid && typeof place.source !== 'undefined' && snapshotIds[Number(place.source)] !== undefined) sid = String(snapshotIds[Number(place.source)] || '');
         if(!sid && typeof place.id !== 'undefined' && snapshotIds[Number(place.id)] !== undefined) sid = String(snapshotIds[Number(place.id)] || '');
         if(!sid) continue;
-        var src = _srh_nest_findSnapshotGroup(doc, snapshotLayerName, sid);
+        var src = _srh_nest_findPageItemByName(doc, sid);
+        if(!src) src = _srh_nest_findSnapshotGroup(doc, snapshotLayerName, sid);
         if(!src) continue;
-        var dup = null;
-        try {dup = src.duplicate(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeDup0) {dup = null;}
-        if(!dup) continue;
-        try {dup.rotate(-Number(place.rotation || 0), true, true, true, true, Transformation.TOPLEFT);} catch(_eNestNativeRot0) { }
-        try {dup.position = [originLeft + Number(place.x || 0), originTop - Number(place.y || 0)];} catch(_eNestNativePos0) { }
+        var target = src;
+        try {target.move(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeMove0) {
+          try {target = src.duplicate(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeDup0) {target = null;}
+        }
+        if(!target) continue;
+        try {target.rotate(-Number(place.rotation || 0), true, true, true, true, Transformation.TOPLEFT);} catch(_eNestNativeRot0) { }
+        try {target.position = [originLeft + Number(place.x || 0), originTop - Number(place.y || 0)];} catch(_eNestNativePos0) { }
         made++;
       }
     }

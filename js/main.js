@@ -3005,8 +3005,28 @@
           return;
         }
         const loadingToast = showToast('Placing nested result into Illustrator...', {type: 'info', title: 'Nest', spinner: true, persistent: true});
-        // Generate and place the SVGnest result so placement geometry matches the bin exactly;
-        // source SVG path styles preserve the loaded artwork fill/stroke.
+        if(nestState.latestPlacement && nestState.partsMeta && nestState.partsMeta.snapshotIds) {
+          const nativePayload = {
+            placements: nestState.latestPlacement,
+            snapshotLayerName: nestState.partsMeta.snapshotLayerName || '',
+            snapshotIds: nestState.partsMeta.snapshotIds || [],
+            binSize: getBinSize() || null
+          };
+          const safePayload = jsxEscapeDoubleQuoted(JSON.stringify(nativePayload));
+          callNestJsx('signarama_helper_nest_placeNativeNestPlacement', '"' + safePayload + '"', (res) => {
+            if(loadingToast) loadingToast.close();
+            const text = String(res || '');
+            const isError = /^error:/i.test(text);
+            if(isError) {
+              showToast(text, {type: 'error', title: 'Nest'});
+              logNest('Place original result failed: ' + text);
+              return;
+            }
+            showToast(text || 'Nested original artwork placed in Illustrator.', {type: 'success', title: 'Nest'});
+            logNest(text || 'Moved original artwork into the nested result.');
+          });
+          return;
+        }
         let outputSvg = String(nestState.latestOutputSvg || '');
         try {
           if(!outputSvg && nestState.latestOutputSvgPath) {
