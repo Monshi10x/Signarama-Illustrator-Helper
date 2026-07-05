@@ -7941,8 +7941,8 @@ function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
           try {target = src.duplicate(root, ElementPlacement.PLACEATEND);} catch(_eNestNativeDup0) {target = null;}
         }
         if(!target) continue;
-        try {target.rotate(-Number(place.rotation || 0), true, true, true, true, Transformation.TOPLEFT);} catch(_eNestNativeRot0) { }
         try {target.position = [originLeft + Number(place.x || 0), originTop - Number(place.y || 0)];} catch(_eNestNativePos0) { }
+        try {target.rotate(-Number(place.rotation || 0), true, true, true, true, Transformation.TOPLEFT);} catch(_eNestNativeRot0) { }
         made++;
       }
     }
