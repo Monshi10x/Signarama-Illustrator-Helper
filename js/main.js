@@ -2470,7 +2470,9 @@
       out.setAttribute('height', String(sourceHeightPt));
 
       let rawPartIndex = 0;
+      const topLevelPartNodes = [];
       Array.prototype.slice.call(partSvg.childNodes).forEach((child) => {
+        if(!child || !child.tagName) return;
         const cloned = child.cloneNode(true);
         if(cloned && cloned.tagName && cloned.setAttribute) {
           const sourcePartId = 'srh-nest-part-' + rawPartIndex;
@@ -2478,6 +2480,7 @@
           if(!cloned.getAttribute('id')) cloned.setAttribute('id', sourcePartId);
           const existingClass = String(cloned.getAttribute('class') || '').trim();
           cloned.setAttribute('class', (existingClass ? (existingClass + ' ') : '') + sourcePartId);
+          topLevelPartNodes.push(cloned);
           rawPartIndex += 1;
         }
         partsOriginGroup.appendChild(cloned);
@@ -2510,13 +2513,28 @@
           scaleRatio = 1;
           normalizationNote = 'scale-skipped ratio-mismatch widthRatio=' + widthRatio.toFixed(4) + ', heightRatio=' + heightRatio.toFixed(4);
         }
-        partsOriginGroup.setAttribute('transform', 'translate(' + (-measuredBounds.x) + ' ' + (-measuredBounds.y) + ')');
-        if(isFinite(scaleRatio) && scaleRatio > 0 && Math.abs(scaleRatio - 1) > 0.001) {
-          partsScaleGroup.setAttribute('transform', 'scale(' + scaleRatio + ')');
-        }
+        const normalizeTransform = (isFinite(scaleRatio) && scaleRatio > 0 && Math.abs(scaleRatio - 1) > 0.001)
+          ? ('scale(' + scaleRatio + ') translate(' + (-measuredBounds.x) + ' ' + (-measuredBounds.y) + ')')
+          : ('translate(' + (-measuredBounds.x) + ' ' + (-measuredBounds.y) + ')');
+        if(partsScaleGroup.parentNode === out) out.removeChild(partsScaleGroup);
+        topLevelPartNodes.forEach((partNode) => {
+          const wrapper = document.createElementNS(ns, 'g');
+          const sourcePartId = partNode.getAttribute('data-srh-part-id') || partNode.getAttribute('id') || '';
+          if(sourcePartId) {
+            wrapper.setAttribute('data-srh-part-id', sourcePartId);
+            wrapper.setAttribute('id', sourcePartId);
+            wrapper.setAttribute('class', sourcePartId);
+          }
+          wrapper.setAttribute('transform', normalizeTransform);
+          wrapper.appendChild(partNode);
+          out.appendChild(wrapper);
+        });
         out.setAttribute('data-srh-part-scale', String(scaleRatio));
         out.setAttribute('data-srh-part-bounds', measuredBounds.width.toFixed(3) + 'x' + measuredBounds.height.toFixed(3));
         out.setAttribute('data-srh-part-normalization-note', normalizationNote);
+      } else {
+        if(partsScaleGroup.parentNode === out) out.removeChild(partsScaleGroup);
+        topLevelPartNodes.forEach((partNode) => out.appendChild(partNode));
       }
 
       if(mode === 'shape') {
