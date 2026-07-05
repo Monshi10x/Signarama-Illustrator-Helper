@@ -495,9 +495,14 @@
     const path = $('btnAddPathText');
     if(path) path.onclick = () => runButtonJsxOperation('signarama_helper_addFilePathTextToArtboards()', {logFn: log, toastTitle: 'Add path labels'});
 
+    function isCorebridgeTabActiveForPolling() {
+      const panel = $('tab-corebridge');
+      return !!(panel && !panel.classList.contains('hidden'));
+    }
     function ensureCorebridgePageNumberWatcher() {
       if(corebridgePageNumberWatchTimer) return;
       corebridgePageNumberWatchTimer = setInterval(() => {
+        if(!isCorebridgeTabActiveForPolling()) return;
         callJSX('((typeof signarama_helper_corebridge_updatePageNumbers === "function") ? signarama_helper_corebridge_updatePageNumbers : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_updatePageNumbers === "function") ? $.global.signarama_helper_corebridge_updatePageNumbers : function(){return "NO_FN";}))()', (res) => {
           const txt = String(res || '');
           if(/^Error:/i.test(txt) && !corebridgePageNumberWatcherErrorLogged) {
@@ -545,6 +550,7 @@
       corebridgeFlashTickPollCount = 0;
       log('Corebridge flash poll start (safe tick every 500ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
+        if(!isCorebridgeTabActiveForPolling()) return;
         if(corebridgeFlashTickPollInFlight) return;
         corebridgeFlashTickPollInFlight = true;
         corebridgeFlashTickPollCount++;
