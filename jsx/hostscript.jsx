@@ -7080,7 +7080,7 @@ function _srh_nest_docPtToActualPt(pt, scaleFactor) {
   if(!(sf > 0)) sf = _srh_getScaleFactor();
   return Number(pt || 0) * sf;
 }
-function _srh_nest_exportDocToSvgText(doc, exportFile) {
+function _srh_nest_exportDocToSvgText(doc, exportFile, artboardRange) {
   var svgOptions = null;
   var svgText = '';
   svgOptions = new ExportOptionsSVG();
@@ -7091,6 +7091,10 @@ function _srh_nest_exportDocToSvgText(doc, exportFile) {
   try {svgOptions.documentEncoding = SVGDocumentEncoding.UTF8;} catch(_eNestSvg4) { }
   try {svgOptions.coordinatePrecision = 3;} catch(_eNestSvg5) { }
   try {svgOptions.preserveEditability = false;} catch(_eNestSvg6) { }
+  if(artboardRange) {
+    try {svgOptions.saveMultipleArtboards = true;} catch(_eNestSvg7) { }
+    try {svgOptions.artboardRange = String(artboardRange);} catch(_eNestSvg8) { }
+  }
   doc.exportFile(exportFile, ExportType.SVG, svgOptions);
   if(exportFile.open('r')) {
     svgText = exportFile.read();
@@ -7098,6 +7102,77 @@ function _srh_nest_exportDocToSvgText(doc, exportFile) {
   }
   return String(svgText || '');
 }
+
+function _srh_nest_captureLayerStates(doc) {
+  var states = [];
+  if(!doc || !doc.layers) return states;
+  for(var i = 0; i < doc.layers.length; i++) {
+    try {
+      states.push({layer: doc.layers[i], visible: doc.layers[i].visible, locked: doc.layers[i].locked});
+    } catch(_eNestLayerState0) { }
+  }
+  return states;
+}
+function _srh_nest_restoreLayerStates(states) {
+  if(!states) return;
+  for(var i = 0; i < states.length; i++) {
+    try {states[i].layer.locked = !!states[i].locked;} catch(_eNestLayerRestore0) { }
+    try {states[i].layer.visible = !!states[i].visible;} catch(_eNestLayerRestore1) { }
+  }
+}
+function _srh_nest_prepareCurrentDocExport(doc, layerName, widthPt, heightPt, marginPt, debugSteps) {
+  var ctx = {doc: doc, layer: null, artboardIndex: -1, artboardRange: '', previousArtboardIndex: 0, previousSelection: null, previousActiveLayer: null, layerStates: null};
+  try {ctx.previousArtboardIndex = doc.artboards.getActiveArtboardIndex();} catch(_eNestPrep0) {ctx.previousArtboardIndex = 0;}
+  try {ctx.previousSelection = doc.selection;} catch(_eNestPrep1) {ctx.previousSelection = null;}
+  try {ctx.previousActiveLayer = doc.activeLayer;} catch(_eNestPrep1b) {ctx.previousActiveLayer = null;}
+  ctx.layerStates = _srh_nest_captureLayerStates(doc);
+  try {ctx.layer = doc.layers.add(); ctx.layer.name = layerName || ('SRH_NEST_EXPORT_' + String(new Date().getTime()));} catch(_eNestPrep2) {ctx.layer = null;}
+  if(!ctx.layer) return null;
+  try {ctx.layer.locked = false; ctx.layer.visible = true;} catch(_eNestPrep3) { }
+  try {
+    var left = 0;
+    var top = Math.max(1, Number(heightPt || 0) + (Number(marginPt || 0) * 2));
+    var right = Math.max(1, Number(widthPt || 0) + (Number(marginPt || 0) * 2));
+    var bottom = 0;
+    doc.artboards.add([left, top, right, bottom]);
+    ctx.artboardIndex = doc.artboards.length - 1;
+    ctx.artboardRange = String(ctx.artboardIndex + 1);
+    doc.artboards.setActiveArtboardIndex(ctx.artboardIndex);
+  } catch(_eNestPrepAb0) {
+    if(debugSteps) debugSteps.push('createCurrentDocTempArtboardFailed: ' + String(_eNestPrepAb0));
+  }
+  try {doc.activeLayer = ctx.layer;} catch(_eNestPrepLayer0) { }
+  try {doc.selection = null;} catch(_eNestPrepSel0) { }
+  return ctx;
+}
+
+function _srh_nest_showOnlyExportLayer(ctx) {
+  if(!ctx || !ctx.doc || !ctx.layer) return;
+  try {ctx.layer.locked = false; ctx.layer.visible = true;} catch(_eNestShowExport0) { }
+  try {
+    for(var i = 0; i < ctx.doc.layers.length; i++) {
+      var lyr = ctx.doc.layers[i];
+      if(lyr !== ctx.layer) {try {lyr.visible = false;} catch(_eNestShowExport1) { }}
+    }
+  } catch(_eNestShowExport2) { }
+}
+
+function _srh_nest_cleanupCurrentDocExport(ctx) {
+  if(!ctx || !ctx.doc) return;
+  var doc = ctx.doc;
+  try {doc.selection = null;} catch(_eNestCleanSel0) { }
+  try {if(ctx.layer) ctx.layer.remove();} catch(_eNestCleanLayer0) { }
+  try {
+    if(ctx.artboardIndex >= 0 && doc.artboards.length > 1) {
+      doc.artboards[ctx.artboardIndex].remove();
+    }
+  } catch(_eNestCleanAb0) { }
+  _srh_nest_restoreLayerStates(ctx.layerStates);
+  try {doc.artboards.setActiveArtboardIndex(ctx.previousArtboardIndex || 0);} catch(_eNestCleanAb1) { }
+  try {if(ctx.previousActiveLayer) doc.activeLayer = ctx.previousActiveLayer;} catch(_eNestCleanLayer1) { }
+  try {if(ctx.previousSelection) doc.selection = ctx.previousSelection;} catch(_eNestCleanSel1) { }
+}
+
 function signarama_helper_nest_captureSelectionBounds() {
   if(!app.documents.length) return _srh_nest_jsonResponse(false, {error: 'No open document.'});
   var doc = app.activeDocument;
@@ -7137,7 +7212,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
   var actualWidthPt = _srh_nest_docPtToActualPt(sourceBounds.width, scaleFactor);
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
   var marginPt = _srh_mm2pt(10);
-  var tempDoc = null;
+  var exportCtx = null;
   var tempFile = null;
   var debugSteps = [];
   function _nestColorToCss(colorRef) {
@@ -7226,13 +7301,15 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
   try {
     var docColorSpace = DocumentColorSpace.RGB;
     try {docColorSpace = sourceDoc.documentColorSpace;} catch(_eNestBinDocSpace0) {docColorSpace = DocumentColorSpace.RGB;}
-    tempDoc = app.documents.add(docColorSpace, Math.max(1, actualWidthPt + marginPt * 2), Math.max(1, actualHeightPt + marginPt * 2));
-    var targetLayer = tempDoc.activeLayer;
+    exportCtx = _srh_nest_prepareCurrentDocExport(sourceDoc, 'SRH_NEST_BIN_EXPORT_TMP', actualWidthPt, actualHeightPt, marginPt, debugSteps);
+    if(!exportCtx || !exportCtx.layer) return _srh_nest_jsonResponse(false, {error: 'Could not prepare the current document for selected bin export.', debug: debugSteps});
+    _dbg('useCurrentDocumentForExport', 'shape');
+    var targetLayer = exportCtx.layer;
     var dup = null;
     try {
       dup = sourceItem.duplicate(targetLayer, ElementPlacement.PLACEATEND);
     } catch(_eNestBinDup0) {
-      return _srh_nest_jsonResponse(false, {error: 'Could not duplicate the selected shape into a temporary document.', debug: debugSteps});
+      return _srh_nest_jsonResponse(false, {error: 'Could not duplicate the selected shape into the current document export layer.', debug: debugSteps});
     }
     if(!dup) return _srh_nest_jsonResponse(false, {error: 'The selected shape could not be duplicated.', debug: debugSteps});
 
@@ -7252,7 +7329,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
     var tempBounds = _srh_nest_unionBounds(tempItems);
     if(!tempBounds) return _srh_nest_jsonResponse(false, {error: 'Could not prepare temporary bin bounds.', debug: debugSteps});
 
-    var artboardRect = tempDoc.artboards[0].artboardRect;
+    var artboardRect = sourceDoc.artboards[exportCtx.artboardIndex >= 0 ? exportCtx.artboardIndex : sourceDoc.artboards.getActiveArtboardIndex()].artboardRect;
     var desiredLeft = Number(artboardRect[0]) + marginPt;
     var desiredTop = Number(artboardRect[1]) - marginPt;
     var dx = desiredLeft - tempBounds.left;
@@ -7262,7 +7339,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
     tempBounds = _srh_nest_unionBounds(tempItems);
     if(tempBounds) {
       try {
-        tempDoc.artboards[0].artboardRect = [
+        sourceDoc.artboards[exportCtx.artboardIndex >= 0 ? exportCtx.artboardIndex : sourceDoc.artboards.getActiveArtboardIndex()].artboardRect = [
           tempBounds.left - marginPt,
           tempBounds.top + marginPt,
           tempBounds.right + marginPt,
@@ -7275,7 +7352,8 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
     tempFile = new File(Folder.temp.fsName + '/srh-nest-bin-' + unique + '.svg');
     tempFile.encoding = 'UTF-8';
 
-    var svgText = _srh_nest_exportDocToSvgText(tempDoc, tempFile);
+    _srh_nest_showOnlyExportLayer(exportCtx);
+    var svgText = _srh_nest_exportDocToSvgText(sourceDoc, tempFile, exportCtx ? exportCtx.artboardRange : '');
     if(!svgText) return _srh_nest_jsonResponse(false, {error: 'Illustrator returned an empty SVG export for the selected bin shape.', debug: debugSteps});
 
     return _srh_nest_jsonResponse(true, {
@@ -7293,7 +7371,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
     return _srh_nest_jsonResponse(false, {error: String(e), debug: debugSteps});
   } finally {
     try {if(tempFile && tempFile.exists) tempFile.remove();} catch(_eNestBinFile0) { }
-    try {if(tempDoc) tempDoc.close(SaveOptions.DONOTSAVECHANGES);} catch(_eNestBinClose0) { }
+    try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestBinClose0) { }
   }
 }
 function signarama_helper_nest_captureSelectionAsSvg() {
@@ -7312,7 +7390,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
   var actualWidthPt = _srh_nest_docPtToActualPt(sourceBounds.width, scaleFactor);
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
   var marginPt = _srh_mm2pt(10);
-  var tempDoc = null;
+  var exportCtx = null;
   var tempFile = null;
   var debugSteps = [];
 
@@ -7322,8 +7400,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
   function _nestRunOnSelection(items, fn) {
     if(!items || !items.length || !fn) return false;
     var prevSel = null;
-    try {prevSel = tempDoc.selection;} catch(_eNestSelRun0) {prevSel = null;}
-    try {tempDoc.selection = null;} catch(_eNestSelRun1) { }
+    try {prevSel = sourceDoc.selection;} catch(_eNestSelRun0) {prevSel = null;}
+    try {sourceDoc.selection = null;} catch(_eNestSelRun1) { }
     try {
       for(var si = 0; si < items.length; si++) {
         try {if(items[si]) items[si].selected = true;} catch(_eNestSelRun2) { }
@@ -7333,8 +7411,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     } catch(_eNestSelRun3) {
       return false;
     } finally {
-      try {tempDoc.selection = null;} catch(_eNestSelRun4) { }
-      try {if(prevSel) tempDoc.selection = prevSel;} catch(_eNestSelRun5) { }
+      try {sourceDoc.selection = null;} catch(_eNestSelRun4) { }
+      try {if(prevSel) sourceDoc.selection = prevSel;} catch(_eNestSelRun5) { }
     }
   }
   function _nestPushPageItems(container, stack) {
@@ -7356,6 +7434,27 @@ function signarama_helper_nest_captureSelectionAsSvg() {
       try {parentRef = parentRef.parent;} catch(_eNestHca2) {parentRef = null;}
     }
     return false;
+  }
+  function _nestOutlineTextInContainer(container) {
+    if(!container) return 0;
+    var targets = [];
+    var stack = [];
+    try {stack.push(container);} catch(_eNestTxt0) { }
+    while(stack.length) {
+      var cur = stack.pop();
+      if(!cur) continue;
+      var tn = '';
+      try {tn = String(cur.typename || '');} catch(_eNestTxt1) {tn = '';}
+      if(tn === 'TextFrame') {
+        targets.push(cur);
+        continue;
+      }
+      _nestPushPageItems(cur, stack);
+    }
+    for(var ti = targets.length - 1; ti >= 0; ti--) {
+      try {targets[ti].createOutline();} catch(_eNestTxt2) { }
+    }
+    return targets.length;
   }
   function _nestOutlineStrokeInContainer(container) {
     if(!container) return 0;
@@ -7459,9 +7558,11 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     var docColorSpace = DocumentColorSpace.RGB;
     try {docColorSpace = sourceDoc.documentColorSpace;} catch(_eNestDocSpace0) {docColorSpace = DocumentColorSpace.RGB;}
     _dbg('sourceDocColorSpace', (docColorSpace === DocumentColorSpace.CMYK ? 'CMYK' : 'RGB'));
-    _dbg('createTempDoc', String(Math.max(1, actualWidthPt + marginPt * 2)) + ' x ' + String(Math.max(1, actualHeightPt + marginPt * 2)));
-    tempDoc = app.documents.add(docColorSpace, Math.max(1, actualWidthPt + marginPt * 2), Math.max(1, actualHeightPt + marginPt * 2));
-    var targetLayer = tempDoc.activeLayer;
+    _dbg('prepareCurrentDocExport', String(Math.max(1, actualWidthPt + marginPt * 2)) + ' x ' + String(Math.max(1, actualHeightPt + marginPt * 2)));
+    exportCtx = _srh_nest_prepareCurrentDocExport(sourceDoc, 'SRH_NEST_PARTS_EXPORT_TMP', actualWidthPt, actualHeightPt, marginPt, debugSteps);
+    if(!exportCtx || !exportCtx.layer) return _srh_nest_jsonResponse(false, {error: 'Could not prepare the current document for selected parts export.', debug: debugSteps});
+    _dbg('useCurrentDocumentForExport', 'parts');
+    var targetLayer = exportCtx.layer;
     var duplicated = [];
     var partGroups = [];
     var i = 0;
@@ -7486,7 +7587,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
       }
     }
     _dbg('duplicated', String(duplicated.length) + '/' + String(selectionItems.length));
-    if(!duplicated.length) return _srh_nest_jsonResponse(false, {error: 'Could not duplicate selection into a temporary document.', debug: debugSteps});
+    if(!duplicated.length) return _srh_nest_jsonResponse(false, {error: 'Could not duplicate selection into the current document export layer.', debug: debugSteps});
 
     if(scaleFactor > 1.0001) {
       _dbg('applyScaleFactor', String(scaleFactor));
@@ -7496,8 +7597,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     }
 
     try {
-      _srh_nest_outlineTempText(tempDoc);
-      _dbg('outlineTempText', 'ok');
+      _dbg('outlineTempText', String(_nestOutlineTextInContainer(targetLayer)));
     } catch(_eNestOutline1) {
       _dbg('outlineTempTextFailed', String(_eNestOutline1));
     }
@@ -7558,7 +7658,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     }
 
     var tempItems = [];
-    var tempItemSource = targetLayer || tempDoc;
+    var tempItemSource = targetLayer || sourceDoc;
     for(i = 0; i < tempItemSource.pageItems.length; i++) {
       try {
         if(tempItemSource.pageItems[i]) tempItems.push(tempItemSource.pageItems[i]);
@@ -7569,7 +7669,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     if(!tempBounds) return _srh_nest_jsonResponse(false, {error: 'Could not prepare temporary SVG bounds.', debug: debugSteps});
 
     _dbg('translateToMargin', String(tempBounds.left) + ',' + String(tempBounds.top));
-    var artboardRect = tempDoc.artboards[0].artboardRect;
+    var artboardRect = sourceDoc.artboards[exportCtx.artboardIndex >= 0 ? exportCtx.artboardIndex : sourceDoc.artboards.getActiveArtboardIndex()].artboardRect;
     var desiredLeft = Number(artboardRect[0]) + marginPt;
     var desiredTop = Number(artboardRect[1]) - marginPt;
     var dx = desiredLeft - tempBounds.left;
@@ -7579,7 +7679,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     tempBounds = _srh_nest_unionBounds(tempItems);
     if(tempBounds) {
       try {
-        tempDoc.artboards[0].artboardRect = [
+        sourceDoc.artboards[exportCtx.artboardIndex >= 0 ? exportCtx.artboardIndex : sourceDoc.artboards.getActiveArtboardIndex()].artboardRect = [
           tempBounds.left - marginPt,
           tempBounds.top + marginPt,
           tempBounds.right + marginPt,
@@ -7618,7 +7718,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
 
     var svgText = '';
     try {
-      svgText = _srh_nest_exportDocToSvgText(tempDoc, tempFile);
+      _srh_nest_showOnlyExportLayer(exportCtx);
+      svgText = _srh_nest_exportDocToSvgText(sourceDoc, tempFile, exportCtx ? exportCtx.artboardRange : '');
       _dbg('exportSvgDone', String(svgText ? svgText.length : 0));
     } catch(_eNestExport0) {
       return _srh_nest_jsonResponse(false, {error: 'SVG export failed: ' + String(_eNestExport0), debug: debugSteps});
@@ -7643,7 +7744,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     return _srh_nest_jsonResponse(false, {error: String(e), debug: debugSteps});
   } finally {
     try {if(tempFile && tempFile.exists) tempFile.remove();} catch(_eNestFile0) { }
-    try {if(tempDoc) tempDoc.close(SaveOptions.DONOTSAVECHANGES);} catch(_eNestClose0) { }
+    try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestClose0) { }
   }
 }
 function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
@@ -7963,51 +8064,6 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
     try {docRef.selection = null;} catch(_eNestCmp10) { }
     return restored;
   }
-  function _nestOpenAndPasteSvg(docRef, tmpFileRef) {
-    var importDocRef = null;
-    var pastedRef = null;
-    try {
-      importDocRef = app.open(tmpFileRef);
-      if(!importDocRef) return false;
-      if(!_nestSelectAllArtwork(importDocRef)) return false;
-
-      try {app.copy();} catch(_eNestCopy0) {
-        try {app.executeMenuCommand('copy');} catch(_eNestCopy1) {return false;}
-      }
-
-      try {docRef.activate();} catch(_eNestAct0) { }
-      try {docRef.selection = null;} catch(_eNestSel5) { }
-
-      try {
-        app.paste();
-      } catch(_eNestPaste0) {
-        try {app.executeMenuCommand('pasteInPlace');} catch(_eNestPaste1) {return false;}
-      }
-
-      var pastedSelRef = null;
-      try {pastedSelRef = docRef.selection;} catch(_eNestSel6) {pastedSelRef = null;}
-      if(pastedSelRef && pastedSelRef.length === 1) pastedRef = pastedSelRef[0];
-      else if(pastedSelRef && pastedSelRef.length > 1) {
-        try {
-          var grpRef = docRef.activeLayer.groupItems.add();
-          for(var pRef = pastedSelRef.length - 1; pRef >= 0; pRef--) {
-            try {pastedSelRef[pRef].move(grpRef, ElementPlacement.PLACEATBEGINNING);} catch(_eNestMove0) { }
-          }
-          pastedRef = grpRef;
-        } catch(_eNestGroup0) {
-          pastedRef = pastedSelRef[0];
-        }
-      }
-      if(!pastedRef) return false;
-      _nestRestoreCompounds(docRef, pastedRef);
-      _nestFitItemToActiveArtboard(docRef, pastedRef);
-      return true;
-    } catch(_eNestOpen0) {
-      return false;
-    } finally {
-      try {if(importDocRef) importDocRef.close(SaveOptions.DONOTSAVECHANGES);} catch(_eNestClose2) { }
-    }
-  }
   function _nestPlaceSvgOnActiveArtboard(docRef, svgMarkup) {
     var tmpFileRef = null;
     var placedItem = null;
@@ -8043,7 +8099,7 @@ function signarama_helper_nest_placeSvgOnActiveArtboard(svgText) {
           try {placedItem.remove();} catch(_eNestRm0) { }
         }
       } catch(_eNestRm1) { }
-      return _nestOpenAndPasteSvg(docRef, tmpFileRef);
+      return false;
     } finally {
       try {if(tmpFileRef && tmpFileRef.opened) tmpFileRef.close();} catch(_eNestTmpClose1) { }
       try {if(tmpFileRef && tmpFileRef.exists) tmpFileRef.remove();} catch(_eNestTmpRm0) { }
