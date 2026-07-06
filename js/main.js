@@ -467,6 +467,35 @@
     const ab = $('btnArtboardPerItem');
     if(ab) ab.onclick = () => runButtonJsxOperation('signarama_helper_createArtboardsFromSelection()', {logFn: log, toastTitle: 'Artboard per selection'});
 
+    const conceptDistort = $('btnConceptFourPointDistort');
+    if(conceptDistort) conceptDistort.onclick = () => {
+      const captureMsg = 'Select a single 4-anchor path that marks the target corners, then click OK.\n\nCorner order is interpreted as top-left, top-right, bottom-right, bottom-left.';
+      if(!window.confirm(captureMsg)) return;
+      callJSX('signarama_helper_concept_captureFourPointDistortTargets()', function(captureRes) {
+        const captureText = String(captureRes || '');
+        if(/^Error:/i.test(captureText) || /^No\b/i.test(captureText)) {
+          log(captureText);
+          notifyOperationResult(captureText, {toastTitle: '4 point distort'});
+          return;
+        }
+        log(captureText);
+        window.alert('Select artwork to be distorted. The panel will apply the 4 point distort as soon as it detects a selection.');
+        showToast('Waiting for artwork selection...', {type: 'info', title: '4 point distort', duration: 6500});
+        let attempts = 0;
+        const maxAttempts = 60;
+        const poll = window.setInterval(function() {
+          attempts++;
+          callJSX('signarama_helper_concept_applyFourPointDistort()', function(applyRes) {
+            const applyText = String(applyRes || '');
+            if(/^No artwork selected/i.test(applyText) && attempts < maxAttempts) return;
+            window.clearInterval(poll);
+            log(applyText);
+            notifyOperationResult(applyText, {toastTitle: '4 point distort'});
+          });
+        }, 1000);
+      });
+    };
+
     const a4 = $('btnCopyOutlineScaleA4');
     const a4Rasterize = $('a4Rasterize');
     const a4RasterizeQuality = $('a4RasterizeQuality');
