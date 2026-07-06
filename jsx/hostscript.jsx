@@ -11440,24 +11440,40 @@ function _srh_conceptDistortItem(item, src, dst) {
   return 0;
 }
 
-function signarama_helper_concept_captureFourPointDistortTargets() {
+
+function signarama_helper_concept_beginFourPointClickCapture() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  _srh_conceptFourPointTargets = null;
+  try {doc.selection = null;} catch(_eCbeg0) { }
+  try {app.selectTool('Adobe Pen Tool');} catch(_eCbeg1) {
+    try {app.executeMenuCommand('Adobe Pen Tool');} catch(_eCbeg2) { }
+  }
+  return 'Ready for 4 document clicks. Use the Pen tool to click four target corner locations.';
+}
+
+function signarama_helper_concept_captureFourPointClickPath() {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
   var sel = doc.selection;
-  if(!sel || sel.length !== 1) return 'Error: Select exactly one 4-anchor path to use as the target corners.';
+  if(!sel || sel.length !== 1) return 'WAIT: Click four locations on the document.';
   var path = sel[0];
   try {
     if(path.typename === 'CompoundPathItem' && path.pathItems.length === 1) path = path.pathItems[0];
-  } catch(_eCcap0) { }
-  if(!path || path.typename !== 'PathItem' || !path.pathPoints || path.pathPoints.length !== 4) return 'Error: The selected target must be a single path with exactly 4 anchors.';
+  } catch(_eCclk0) { }
+  if(!path || path.typename !== 'PathItem' || !path.pathPoints) return 'WAIT: Click four locations on the document.';
+  if(path.pathPoints.length < 4) return 'WAIT: ' + path.pathPoints.length + ' of 4 clicked points recorded.';
+  if(path.pathPoints.length > 4) return 'Error: More than 4 points were clicked. Undo or delete the temporary path and try again.';
   var pts = [];
   for(var i = 0; i < path.pathPoints.length; i++) {
     var a = path.pathPoints[i].anchor;
     pts.push({x: Number(a[0]), y: Number(a[1])});
   }
   _srh_conceptFourPointTargets = _srh_conceptSortFourPoints(pts);
-  try {doc.selection = null;} catch(_eCcap1) { }
-  return 'Captured 4 target points for Concept 4 point distort.';
+  try {path.remove();} catch(_eCclk1) { }
+  try {doc.selection = null;} catch(_eCclk2) { }
+  try {app.selectTool('Adobe Select Tool');} catch(_eCclk3) { }
+  return 'Captured 4 clicked document points for Concept 4 point distort.';
 }
 
 function signarama_helper_concept_applyFourPointDistort() {
@@ -11480,7 +11496,9 @@ function signarama_helper_concept_applyFourPointDistort() {
   return '4 point distort applied to ' + changed + ' path points.';
 }
 
-try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_captureFourPointDistortTargets = signarama_helper_concept_captureFourPointDistortTargets;} catch(_eCex0) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB0) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_captureFourPointClickPath = signarama_helper_concept_captureFourPointClickPath;} catch(_eCexB1) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_applyFourPointDistort = signarama_helper_concept_applyFourPointDistort;} catch(_eCex1) { }
-try {this.signarama_helper_concept_captureFourPointDistortTargets = signarama_helper_concept_captureFourPointDistortTargets;} catch(_eCex2) { }
+try {this.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB2) { }
+try {this.signarama_helper_concept_captureFourPointClickPath = signarama_helper_concept_captureFourPointClickPath;} catch(_eCexB3) { }
 try {this.signarama_helper_concept_applyFourPointDistort = signarama_helper_concept_applyFourPointDistort;} catch(_eCex3) { }
