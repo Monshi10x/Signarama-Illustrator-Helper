@@ -515,7 +515,7 @@
     if(conceptDistort) conceptDistort.onclick = () => {
       showPanelConfirm(
         '4 Point Distort: Select 4 Target Points',
-        'Click OK, then click 4 locations on the Illustrator document to record the target corners.\n\nClick counter-clockwise: top-left, bottom-left, bottom-right, then top-right. The temporary 4-point click path will be removed after capture.',
+        'Click OK, then click 4 locations on the Illustrator document to record the target corners.\n\nClick clockwise: top-left, top-right, bottom-right, then bottom-left. The temporary 4-point click path will be removed after capture.',
         'OK',
         'Cancel',
         function() {
