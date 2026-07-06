@@ -669,6 +669,7 @@
     <button class="tab" data-tab="tab-cutfiles" type="button">Router/Laser</button>
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
+    <button class="tab" data-tab="tab-concept" type="button">Concept</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
@@ -695,6 +696,18 @@
         <span class="info" data-tip="Creates a new artboard for each selected item and fits it to the item bounds.">i</span>
       </button>
 
+    </section>
+
+    <!-- TAB: CONCEPT -->
+    <section id="tab-concept" class="wrap hidden" role="tabpanel">
+      <button class="btn" id="btnConceptFourPointDistort" type="button">
+        <span class="btnText">4 point distort</span>
+        <span class="info" data-tip="Capture a selected 4-point guide path, then select artwork and distort its corners to those four points. Points are used in top-left, top-right, bottom-right, bottom-left order.">i</span>
+      </button>
+      <div class="card">
+        <div class="cardTitle">4 point distort workflow</div>
+        <div class="small" style="margin-top:6px;">Draw or select a 4-anchor guide path for the target corners, click the button, then select the artwork when prompted. The artwork is warped by mapping its current bounding-box corners to the captured points.</div>
+      </div>
     </section>
 
     <!-- TAB: BLEEDS -->
