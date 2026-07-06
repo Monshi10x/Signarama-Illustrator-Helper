@@ -642,6 +642,26 @@
       border-radius:10px;
       padding:6px;
     }
+    .concept-flow {
+      margin-top:10px;
+      border:1px solid #333;
+      border-radius:10px;
+      background:#101010;
+      padding:10px;
+    }
+    .concept-flow svg {
+      width:min(100%, 380px);
+      height:auto;
+      display:block;
+      margin:0 auto;
+    }
+    .concept-flow-note {
+      margin-top:8px;
+      text-align:center;
+      color:#bbb;
+      font-size:12px;
+      line-height:1.35;
+    }
   </style>
 </head>
 <body>
@@ -669,6 +689,7 @@
     <button class="tab" data-tab="tab-cutfiles" type="button">Router/Laser</button>
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
+    <button class="tab" data-tab="tab-concept" type="button">Concept</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
@@ -695,6 +716,55 @@
         <span class="info" data-tip="Creates a new artboard for each selected item and fits it to the item bounds.">i</span>
       </button>
 
+    </section>
+
+    <!-- TAB: CONCEPT -->
+    <section id="tab-concept" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <button class="btn" id="btnConceptFourPointDistort" type="button">
+          <span class="btnText">4 point distort</span>
+          <span class="info" data-tip="After OK, click four document locations clockwise to record target corners, then select artwork to distort. Points are used in top-left, top-right, bottom-right, bottom-left order.">i</span>
+        </button>
+        <div class="cardHead" style="margin-top:12px;">
+          <div class="cardTitle">4 point distort workflow</div>
+          <label class="chk" for="conceptDistortIncludeStroke" style="margin-left:auto;">
+            <input id="conceptDistortIncludeStroke" type="checkbox">
+            <span>Include stroke</span>
+          </label>
+        </div>
+        <div class="small" style="margin-top:6px;">Click the button, press OK, then click four locations on the Illustrator document in clockwise order. Start at the top-left corner, then top-right, bottom-right, and bottom-left. Strokes are ignored by default so the editable artwork edge maps directly to the clicked corners.</div>
+        <div class="concept-flow" aria-label="Clockwise point selection order: 1 top-left, 2 top-right, 3 bottom-right, 4 bottom-left.">
+          <svg viewBox="0 0 260 150" role="img" aria-labelledby="conceptFlowTitle conceptFlowDesc">
+            <title id="conceptFlowTitle">Clockwise 4 point selection order</title>
+            <desc id="conceptFlowDesc">Select point 1 at top-left, point 2 at top-right, point 3 at bottom-right, and point 4 at bottom-left.</desc>
+            <defs>
+              <marker id="conceptArrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto">
+                <path d="M 0 0 L 12 6 L 0 12 z" fill="#c8102e"></path>
+              </marker>
+            </defs>
+            <polygon points="58,34 202,24 220,116 42,126" fill="#1f1f1f" stroke="#555" stroke-width="2" stroke-dasharray="5 5"></polygon>
+            <g fill="none" stroke="#c8102e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#conceptArrow)">
+              <path d="M75 33 L181 26"></path>
+              <path d="M205 42 L216 94"></path>
+              <path d="M202 118 L64 125"></path>
+              <path d="M45 108 L55 55"></path>
+            </g>
+            <g fill="#fff" stroke="#c8102e" stroke-width="3">
+              <circle cx="58" cy="34" r="13"></circle>
+              <circle cx="202" cy="24" r="13"></circle>
+              <circle cx="220" cy="116" r="13"></circle>
+              <circle cx="42" cy="126" r="13"></circle>
+            </g>
+            <g fill="#111" font-family="Arial, sans-serif" font-size="12" font-weight="800" text-anchor="middle" dominant-baseline="central">
+              <text x="58" y="34">1</text>
+              <text x="202" y="24">2</text>
+              <text x="220" y="116">3</text>
+              <text x="42" y="126">4</text>
+            </g>
+          </svg>
+          <div class="concept-flow-note">Click clockwise: top-left → top-right → bottom-right → bottom-left.</div>
+        </div>
+      </div>
     </section>
 
     <!-- TAB: BLEEDS -->
