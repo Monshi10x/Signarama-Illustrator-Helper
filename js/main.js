@@ -442,6 +442,49 @@
     });
   }
 
+
+  function showPanelConfirm(title, message, okText, cancelText, onOk) {
+    let overlay = document.getElementById('srhConfirmOverlay');
+    if(overlay) overlay.remove();
+    overlay = document.createElement('div');
+    overlay.id = 'srhConfirmOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;background:#171717;color:#eee;border:1px solid #454545;border-radius:12px;box-shadow:0 16px 34px rgba(0,0,0,.55);';
+    const head = document.createElement('div');
+    head.style.cssText = 'padding:12px 14px;border-bottom:1px solid #333;font-weight:800;background:#111;';
+    head.textContent = title || 'Confirm';
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:14px;font-size:13px;line-height:1.45;white-space:pre-wrap;';
+    body.textContent = message || '';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;padding:0 14px 14px 14px;';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn2';
+    cancel.style.width = 'auto';
+    cancel.textContent = cancelText || 'Cancel';
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'btn2 danger';
+    ok.style.width = 'auto';
+    ok.textContent = okText || 'OK';
+    function close(runOk) {
+      if(overlay && overlay.isConnected) overlay.remove();
+      if(runOk && typeof onOk === 'function') onOk();
+    }
+    cancel.addEventListener('click', () => close(false));
+    ok.addEventListener('click', () => close(true));
+    actions.appendChild(cancel);
+    actions.appendChild(ok);
+    dialog.appendChild(head);
+    dialog.appendChild(body);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    setTimeout(() => ok.focus(), 0);
+  }
+
   function wireActions() {
     const fit = $('btnFitArtboard');
     const fitArtboardMarginMm = $('fitArtboardMarginMm');
@@ -470,7 +513,12 @@
     const conceptDistort = $('btnConceptFourPointDistort');
     const conceptDistortIncludeStroke = $('conceptDistortIncludeStroke');
     if(conceptDistort) conceptDistort.onclick = () => {
-      if(!window.confirm('Click OK, then click 4 locations on the Illustrator document to record the target corners.\n\nUse the Pen tool to place the 4 clicks; the temporary 4-point click path will be removed after capture.')) return;
+      showPanelConfirm(
+        '4 Point Distort: Select 4 Target Points',
+        'Click OK, then click 4 locations on the Illustrator document to record the target corners.\n\nClick counter-clockwise: top-left, bottom-left, bottom-right, then top-right. The temporary 4-point click path will be removed after capture.',
+        'OK',
+        'Cancel',
+        function() {
       callJSX('signarama_helper_concept_beginFourPointClickCapture()', function(beginRes) {
         const beginText = String(beginRes || '');
         log(beginText);
@@ -498,7 +546,12 @@
               return;
             }
             log(captureText);
-            window.alert('Select artwork to be distorted. The panel will apply the 4 point distort as soon as it detects a selection.');
+            showPanelConfirm(
+              '4 Point Distort: Select Artwork',
+              'Select artwork to be distorted, then click OK. The panel will apply the 4 point distort as soon as it detects a selection.',
+              'OK',
+              'Cancel',
+              function() {
             showToast('Waiting for artwork selection...', {type: 'info', title: '4 point distort', duration: 6500});
             let applyAttempts = 0;
             const maxApplyAttempts = 60;
@@ -512,9 +565,13 @@
                 notifyOperationResult(applyText, {toastTitle: '4 point distort'});
               });
             }, 1000);
+              }
+            );
           });
         }, 500);
       });
+        }
+      );
     };
 
     const a4 = $('btnCopyOutlineScaleA4');

@@ -11395,6 +11395,13 @@ function _srh_conceptSortFourPoints(points) {
   return [top[0], top[1], bottom[1], bottom[0]];
 }
 
+function _srh_conceptCounterClockwiseClickOrderToCorners(points) {
+  if(!points || points.length !== 4) return points;
+  // User click order: 1 top-left, 2 bottom-left, 3 bottom-right, 4 top-right.
+  // Mapper order: top-left, top-right, bottom-right, bottom-left.
+  return [points[0], points[3], points[2], points[1]];
+}
+
 function _srh_conceptMapPoint(x, y, src, dst) {
   var w = src.right - src.left;
   var h = src.top - src.bottom;
@@ -11449,6 +11456,8 @@ function signarama_helper_concept_beginFourPointClickCapture() {
   var doc = app.activeDocument;
   _srh_conceptFourPointTargets = null;
   try {doc.selection = null;} catch(_eCbeg0) { }
+  try {doc.defaultFilled = false;} catch(_eCbegFill0) { }
+  try {doc.defaultStroked = false;} catch(_eCbegStroke0) { }
   try {app.selectTool('Adobe Pen Tool');} catch(_eCbeg1) {
     try {app.executeMenuCommand('Adobe Pen Tool');} catch(_eCbeg2) { }
   }
@@ -11472,7 +11481,7 @@ function signarama_helper_concept_captureFourPointClickPath() {
     var a = path.pathPoints[i].anchor;
     pts.push({x: Number(a[0]), y: Number(a[1])});
   }
-  _srh_conceptFourPointTargets = _srh_conceptSortFourPoints(pts);
+  _srh_conceptFourPointTargets = _srh_conceptCounterClockwiseClickOrderToCorners(pts);
   try {path.remove();} catch(_eCclk1) { }
   try {doc.selection = null;} catch(_eCclk2) { }
   try {app.selectTool('Adobe Select Tool');} catch(_eCclk3) { }
