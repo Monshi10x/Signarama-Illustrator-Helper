@@ -467,6 +467,56 @@
     const ab = $('btnArtboardPerItem');
     if(ab) ab.onclick = () => runButtonJsxOperation('signarama_helper_createArtboardsFromSelection()', {logFn: log, toastTitle: 'Artboard per selection'});
 
+    const conceptDistort = $('btnConceptFourPointDistort');
+    const conceptDistortIncludeStroke = $('conceptDistortIncludeStroke');
+    if(conceptDistort) conceptDistort.onclick = () => {
+      if(!window.confirm('Click OK, then click 4 locations on the Illustrator document to record the target corners.\n\nUse the Pen tool to place the 4 clicks; the temporary 4-point click path will be removed after capture.')) return;
+      callJSX('signarama_helper_concept_beginFourPointClickCapture()', function(beginRes) {
+        const beginText = String(beginRes || '');
+        log(beginText);
+        if(/^Error:/i.test(beginText) || /^No\b/i.test(beginText)) {
+          notifyOperationResult(beginText, {toastTitle: '4 point distort'});
+          return;
+        }
+        showToast('Click 4 document locations with the Pen tool. Waiting for the fourth click...', {type: 'info', title: '4 point distort', duration: 9000});
+        let captureAttempts = 0;
+        const maxCaptureAttempts = 120;
+        const capturePoll = window.setInterval(function() {
+          captureAttempts++;
+          callJSX('signarama_helper_concept_captureFourPointClickPath()', function(captureRes) {
+            const captureText = String(captureRes || '');
+            if(/^WAIT:/i.test(captureText) && captureAttempts < maxCaptureAttempts) return;
+            window.clearInterval(capturePoll);
+            if(/^WAIT:/i.test(captureText)) {
+              log('Timed out waiting for 4 clicked points.');
+              notifyOperationResult('Error: Timed out waiting for 4 clicked points.', {toastTitle: '4 point distort'});
+              return;
+            }
+            if(/^Error:/i.test(captureText) || /^No\b/i.test(captureText)) {
+              log(captureText);
+              notifyOperationResult(captureText, {toastTitle: '4 point distort'});
+              return;
+            }
+            log(captureText);
+            window.alert('Select artwork to be distorted. The panel will apply the 4 point distort as soon as it detects a selection.');
+            showToast('Waiting for artwork selection...', {type: 'info', title: '4 point distort', duration: 6500});
+            let applyAttempts = 0;
+            const maxApplyAttempts = 60;
+            const applyPoll = window.setInterval(function() {
+              applyAttempts++;
+              callJSX('signarama_helper_concept_applyFourPointDistort(' + ((conceptDistortIncludeStroke && conceptDistortIncludeStroke.checked) ? 'true' : 'false') + ')', function(applyRes) {
+                const applyText = String(applyRes || '');
+                if(/^No artwork selected/i.test(applyText) && applyAttempts < maxApplyAttempts) return;
+                window.clearInterval(applyPoll);
+                log(applyText);
+                notifyOperationResult(applyText, {toastTitle: '4 point distort'});
+              });
+            }, 1000);
+          });
+        }, 500);
+      });
+    };
+
     const a4 = $('btnCopyOutlineScaleA4');
     const a4Rasterize = $('a4Rasterize');
     const a4RasterizeQuality = $('a4RasterizeQuality');

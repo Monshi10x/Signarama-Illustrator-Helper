@@ -669,6 +669,7 @@
     <button class="tab" data-tab="tab-cutfiles" type="button">Router/Laser</button>
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
+    <button class="tab" data-tab="tab-concept" type="button">Concept</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
@@ -695,6 +696,24 @@
         <span class="info" data-tip="Creates a new artboard for each selected item and fits it to the item bounds.">i</span>
       </button>
 
+    </section>
+
+    <!-- TAB: CONCEPT -->
+    <section id="tab-concept" class="wrap hidden" role="tabpanel">
+      <button class="btn" id="btnConceptFourPointDistort" type="button">
+        <span class="btnText">4 point distort</span>
+        <span class="info" data-tip="After OK, click four document locations to record target corners, then select artwork to distort. Points are used in top-left, top-right, bottom-right, bottom-left order.">i</span>
+      </button>
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">4 point distort workflow</div>
+          <label class="chk" for="conceptDistortIncludeStroke" style="margin-left:auto;">
+            <input id="conceptDistortIncludeStroke" type="checkbox">
+            <span>Include stroke</span>
+          </label>
+        </div>
+        <div class="small" style="margin-top:6px;">Click the button, press OK, then click four locations on the Illustrator document. The panel records those click locations as target corners, then prompts for the artwork to distort. Strokes are ignored by default so the editable artwork edge maps directly to the clicked corners.</div>
+      </div>
     </section>
 
     <!-- TAB: BLEEDS -->

@@ -11358,3 +11358,151 @@ this.atlas_dimensions_clear = function() {
     return "Nothing to clear (no 'Dimensions' layer).";
   }
 };
+
+/* ---------------- Concept: 4 point distort ---------------- */
+var _srh_conceptFourPointTargets = null;
+
+function _srh_conceptBoundsOfSelection(sel, includeStroke) {
+  if(!sel || !sel.length) return null;
+  var b = null;
+  for(var i = 0; i < sel.length; i++) {
+    var it = sel[i];
+    if(!it) continue;
+    var vb = null;
+    try {vb = includeStroke ? it.visibleBounds : it.geometricBounds;} catch(_eCvb0) {vb = null;}
+    if((!vb || vb.length !== 4) && !includeStroke) {
+      try {vb = it.visibleBounds;} catch(_eCvb1) {vb = null;}
+    }
+    if(!vb || vb.length !== 4) continue;
+    if(!b) b = {left: vb[0], top: vb[1], right: vb[2], bottom: vb[3]};
+    else {
+      if(vb[0] < b.left) b.left = vb[0];
+      if(vb[1] > b.top) b.top = vb[1];
+      if(vb[2] > b.right) b.right = vb[2];
+      if(vb[3] < b.bottom) b.bottom = vb[3];
+    }
+  }
+  return b;
+}
+
+function _srh_conceptSortFourPoints(points) {
+  var pts = points.slice(0);
+  pts.sort(function(a, b) {return b.y - a.y;});
+  var top = pts.slice(0, 2);
+  var bottom = pts.slice(2, 4);
+  top.sort(function(a, b) {return a.x - b.x;});
+  bottom.sort(function(a, b) {return a.x - b.x;});
+  return [top[0], top[1], bottom[1], bottom[0]];
+}
+
+function _srh_conceptMapPoint(x, y, src, dst) {
+  var w = src.right - src.left;
+  var h = src.top - src.bottom;
+  if(Math.abs(w) < 0.0001 || Math.abs(h) < 0.0001) return {x: x, y: y};
+  var u = (x - src.left) / w;
+  var v = (src.top - y) / h;
+  var tl = dst[0], tr = dst[1], br = dst[2], bl = dst[3];
+  var xOut = ((1 - u) * (1 - v) * tl.x) + (u * (1 - v) * tr.x) + (u * v * br.x) + ((1 - u) * v * bl.x);
+  var yOut = ((1 - u) * (1 - v) * tl.y) + (u * (1 - v) * tr.y) + (u * v * br.y) + ((1 - u) * v * bl.y);
+  return {x: xOut, y: yOut};
+}
+
+function _srh_conceptDistortPath(pathItem, src, dst) {
+  var changed = 0;
+  if(!pathItem || !pathItem.pathPoints) return 0;
+  for(var i = 0; i < pathItem.pathPoints.length; i++) {
+    var pp = pathItem.pathPoints[i];
+    var a = pp.anchor;
+    var l = pp.leftDirection;
+    var r = pp.rightDirection;
+    var ma = _srh_conceptMapPoint(a[0], a[1], src, dst);
+    var ml = _srh_conceptMapPoint(l[0], l[1], src, dst);
+    var mr = _srh_conceptMapPoint(r[0], r[1], src, dst);
+    try {pp.anchor = [ma.x, ma.y];} catch(_eCda0) { }
+    try {pp.leftDirection = [ml.x, ml.y];} catch(_eCdl0) { }
+    try {pp.rightDirection = [mr.x, mr.y];} catch(_eCdr0) { }
+    changed++;
+  }
+  return changed;
+}
+
+function _srh_conceptDistortItem(item, src, dst) {
+  var changed = 0;
+  if(!item) return 0;
+  var tn = '';
+  try {tn = String(item.typename || '');} catch(_eCtn0) {tn = '';}
+  if(tn === 'PathItem') return _srh_conceptDistortPath(item, src, dst);
+  if(tn === 'CompoundPathItem') {
+    for(var c = 0; c < item.pathItems.length; c++) changed += _srh_conceptDistortPath(item.pathItems[c], src, dst);
+    return changed;
+  }
+  if(tn === 'GroupItem') {
+    for(var g = 0; g < item.pageItems.length; g++) changed += _srh_conceptDistortItem(item.pageItems[g], src, dst);
+    return changed;
+  }
+  return 0;
+}
+
+
+function signarama_helper_concept_beginFourPointClickCapture() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  _srh_conceptFourPointTargets = null;
+  try {doc.selection = null;} catch(_eCbeg0) { }
+  try {app.selectTool('Adobe Pen Tool');} catch(_eCbeg1) {
+    try {app.executeMenuCommand('Adobe Pen Tool');} catch(_eCbeg2) { }
+  }
+  return 'Ready for 4 document clicks. Use the Pen tool to click four target corner locations.';
+}
+
+function signarama_helper_concept_captureFourPointClickPath() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var sel = doc.selection;
+  if(!sel || sel.length !== 1) return 'WAIT: Click four locations on the document.';
+  var path = sel[0];
+  try {
+    if(path.typename === 'CompoundPathItem' && path.pathItems.length === 1) path = path.pathItems[0];
+  } catch(_eCclk0) { }
+  if(!path || path.typename !== 'PathItem' || !path.pathPoints) return 'WAIT: Click four locations on the document.';
+  if(path.pathPoints.length < 4) return 'WAIT: ' + path.pathPoints.length + ' of 4 clicked points recorded.';
+  if(path.pathPoints.length > 4) return 'Error: More than 4 points were clicked. Undo or delete the temporary path and try again.';
+  var pts = [];
+  for(var i = 0; i < path.pathPoints.length; i++) {
+    var a = path.pathPoints[i].anchor;
+    pts.push({x: Number(a[0]), y: Number(a[1])});
+  }
+  _srh_conceptFourPointTargets = _srh_conceptSortFourPoints(pts);
+  try {path.remove();} catch(_eCclk1) { }
+  try {doc.selection = null;} catch(_eCclk2) { }
+  try {app.selectTool('Adobe Select Tool');} catch(_eCclk3) { }
+  return 'Captured 4 clicked document points for Concept 4 point distort.';
+}
+
+function signarama_helper_concept_applyFourPointDistort(includeStroke) {
+  if(!app.documents.length) return 'No open document.';
+  if(!_srh_conceptFourPointTargets || _srh_conceptFourPointTargets.length !== 4) return 'Error: Capture 4 target points first.';
+  includeStroke = !!includeStroke;
+  var doc = app.activeDocument;
+  var sel = doc.selection;
+  if(!sel || !sel.length) return 'No artwork selected to distort.';
+  var src = _srh_conceptBoundsOfSelection(sel, includeStroke);
+  if(!src) return 'Error: Could not read selected artwork bounds.';
+  var changed = 0;
+  try {app.beginUndoGroup('SRH Concept 4 point distort');} catch(_eCug0) { }
+  try {
+    for(var i = 0; i < sel.length; i++) changed += _srh_conceptDistortItem(sel[i], src, _srh_conceptFourPointTargets);
+  } finally {
+    try {app.endUndoGroup();} catch(_eCug1) { }
+  }
+  if(!changed) return 'Error: No editable vector paths found. Expand text/symbols/images before using 4 point distort.';
+  try {app.redraw();} catch(_eCred0) { }
+  return '4 point distort applied to ' + changed + ' path points (' + (includeStroke ? 'including stroke bounds' : 'ignoring stroke bounds') + ').';
+}
+
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB0) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_captureFourPointClickPath = signarama_helper_concept_captureFourPointClickPath;} catch(_eCexB1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_applyFourPointDistort = signarama_helper_concept_applyFourPointDistort;} catch(_eCex1) { }
+try {this.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB2) { }
+try {this.signarama_helper_concept_captureFourPointClickPath = signarama_helper_concept_captureFourPointClickPath;} catch(_eCexB3) { }
+try {this.signarama_helper_concept_applyFourPointDistort = signarama_helper_concept_applyFourPointDistort;} catch(_eCex3) { }
