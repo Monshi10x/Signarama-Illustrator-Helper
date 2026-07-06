@@ -11362,14 +11362,17 @@ this.atlas_dimensions_clear = function() {
 /* ---------------- Concept: 4 point distort ---------------- */
 var _srh_conceptFourPointTargets = null;
 
-function _srh_conceptBoundsOfSelection(sel) {
+function _srh_conceptBoundsOfSelection(sel, includeStroke) {
   if(!sel || !sel.length) return null;
   var b = null;
   for(var i = 0; i < sel.length; i++) {
     var it = sel[i];
     if(!it) continue;
     var vb = null;
-    try {vb = it.visibleBounds;} catch(_eCvb0) {vb = null;}
+    try {vb = includeStroke ? it.visibleBounds : it.geometricBounds;} catch(_eCvb0) {vb = null;}
+    if((!vb || vb.length !== 4) && !includeStroke) {
+      try {vb = it.visibleBounds;} catch(_eCvb1) {vb = null;}
+    }
     if(!vb || vb.length !== 4) continue;
     if(!b) b = {left: vb[0], top: vb[1], right: vb[2], bottom: vb[3]};
     else {
@@ -11476,13 +11479,14 @@ function signarama_helper_concept_captureFourPointClickPath() {
   return 'Captured 4 clicked document points for Concept 4 point distort.';
 }
 
-function signarama_helper_concept_applyFourPointDistort() {
+function signarama_helper_concept_applyFourPointDistort(includeStroke) {
   if(!app.documents.length) return 'No open document.';
   if(!_srh_conceptFourPointTargets || _srh_conceptFourPointTargets.length !== 4) return 'Error: Capture 4 target points first.';
+  includeStroke = !!includeStroke;
   var doc = app.activeDocument;
   var sel = doc.selection;
   if(!sel || !sel.length) return 'No artwork selected to distort.';
-  var src = _srh_conceptBoundsOfSelection(sel);
+  var src = _srh_conceptBoundsOfSelection(sel, includeStroke);
   if(!src) return 'Error: Could not read selected artwork bounds.';
   var changed = 0;
   try {app.beginUndoGroup('SRH Concept 4 point distort');} catch(_eCug0) { }
@@ -11493,7 +11497,7 @@ function signarama_helper_concept_applyFourPointDistort() {
   }
   if(!changed) return 'Error: No editable vector paths found. Expand text/symbols/images before using 4 point distort.';
   try {app.redraw();} catch(_eCred0) { }
-  return '4 point distort applied to ' + changed + ' path points.';
+  return '4 point distort applied to ' + changed + ' path points (' + (includeStroke ? 'including stroke bounds' : 'ignoring stroke bounds') + ').';
 }
 
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB0) { }

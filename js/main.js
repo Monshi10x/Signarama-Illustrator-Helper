@@ -468,6 +468,7 @@
     if(ab) ab.onclick = () => runButtonJsxOperation('signarama_helper_createArtboardsFromSelection()', {logFn: log, toastTitle: 'Artboard per selection'});
 
     const conceptDistort = $('btnConceptFourPointDistort');
+    const conceptDistortIncludeStroke = $('conceptDistortIncludeStroke');
     if(conceptDistort) conceptDistort.onclick = () => {
       if(!window.confirm('Click OK, then click 4 locations on the Illustrator document to record the target corners.\n\nUse the Pen tool to place the 4 clicks; the temporary 4-point click path will be removed after capture.')) return;
       callJSX('signarama_helper_concept_beginFourPointClickCapture()', function(beginRes) {
@@ -503,7 +504,7 @@
             const maxApplyAttempts = 60;
             const applyPoll = window.setInterval(function() {
               applyAttempts++;
-              callJSX('signarama_helper_concept_applyFourPointDistort()', function(applyRes) {
+              callJSX('signarama_helper_concept_applyFourPointDistort(' + ((conceptDistortIncludeStroke && conceptDistortIncludeStroke.checked) ? 'true' : 'false') + ')', function(applyRes) {
                 const applyText = String(applyRes || '');
                 if(/^No artwork selected/i.test(applyText) && applyAttempts < maxApplyAttempts) return;
                 window.clearInterval(applyPoll);
