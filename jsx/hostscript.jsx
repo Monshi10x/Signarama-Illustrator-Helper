@@ -11476,12 +11476,19 @@ function _srh_conceptOutlineTextInItem(item) {
   return count;
 }
 
+function _srh_conceptRunOutlineStrokeMenuAction() {
+  // Illustrator's Object > Path > Outline Stroke menu action is exposed to
+  // ExtendScript as "Live Outline Stroke". Keep the older label as a fallback
+  // only for hosts that may alias it.
+  try {app.executeMenuCommand('Live Outline Stroke'); return true;} catch(_eCosLive0) { }
+  try {app.executeMenuCommand('Outline Stroke'); return true;} catch(_eCosLabel0) { }
+  return false;
+}
+
 function _srh_conceptPreflightSelection(doc, opts) {
   var notes = [];
   if(opts.autoOutlineStroke) {
-    try {app.executeMenuCommand('Outline Stroke'); notes.push('outlined strokes');} catch(_eCpos0) { }
-    try {app.executeMenuCommand('expandStyle');} catch(_eCpos1) { }
-    try {app.executeMenuCommand('expand');} catch(_eCpos2) { }
+    if(_srh_conceptRunOutlineStrokeMenuAction()) notes.push('outlined strokes');
   }
   if(opts.autoOutlineText) {
     var outlinedText = 0;
