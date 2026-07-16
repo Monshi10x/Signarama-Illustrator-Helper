@@ -8738,6 +8738,153 @@ function signarama_helper_setAllFillsStrokes() {
   return changed ? ('Updated fills/strokes on ' + changed + ' item(s).') : 'No items updated.';
 }
 
+
+function _srh_cutfileGetSourceFilePath(doc) {
+  if(!doc) return '';
+  try {
+    if(doc.fullName) return String(doc.fullName.fsName || doc.fullName);
+  } catch(_eCfPath0) { }
+  try {return String(doc.name || 'Untitled');} catch(_eCfPath1) { }
+  return 'Untitled';
+}
+
+function _srh_cutfileBoundsOfItems(items) {
+  if(!items || !items.length) return null;
+  var b = null;
+  for(var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if(!it) continue;
+    var vb = null;
+    try {vb = it.visibleBounds;} catch(_eCfB0) {vb = null;}
+    if((!vb || vb.length !== 4)) {try {vb = it.geometricBounds;} catch(_eCfB1) {vb = null;}}
+    if(!vb || vb.length !== 4) continue;
+    if(!b) b = {left: vb[0], top: vb[1], right: vb[2], bottom: vb[3]};
+    else {
+      if(vb[0] < b.left) b.left = vb[0];
+      if(vb[1] > b.top) b.top = vb[1];
+      if(vb[2] > b.right) b.right = vb[2];
+      if(vb[3] < b.bottom) b.bottom = vb[3];
+    }
+  }
+  return b;
+}
+
+function _srh_cutfileGetItemBounds(item) {
+  if(!item) return null;
+  var arr = [item];
+  return _srh_cutfileBoundsOfItems(arr);
+}
+
+function _srh_cutfileBlack() {
+  var black = new RGBColor();
+  black.red = 0; black.green = 0; black.blue = 0;
+  return black;
+}
+
+function _srh_cutfileAddFittedPointText(doc, contents, x, y, targetWidth, sizePt, justification) {
+  var tf = doc.textFrames.pointText([x, y]);
+  tf.contents = String(contents || '');
+  try {tf.textRange.characterAttributes.fillColor = _srh_cutfileBlack();} catch(_eCfTxtFill0) { }
+  try {tf.textRange.characterAttributes.strokeWeight = 0;} catch(_eCfTxtStroke0) { }
+  try {tf.textRange.characterAttributes.size = sizePt;} catch(_eCfTxtSize0) { }
+  try {tf.textRange.paragraphAttributes.justification = justification;} catch(_eCfTxtJust0) { }
+  try {
+    for(var pass = 0; pass < 4; pass++) {
+      var b = tf.visibleBounds;
+      if(!b || b.length !== 4) break;
+      var w = b[2] - b[0];
+      if(!(w > 0) || !(targetWidth > 0)) break;
+      var factor = targetWidth / w;
+      if(factor > 1) factor = Math.min(factor, 1.6);
+      var curSize = Number(tf.textRange.characterAttributes.size || sizePt);
+      var nextSize = curSize * factor;
+      if(nextSize < 4) nextSize = 4;
+      if(nextSize > sizePt * 1.6) nextSize = sizePt * 1.6;
+      tf.textRange.characterAttributes.size = nextSize;
+      if(Math.abs(factor - 1) < 0.03) break;
+    }
+  } catch(_eCfTxtFit0) { }
+  try {
+    var nb = tf.visibleBounds;
+    if(nb && nb.length === 4) {
+      var dx = x - ((nb[0] + nb[2]) / 2);
+      if(justification === Justification.LEFT) dx = x - nb[0];
+      var dy = y - nb[1];
+      tf.translate(dx, dy);
+    }
+  } catch(_eCfTxtMove0) { }
+  return tf;
+}
+
+function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
+  if(!app.documents.length) return 'No open document.';
+  var sourceDoc = app.activeDocument;
+  var sel = sourceDoc.selection;
+  if(!sel || !sel.length) return 'No selection. Select artwork for the ' + kind + ' cutfile.';
+
+  var sourceItems = [];
+  for(var si = 0; si < sel.length; si++) sourceItems.push(sel[si]);
+  var filePath = _srh_cutfileGetSourceFilePath(sourceDoc);
+  var initialSizePt = _srh_mm2pt(initialSizeMm);
+  var targetDoc = null;
+  try {
+    targetDoc = app.documents.add(sourceDoc.documentColorSpace, initialSizePt, initialSizePt);
+  } catch(_eCfDoc0) {
+    try {targetDoc = app.documents.add(DocumentColorSpace.CMYK, initialSizePt, initialSizePt);} catch(_eCfDoc1) {targetDoc = null;}
+  }
+  if(!targetDoc) return 'Error: Could not create ' + kind + ' cutfile document.';
+
+  var grp = targetDoc.activeLayer.groupItems.add();
+  grp.name = 'SRH_' + kind + '_Cutfile_Selection';
+  var copied = 0;
+  for(var i = 0; i < sourceItems.length; i++) {
+    try {sourceItems[i].duplicate(grp, ElementPlacement.PLACEATEND); copied++;} catch(_eCfDup0) { }
+  }
+  if(!copied) return 'Error: Could not copy selection to the ' + kind + ' cutfile document.';
+
+  try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel0) { }
+  if(scalePercent && Math.abs(scalePercent - 100) > 0.001) {
+    try {grp.resize(scalePercent, scalePercent, true, true, true, true, scalePercent, Transformation.CENTER);} catch(_eCfScale0) { }
+  }
+
+  try {signarama_helper_outlineAllText();} catch(_eCfOutline0) { }
+  try {signarama_helper_setAllFillsStrokes();} catch(_eCfStyle0) { }
+
+  var b = _srh_cutfileGetItemBounds(grp);
+  if(!b) return kind + ' cutfile created, but could not read copied artwork bounds.';
+  var sf = _srh_getScaleFactor();
+  if(!(sf > 0)) sf = 1;
+  var margin = _srh_mm2pt(10) / sf;
+  var labelBand = _srh_mm2pt(30) / sf;
+  var minW = _srh_mm2pt(120) / sf;
+  var artW = b.right - b.left;
+  var artH = b.top - b.bottom;
+  var totalW = Math.max(artW + margin * 2, minW);
+  var totalH = Math.max(artH + margin * 2 + labelBand, _srh_mm2pt(80) / sf);
+  try {targetDoc.artboards[0].artboardRect = [0, totalH, totalW, 0];} catch(_eCfAb0) { }
+
+  var desiredLeft = margin + ((totalW - (artW + margin * 2)) / 2);
+  var desiredTop = totalH - labelBand - margin;
+  try {grp.translate(desiredLeft - b.left, desiredTop - b.top);} catch(_eCfMove0) { }
+
+  var labelMargin = _srh_mm2pt(4) / sf;
+  var fileSize = _srh_ptDoc(11);
+  var materialSize = _srh_ptDoc(14);
+  _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - labelMargin, Math.max(1, totalW - labelMargin * 2), fileSize, Justification.CENTER);
+  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', labelMargin, totalH - labelMargin - (_srh_mm2pt(10) / sf), Math.max(1, totalW - labelMargin * 2), materialSize, Justification.LEFT);
+
+  try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
+  return 'Created ' + kind + ' cutfile from ' + copied + ' selected item(s). Artboard fitted with labels.';
+}
+
+function signarama_helper_makeRouterCutfile() {
+  return _srh_cutfileCreateFromSelection('Router', 50000, 100);
+}
+
+function signarama_helper_makeLaserCutfile() {
+  return _srh_cutfileCreateFromSelection('Laser', 5000, 10);
+}
+
 /* ---------------- Dimensions (Atlas) ---------------- */
 function _dim_mm2pt(mm) {return mm * 72.0 / 25.4;}
 function _dim_mm2ptDoc(mm, scaleFactor) {
@@ -11449,6 +11596,74 @@ function _srh_conceptDistortItem(item, src, dst) {
   return 0;
 }
 
+function _srh_conceptReadOptions(opts) {
+  if(typeof opts === 'boolean') return {autoOutlineStroke: false, autoOutlineText: false, autoGroup: false, includeStroke: !!opts};
+  opts = opts || {};
+  return {
+    autoOutlineStroke: (typeof opts.autoOutlineStroke === 'undefined') ? true : !!opts.autoOutlineStroke,
+    autoOutlineText: (typeof opts.autoOutlineText === 'undefined') ? true : !!opts.autoOutlineText,
+    autoGroup: (typeof opts.autoGroup === 'undefined') ? true : !!opts.autoGroup,
+    includeStroke: !!opts.includeStroke
+  };
+}
+
+function _srh_conceptOutlineTextInItem(item) {
+  if(!item) return 0;
+  var tn = '';
+  try {tn = String(item.typename || '');} catch(_eCot0) {tn = '';}
+  if(tn === 'TextFrame') {
+    try {item.createOutline(); return 1;} catch(_eCot1) {return 0;}
+  }
+  var count = 0;
+  try {
+    if(item.pageItems && item.pageItems.length) {
+      for(var i = item.pageItems.length - 1; i >= 0; i--) count += _srh_conceptOutlineTextInItem(item.pageItems[i]);
+    }
+  } catch(_eCot2) { }
+  return count;
+}
+
+function _srh_conceptRunOutlineStrokeMenuAction() {
+  // Illustrator's Object > Path > Outline Stroke menu action is exposed to
+  // ExtendScript as "Live Outline Stroke". Follow it immediately with
+  // expandStyle so the outlined stroke is finalized as standard filled shapes.
+  try {
+    app.executeMenuCommand('Live Outline Stroke');
+    try {app.executeMenuCommand('expandStyle');} catch(_eCosExpand0) { }
+    return true;
+  } catch(_eCosLive0) { }
+  try {
+    app.executeMenuCommand('Outline Stroke');
+    try {app.executeMenuCommand('expandStyle');} catch(_eCosExpand1) { }
+    return true;
+  } catch(_eCosLabel0) { }
+  return false;
+}
+
+function _srh_conceptPreflightSelection(doc, opts) {
+  var notes = [];
+  if(opts.autoOutlineStroke) {
+    if(_srh_conceptRunOutlineStrokeMenuAction()) notes.push('outlined strokes');
+  }
+  if(opts.autoOutlineText) {
+    var outlinedText = 0;
+    try {
+      var selText = doc.selection;
+      for(var t = selText.length - 1; t >= 0; t--) outlinedText += _srh_conceptOutlineTextInItem(selText[t]);
+    } catch(_eCpot0) { }
+    if(outlinedText) notes.push('outlined text');
+  }
+  if(opts.autoGroup) {
+    try {
+      if(doc.selection && doc.selection.length > 1) {
+        app.executeMenuCommand('group');
+        notes.push('grouped artwork');
+      }
+    } catch(_eCpog0) { }
+  }
+  return notes;
+}
+
 
 function signarama_helper_concept_beginFourPointClickCapture() {
   if(!app.documents.length) return 'No open document.';
@@ -11487,25 +11702,30 @@ function signarama_helper_concept_captureFourPointClickPath() {
   return 'Captured 4 clicked document points for Concept 4 point distort.';
 }
 
-function signarama_helper_concept_applyFourPointDistort(includeStroke) {
+function signarama_helper_concept_applyFourPointDistort(options) {
   if(!app.documents.length) return 'No open document.';
   if(!_srh_conceptFourPointTargets || _srh_conceptFourPointTargets.length !== 4) return 'Error: Capture 4 target points first.';
-  includeStroke = !!includeStroke;
+  var opts = _srh_conceptReadOptions(options);
   var doc = app.activeDocument;
   var sel = doc.selection;
   if(!sel || !sel.length) return 'No artwork selected to distort.';
-  var src = _srh_conceptBoundsOfSelection(sel, includeStroke);
-  if(!src) return 'Error: Could not read selected artwork bounds.';
   var changed = 0;
+  var notes = [];
   try {app.beginUndoGroup('SRH Concept 4 point distort');} catch(_eCug0) { }
   try {
+    notes = _srh_conceptPreflightSelection(doc, opts);
+    sel = doc.selection;
+    if(!sel || !sel.length) return 'No artwork selected to distort.';
+    var src = _srh_conceptBoundsOfSelection(sel, opts.includeStroke);
+    if(!src) return 'Error: Could not read selected artwork bounds.';
     for(var i = 0; i < sel.length; i++) changed += _srh_conceptDistortItem(sel[i], src, _srh_conceptFourPointTargets);
   } finally {
     try {app.endUndoGroup();} catch(_eCug1) { }
   }
   if(!changed) return 'Error: No editable vector paths found. Expand text/symbols/images before using 4 point distort.';
   try {app.redraw();} catch(_eCred0) { }
-  return '4 point distort applied to ' + changed + ' path points (' + (includeStroke ? 'including stroke bounds' : 'ignoring stroke bounds') + ').';
+  var suffix = notes.length ? ' Preflight: ' + notes.join(', ') + '.' : '';
+  return '4 point distort applied to ' + changed + ' path points.' + suffix;
 }
 
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB0) { }
