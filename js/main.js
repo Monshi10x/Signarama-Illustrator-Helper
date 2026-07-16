@@ -2161,6 +2161,16 @@
     const setFillsStrokes = $('btnSetFillsStrokes');
     if(setFillsStrokes) setFillsStrokes.onclick = () => runButtonJsxOperation('signarama_helper_setAllFillsStrokes()', {logFn: log, toastTitle: 'Set fills/strokes'});
 
+    const cutfileDisableActiveTick = $('cutfileDisableActiveTick');
+    let cutfileTickBusy = false;
+    window.setInterval(function() {
+      if(cutfileTickBusy || (cutfileDisableActiveTick && cutfileDisableActiveTick.checked)) return;
+      cutfileTickBusy = true;
+      callJSX('signarama_helper_cutfile_tickFilePathLabels()', function() {
+        cutfileTickBusy = false;
+      });
+    }, 1000);
+
     wireDimensions();
     wireTransform();
     wireLightbox();

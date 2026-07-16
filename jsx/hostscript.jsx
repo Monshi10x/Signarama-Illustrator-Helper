@@ -8739,6 +8739,9 @@ function signarama_helper_setAllFillsStrokes() {
 }
 
 
+var _SRH_CUTFILE_LABEL_LAYER_NAME = 'SRH Cutfile Labels';
+var _SRH_CUTFILE_FILE_PATH_TEXT_NAME = 'SRH_CUTFILE_FILE_PATH_LABEL';
+
 function _srh_cutfileGetSourceFilePath(doc) {
   if(!doc) return '';
   try {
@@ -8781,7 +8784,7 @@ function _srh_cutfileBlack() {
   return black;
 }
 
-function _srh_cutfileAddFittedPointText(doc, contents, x, y, targetWidth, sizePt, justification) {
+function _srh_cutfileAddFittedPointText(doc, contents, x, y, targetWidth, sizePt, justification, allowGrow) {
   var tf = doc.textFrames.pointText([x, y]);
   tf.contents = String(contents || '');
   try {tf.textRange.characterAttributes.fillColor = _srh_cutfileBlack();} catch(_eCfTxtFill0) { }
@@ -8795,6 +8798,7 @@ function _srh_cutfileAddFittedPointText(doc, contents, x, y, targetWidth, sizePt
       var w = b[2] - b[0];
       if(!(w > 0) || !(targetWidth > 0)) break;
       var factor = targetWidth / w;
+      if(allowGrow === false && factor > 1) break;
       var curSize = Number(tf.textRange.characterAttributes.size || sizePt);
       var nextSize = curSize * factor;
       if(nextSize < 4) nextSize = 4;
@@ -8835,6 +8839,7 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   }
   if(!targetDoc) return 'Error: Could not create ' + kind + ' cutfile document.';
   try {targetDoc.rulerUnits = RulerUnits.Millimeters;} catch(_eCfUnits0) { }
+  try {app.preferences.setIntegerPreference('rulerType', RulerUnits.Millimeters);} catch(_eCfUnits1) { }
 
   try {targetDoc.activate();} catch(_eCfAct1) { }
   try {app.paste();} catch(_eCfPaste0) {return 'Error: Could not paste selection into the ' + kind + ' cutfile document.';}
@@ -8868,28 +8873,88 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   if(!b) return kind + ' cutfile created, but could not read copied artwork bounds.';
   var sf = _srh_getScaleFactor();
   if(!(sf > 0)) sf = 1;
-  var labelBand = _srh_mm2pt(30) / sf;
   var minW = _srh_mm2pt(120) / sf;
   var artW = b.right - b.left;
   var artH = b.top - b.bottom;
   var marginX = artW * 0.10;
   var marginY = artH * 0.10;
   var totalW = Math.max(artW * 1.20, minW);
-  var totalH = Math.max((artH * 1.20) + labelBand, _srh_mm2pt(80) / sf);
+  var labelBand = Math.max(_srh_mm2pt(50) / sf, totalW * 0.18);
+  var totalH = Math.max((artH * 1.20) + labelBand, _srh_mm2pt(100) / sf);
   try {targetDoc.artboards[0].artboardRect = [0, totalH, totalW, 0];} catch(_eCfAb0) { }
 
   var desiredLeft = marginX + ((totalW - (artW + marginX * 2)) / 2);
   var desiredTop = totalH - labelBand - marginY;
   try {grp.translate(desiredLeft - b.left, desiredTop - b.top);} catch(_eCfMove0) { }
 
+  var labelLayer = null;
+  try {labelLayer = targetDoc.layers.add(); labelLayer.name = _SRH_CUTFILE_LABEL_LAYER_NAME; targetDoc.activeLayer = labelLayer;} catch(_eCfLayer0) {labelLayer = null;}
   var labelMargin = _srh_mm2pt(4) / sf;
   var fileSize = _srh_ptDoc(11);
   var materialSize = _srh_ptDoc(14);
-  _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - labelMargin, Math.max(1, totalW), fileSize, Justification.CENTER);
-  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', labelMargin, totalH - labelMargin - (_srh_mm2pt(10) / sf), Math.max(1, totalW - labelMargin * 2), materialSize, Justification.LEFT);
+  var fileTf = _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - labelMargin, Math.max(1, totalW), fileSize, Justification.CENTER, true);
+  try {fileTf.name = _SRH_CUTFILE_FILE_PATH_TEXT_NAME;} catch(_eCfFileName0) { }
+  try {fileTf.note = _SRH_CUTFILE_FILE_PATH_TEXT_NAME;} catch(_eCfFileNote0) { }
+  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', labelMargin, totalH - labelMargin - (_srh_mm2pt(14) / sf), Math.max(1, totalW - labelMargin * 2), materialSize, Justification.LEFT, false);
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
   return 'Created ' + kind + ' cutfile from ' + sourceCount + ' selected item(s). Artboard fitted with labels.';
+}
+
+function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
+  if(!doc || !tf) return false;
+  var ab = null;
+  try {ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;} catch(_eCfTickAb0) {ab = null;}
+  if(!ab || ab.length !== 4) return false;
+  var totalW = ab[2] - ab[0];
+  if(!(totalW > 0)) return false;
+  var sf = _srh_getScaleFactor();
+  if(!(sf > 0)) sf = 1;
+  var filePath = _srh_cutfileGetSourceFilePath(doc);
+  try {tf.contents = filePath;} catch(_eCfTickContent0) { }
+  try {tf.textRange.characterAttributes.size = _srh_ptDoc(11);} catch(_eCfTickSize0) { }
+  try {
+    for(var pass = 0; pass < 4; pass++) {
+      var b = tf.visibleBounds;
+      if(!b || b.length !== 4) break;
+      var w = b[2] - b[0];
+      if(!(w > 0)) break;
+      var factor = totalW / w;
+      var curSize = Number(tf.textRange.characterAttributes.size || _srh_ptDoc(11));
+      var nextSize = curSize * factor;
+      if(nextSize < 4) nextSize = 4;
+      if(nextSize > 20000) nextSize = 20000;
+      tf.textRange.characterAttributes.size = nextSize;
+      if(Math.abs(factor - 1) < 0.03) break;
+    }
+  } catch(_eCfTickFit0) { }
+  try {
+    var nb = tf.visibleBounds;
+    if(nb && nb.length === 4) tf.translate(((ab[0] + ab[2]) / 2) - ((nb[0] + nb[2]) / 2), (ab[1] - (_srh_mm2pt(4) / sf)) - nb[1]);
+  } catch(_eCfTickMove0) { }
+  return true;
+}
+
+function signarama_helper_cutfile_tickFilePathLabels() {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var layer = null;
+  try {layer = doc.layers.getByName(_SRH_CUTFILE_LABEL_LAYER_NAME);} catch(_eCfTickLayer0) {layer = null;}
+  if(!layer) return 'No cutfile file path labels found.';
+  var updated = 0;
+  try {
+    for(var i = 0; i < layer.textFrames.length; i++) {
+      var tf = layer.textFrames[i];
+      var nm = '';
+      var note = '';
+      try {nm = String(tf.name || '');} catch(_eCfTickNm0) {nm = '';}
+      try {note = String(tf.note || '');} catch(_eCfTickNote0) {note = '';}
+      if(nm === _SRH_CUTFILE_FILE_PATH_TEXT_NAME || note === _SRH_CUTFILE_FILE_PATH_TEXT_NAME) {
+        if(_srh_cutfileResizeFilePathTextToArtboard(doc, tf)) updated++;
+      }
+    }
+  } catch(_eCfTickLoop0) { }
+  return updated ? ('Updated ' + updated + ' cutfile file path label(s).') : 'No cutfile file path labels updated.';
 }
 
 function signarama_helper_makeRouterCutfile() {
