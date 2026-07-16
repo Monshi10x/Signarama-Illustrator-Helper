@@ -83,12 +83,14 @@
       color:#fff;
     }
     .btn.danger:hover { background:#a80e28; }
-    .corebridge-proof-actions {
+    .corebridge-proof-actions,
+    .cutfile-action-row {
       display:grid;
       grid-template-columns:1fr 1fr;
       gap:8px;
     }
-    .corebridge-proof-actions .btn { height:100%; }
+    .corebridge-proof-actions .btn,
+    .cutfile-action-row .btn { height:100%; }
     .corebridge-lookup-tools {
       display:grid;
       gap:4px;
@@ -895,6 +897,17 @@
 
     <!-- TAB: CUTFILES -->
     <section id="tab-cutfiles" class="wrap hidden" role="tabpanel">
+      <div class="cutfile-action-row">
+        <button class="btn danger" id="btnMakeRouterCutfile" type="button">
+          <span class="btnText">Make Router Cutfile</span>
+          <span class="info" data-tip="Requires a selection. Copies the selection to a new 50000 × 50000mm document, outlines text, sets cutfile fills/strokes, fits the artboard with room, and adds file/material labels.">i</span>
+        </button>
+        <button class="btn danger" id="btnMakeLaserCutfile" type="button">
+          <span class="btnText">Make Laser Cutfile</span>
+          <span class="info" data-tip="Requires a selection. Copies the selection to a new 5000 × 5000mm document, scales it to 10%, outlines text, sets cutfile fills/strokes, fits the artboard with room, and adds file/material labels.">i</span>
+        </button>
+      </div>
+
       <button class="btn" id="btnAddPathText" type="button">
         <span class="btnText">Add file path label to artboards</span>
         <span class="info" data-tip="Adds a centered label near the top of each artboard showing the current file path. Width=60% of artboard, offset=5mm. Text scales to the field width.">i</span>

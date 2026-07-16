@@ -2149,6 +2149,12 @@
         };
       }
     }
+    const makeRouterCutfile = $('btnMakeRouterCutfile');
+    if(makeRouterCutfile) makeRouterCutfile.onclick = () => runButtonJsxOperation('signarama_helper_makeRouterCutfile()', {logFn: log, toastTitle: 'Make Router Cutfile'});
+
+    const makeLaserCutfile = $('btnMakeLaserCutfile');
+    if(makeLaserCutfile) makeLaserCutfile.onclick = () => runButtonJsxOperation('signarama_helper_makeLaserCutfile()', {logFn: log, toastTitle: 'Make Laser Cutfile'});
+
     const outlineAll = $('btnOutlineAllText');
     if(outlineAll) outlineAll.onclick = () => runButtonJsxOperation('signarama_helper_outlineAllText()', {logFn: log, toastTitle: 'Outline all text'});
 
