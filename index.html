@@ -83,12 +83,14 @@
       color:#fff;
     }
     .btn.danger:hover { background:#a80e28; }
-    .corebridge-proof-actions {
+    .corebridge-proof-actions,
+    .cutfile-action-row {
       display:grid;
       grid-template-columns:1fr 1fr;
       gap:8px;
     }
-    .corebridge-proof-actions .btn { height:100%; }
+    .corebridge-proof-actions .btn,
+    .cutfile-action-row .btn { height:100%; }
     .corebridge-lookup-tools {
       display:grid;
       gap:4px;
@@ -723,16 +725,26 @@
       <div class="card">
         <button class="btn" id="btnConceptFourPointDistort" type="button">
           <span class="btnText">4 point distort</span>
-          <span class="info" data-tip="After OK, click four document locations clockwise to record target corners, then select artwork to distort. Points are used in top-left, top-right, bottom-right, bottom-left order.">i</span>
+          <span class="info" data-tip="Click four document locations clockwise to record target corners, then select artwork to distort. Points are used in top-left, top-right, bottom-right, bottom-left order.">i</span>
         </button>
         <div class="cardHead" style="margin-top:12px;">
           <div class="cardTitle">4 point distort workflow</div>
-          <label class="chk" for="conceptDistortIncludeStroke" style="margin-left:auto;">
-            <input id="conceptDistortIncludeStroke" type="checkbox">
-            <span>Include stroke</span>
-          </label>
+          <div style="margin-left:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+            <label class="chk" for="conceptDistortAutoOutlineStroke">
+              <input id="conceptDistortAutoOutlineStroke" type="checkbox" checked>
+              <span>Auto outline stroke</span>
+            </label>
+            <label class="chk" for="conceptDistortAutoOutlineText">
+              <input id="conceptDistortAutoOutlineText" type="checkbox" checked>
+              <span>Auto convert text to outlines</span>
+            </label>
+            <label class="chk" for="conceptDistortAutoGroup">
+              <input id="conceptDistortAutoGroup" type="checkbox" checked>
+              <span>Auto group</span>
+            </label>
+          </div>
         </div>
-        <div class="small" style="margin-top:6px;">Click the button, press OK, then click four locations on the Illustrator document in clockwise order. Start at the top-left corner, then top-right, bottom-right, and bottom-left. Strokes are ignored by default so the editable artwork edge maps directly to the clicked corners.</div>
+        <div class="small" style="margin-top:6px;">Click the button, then click four locations on the Illustrator document in clockwise order. Start at the top-left corner, then top-right, bottom-right, and bottom-left. The panel prompts auto-close after 5 seconds while the workflow continues automatically.</div>
         <div class="concept-flow" aria-label="Clockwise point selection order: 1 top-left, 2 top-right, 3 bottom-right, 4 bottom-left.">
           <svg viewBox="0 0 260 150" role="img" aria-labelledby="conceptFlowTitle conceptFlowDesc">
             <title id="conceptFlowTitle">Clockwise 4 point selection order</title>
@@ -747,7 +759,6 @@
               <path d="M75 33 L181 26"></path>
               <path d="M205 42 L216 94"></path>
               <path d="M202 118 L64 125"></path>
-              <path d="M45 108 L55 55"></path>
             </g>
             <g fill="#fff" stroke="#c8102e" stroke-width="3">
               <circle cx="58" cy="34" r="13"></circle>
@@ -886,6 +897,17 @@
 
     <!-- TAB: CUTFILES -->
     <section id="tab-cutfiles" class="wrap hidden" role="tabpanel">
+      <div class="cutfile-action-row">
+        <button class="btn danger" id="btnMakeRouterCutfile" type="button">
+          <span class="btnText">Make Router Cutfile</span>
+          <span class="info" data-tip="Requires a selection. Copies the selection to a new 50000 × 50000mm document, outlines text, sets cutfile fills/strokes, fits the artboard with room, and adds file/material labels.">i</span>
+        </button>
+        <button class="btn danger" id="btnMakeLaserCutfile" type="button">
+          <span class="btnText">Make Laser Cutfile</span>
+          <span class="info" data-tip="Requires a selection. Copies the selection to a new 5000 × 5000mm document, scales it to 10%, outlines text, sets cutfile fills/strokes, fits the artboard with room, and adds file/material labels.">i</span>
+        </button>
+      </div>
+
       <button class="btn" id="btnAddPathText" type="button">
         <span class="btnText">Add file path label to artboards</span>
         <span class="info" data-tip="Adds a centered label near the top of each artboard showing the current file path. Width=60% of artboard, offset=5mm. Text scales to the field width.">i</span>
@@ -900,6 +922,14 @@
         <span class="btnText">Set fills/strokes</span>
         <span class="info" data-tip="Sets all fills to none and all strokes to 1px black across the document.">i</span>
       </button>
+
+      <details class="card" style="margin-top:auto;">
+        <summary class="cardTitle">Dev mode</summary>
+        <label class="chk" for="cutfileDisableActiveTick" style="margin-top:10px;">
+          <input id="cutfileDisableActiveTick" type="checkbox">
+          <span>Turn off active tick</span>
+        </label>
+      </details>
     </section>
 
     <!-- TAB: DIMENSIONS -->
