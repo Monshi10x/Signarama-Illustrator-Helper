@@ -8822,9 +8822,11 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   var sel = sourceDoc.selection;
   if(!sel || !sel.length) return 'No selection. Select artwork for the ' + kind + ' cutfile.';
 
-  var sourceItems = [];
-  for(var si = 0; si < sel.length; si++) sourceItems.push(sel[si]);
+  var sourceCount = sel.length;
   var filePath = _srh_cutfileGetSourceFilePath(sourceDoc);
+  try {sourceDoc.activate();} catch(_eCfAct0) { }
+  try {app.copy();} catch(_eCfCopy0) {return 'Error: Could not copy selection to the clipboard for the ' + kind + ' cutfile document.';}
+
   var initialSizePt = _srh_mm2pt(initialSizeMm);
   var targetDoc = null;
   try {
@@ -8834,13 +8836,25 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   }
   if(!targetDoc) return 'Error: Could not create ' + kind + ' cutfile document.';
 
-  var grp = targetDoc.activeLayer.groupItems.add();
-  grp.name = 'SRH_' + kind + '_Cutfile_Selection';
-  var copied = 0;
-  for(var i = 0; i < sourceItems.length; i++) {
-    try {sourceItems[i].duplicate(grp, ElementPlacement.PLACEATEND); copied++;} catch(_eCfDup0) { }
+  try {targetDoc.activate();} catch(_eCfAct1) { }
+  try {app.paste();} catch(_eCfPaste0) {return 'Error: Could not paste selection into the ' + kind + ' cutfile document.';}
+  var pastedSel = targetDoc.selection;
+  if(!pastedSel || !pastedSel.length) return 'Error: Could not copy selection to the ' + kind + ' cutfile document.';
+
+  var grp = null;
+  try {
+    app.executeMenuCommand('group');
+    if(targetDoc.selection && targetDoc.selection.length) grp = targetDoc.selection[0];
+  } catch(_eCfGroup0) {grp = null;}
+  if(!grp || String(grp.typename || '') !== 'GroupItem') {
+    grp = targetDoc.activeLayer.groupItems.add();
+    var pastedItems = [];
+    try {for(var pi = 0; pi < pastedSel.length; pi++) pastedItems.push(pastedSel[pi]);} catch(_eCfItems0) { }
+    for(var mi = 0; mi < pastedItems.length; mi++) {
+      try {pastedItems[mi].move(grp, ElementPlacement.PLACEATEND);} catch(_eCfMoveItem0) { }
+    }
   }
-  if(!copied) return 'Error: Could not copy selection to the ' + kind + ' cutfile document.';
+  grp.name = 'SRH_' + kind + '_Cutfile_Selection';
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel0) { }
   if(scalePercent && Math.abs(scalePercent - 100) > 0.001) {
@@ -8874,7 +8888,7 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', labelMargin, totalH - labelMargin - (_srh_mm2pt(10) / sf), Math.max(1, totalW - labelMargin * 2), materialSize, Justification.LEFT);
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
-  return 'Created ' + kind + ' cutfile from ' + copied + ' selected item(s). Artboard fitted with labels.';
+  return 'Created ' + kind + ' cutfile from ' + sourceCount + ' selected item(s). Artboard fitted with labels.';
 }
 
 function signarama_helper_makeRouterCutfile() {
