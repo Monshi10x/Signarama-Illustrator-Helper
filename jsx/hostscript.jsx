@@ -8795,11 +8795,10 @@ function _srh_cutfileAddFittedPointText(doc, contents, x, y, targetWidth, sizePt
       var w = b[2] - b[0];
       if(!(w > 0) || !(targetWidth > 0)) break;
       var factor = targetWidth / w;
-      if(factor > 1) factor = Math.min(factor, 1.6);
       var curSize = Number(tf.textRange.characterAttributes.size || sizePt);
       var nextSize = curSize * factor;
       if(nextSize < 4) nextSize = 4;
-      if(nextSize > sizePt * 1.6) nextSize = sizePt * 1.6;
+      if(nextSize > 20000) nextSize = 20000;
       tf.textRange.characterAttributes.size = nextSize;
       if(Math.abs(factor - 1) < 0.03) break;
     }
@@ -8835,6 +8834,7 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
     try {targetDoc = app.documents.add(DocumentColorSpace.CMYK, initialSizePt, initialSizePt);} catch(_eCfDoc1) {targetDoc = null;}
   }
   if(!targetDoc) return 'Error: Could not create ' + kind + ' cutfile document.';
+  try {targetDoc.rulerUnits = RulerUnits.Millimeters;} catch(_eCfUnits0) { }
 
   try {targetDoc.activate();} catch(_eCfAct1) { }
   try {app.paste();} catch(_eCfPaste0) {return 'Error: Could not paste selection into the ' + kind + ' cutfile document.';}
@@ -8868,23 +8868,24 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   if(!b) return kind + ' cutfile created, but could not read copied artwork bounds.';
   var sf = _srh_getScaleFactor();
   if(!(sf > 0)) sf = 1;
-  var margin = _srh_mm2pt(10) / sf;
   var labelBand = _srh_mm2pt(30) / sf;
   var minW = _srh_mm2pt(120) / sf;
   var artW = b.right - b.left;
   var artH = b.top - b.bottom;
-  var totalW = Math.max(artW + margin * 2, minW);
-  var totalH = Math.max(artH + margin * 2 + labelBand, _srh_mm2pt(80) / sf);
+  var marginX = artW * 0.10;
+  var marginY = artH * 0.10;
+  var totalW = Math.max(artW * 1.20, minW);
+  var totalH = Math.max((artH * 1.20) + labelBand, _srh_mm2pt(80) / sf);
   try {targetDoc.artboards[0].artboardRect = [0, totalH, totalW, 0];} catch(_eCfAb0) { }
 
-  var desiredLeft = margin + ((totalW - (artW + margin * 2)) / 2);
-  var desiredTop = totalH - labelBand - margin;
+  var desiredLeft = marginX + ((totalW - (artW + marginX * 2)) / 2);
+  var desiredTop = totalH - labelBand - marginY;
   try {grp.translate(desiredLeft - b.left, desiredTop - b.top);} catch(_eCfMove0) { }
 
   var labelMargin = _srh_mm2pt(4) / sf;
   var fileSize = _srh_ptDoc(11);
   var materialSize = _srh_ptDoc(14);
-  _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - labelMargin, Math.max(1, totalW - labelMargin * 2), fileSize, Justification.CENTER);
+  _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - labelMargin, Math.max(1, totalW), fileSize, Justification.CENTER);
   _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', labelMargin, totalH - labelMargin - (_srh_mm2pt(10) / sf), Math.max(1, totalW - labelMargin * 2), materialSize, Justification.LEFT);
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
