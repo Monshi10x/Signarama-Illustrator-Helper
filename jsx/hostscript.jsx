@@ -11478,10 +11478,18 @@ function _srh_conceptOutlineTextInItem(item) {
 
 function _srh_conceptRunOutlineStrokeMenuAction() {
   // Illustrator's Object > Path > Outline Stroke menu action is exposed to
-  // ExtendScript as "Live Outline Stroke". Keep the older label as a fallback
-  // only for hosts that may alias it.
-  try {app.executeMenuCommand('Live Outline Stroke'); return true;} catch(_eCosLive0) { }
-  try {app.executeMenuCommand('Outline Stroke'); return true;} catch(_eCosLabel0) { }
+  // ExtendScript as "Live Outline Stroke". Follow it immediately with
+  // expandStyle so the outlined stroke is finalized as standard filled shapes.
+  try {
+    app.executeMenuCommand('Live Outline Stroke');
+    try {app.executeMenuCommand('expandStyle');} catch(_eCosExpand0) { }
+    return true;
+  } catch(_eCosLive0) { }
+  try {
+    app.executeMenuCommand('Outline Stroke');
+    try {app.executeMenuCommand('expandStyle');} catch(_eCosExpand1) { }
+    return true;
+  } catch(_eCosLabel0) { }
   return false;
 }
 
