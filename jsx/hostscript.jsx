@@ -11449,6 +11449,74 @@ function _srh_conceptDistortItem(item, src, dst) {
   return 0;
 }
 
+function _srh_conceptReadOptions(opts) {
+  if(typeof opts === 'boolean') return {autoOutlineStroke: false, autoOutlineText: false, autoGroup: false, includeStroke: !!opts};
+  opts = opts || {};
+  return {
+    autoOutlineStroke: (typeof opts.autoOutlineStroke === 'undefined') ? true : !!opts.autoOutlineStroke,
+    autoOutlineText: (typeof opts.autoOutlineText === 'undefined') ? true : !!opts.autoOutlineText,
+    autoGroup: (typeof opts.autoGroup === 'undefined') ? true : !!opts.autoGroup,
+    includeStroke: !!opts.includeStroke
+  };
+}
+
+function _srh_conceptOutlineTextInItem(item) {
+  if(!item) return 0;
+  var tn = '';
+  try {tn = String(item.typename || '');} catch(_eCot0) {tn = '';}
+  if(tn === 'TextFrame') {
+    try {item.createOutline(); return 1;} catch(_eCot1) {return 0;}
+  }
+  var count = 0;
+  try {
+    if(item.pageItems && item.pageItems.length) {
+      for(var i = item.pageItems.length - 1; i >= 0; i--) count += _srh_conceptOutlineTextInItem(item.pageItems[i]);
+    }
+  } catch(_eCot2) { }
+  return count;
+}
+
+function _srh_conceptRunOutlineStrokeMenuAction() {
+  // Illustrator's Object > Path > Outline Stroke menu action is exposed to
+  // ExtendScript as "Live Outline Stroke". Follow it immediately with
+  // expandStyle so the outlined stroke is finalized as standard filled shapes.
+  try {
+    app.executeMenuCommand('Live Outline Stroke');
+    try {app.executeMenuCommand('expandStyle');} catch(_eCosExpand0) { }
+    return true;
+  } catch(_eCosLive0) { }
+  try {
+    app.executeMenuCommand('Outline Stroke');
+    try {app.executeMenuCommand('expandStyle');} catch(_eCosExpand1) { }
+    return true;
+  } catch(_eCosLabel0) { }
+  return false;
+}
+
+function _srh_conceptPreflightSelection(doc, opts) {
+  var notes = [];
+  if(opts.autoOutlineStroke) {
+    if(_srh_conceptRunOutlineStrokeMenuAction()) notes.push('outlined strokes');
+  }
+  if(opts.autoOutlineText) {
+    var outlinedText = 0;
+    try {
+      var selText = doc.selection;
+      for(var t = selText.length - 1; t >= 0; t--) outlinedText += _srh_conceptOutlineTextInItem(selText[t]);
+    } catch(_eCpot0) { }
+    if(outlinedText) notes.push('outlined text');
+  }
+  if(opts.autoGroup) {
+    try {
+      if(doc.selection && doc.selection.length > 1) {
+        app.executeMenuCommand('group');
+        notes.push('grouped artwork');
+      }
+    } catch(_eCpog0) { }
+  }
+  return notes;
+}
+
 
 function signarama_helper_concept_beginFourPointClickCapture() {
   if(!app.documents.length) return 'No open document.';
@@ -11487,25 +11555,30 @@ function signarama_helper_concept_captureFourPointClickPath() {
   return 'Captured 4 clicked document points for Concept 4 point distort.';
 }
 
-function signarama_helper_concept_applyFourPointDistort(includeStroke) {
+function signarama_helper_concept_applyFourPointDistort(options) {
   if(!app.documents.length) return 'No open document.';
   if(!_srh_conceptFourPointTargets || _srh_conceptFourPointTargets.length !== 4) return 'Error: Capture 4 target points first.';
-  includeStroke = !!includeStroke;
+  var opts = _srh_conceptReadOptions(options);
   var doc = app.activeDocument;
   var sel = doc.selection;
   if(!sel || !sel.length) return 'No artwork selected to distort.';
-  var src = _srh_conceptBoundsOfSelection(sel, includeStroke);
-  if(!src) return 'Error: Could not read selected artwork bounds.';
   var changed = 0;
+  var notes = [];
   try {app.beginUndoGroup('SRH Concept 4 point distort');} catch(_eCug0) { }
   try {
+    notes = _srh_conceptPreflightSelection(doc, opts);
+    sel = doc.selection;
+    if(!sel || !sel.length) return 'No artwork selected to distort.';
+    var src = _srh_conceptBoundsOfSelection(sel, opts.includeStroke);
+    if(!src) return 'Error: Could not read selected artwork bounds.';
     for(var i = 0; i < sel.length; i++) changed += _srh_conceptDistortItem(sel[i], src, _srh_conceptFourPointTargets);
   } finally {
     try {app.endUndoGroup();} catch(_eCug1) { }
   }
   if(!changed) return 'Error: No editable vector paths found. Expand text/symbols/images before using 4 point distort.';
   try {app.redraw();} catch(_eCred0) { }
-  return '4 point distort applied to ' + changed + ' path points (' + (includeStroke ? 'including stroke bounds' : 'ignoring stroke bounds') + ').';
+  var suffix = notes.length ? ' Preflight: ' + notes.join(', ') + '.' : '';
+  return '4 point distort applied to ' + changed + ' path points.' + suffix;
 }
 
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_concept_beginFourPointClickCapture = signarama_helper_concept_beginFourPointClickCapture;} catch(_eCexB0) { }
