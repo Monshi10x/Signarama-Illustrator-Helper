@@ -8879,7 +8879,7 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   var marginX = artW * 0.10;
   var marginY = artH * 0.10;
   var totalW = Math.max(artW * 1.20, minW);
-  var labelBand = Math.max(_srh_mm2pt(50) / sf, totalW * 0.18);
+  var labelBand = Math.max(_srh_mm2pt(50) / sf, totalW * 0.24);
   var totalH = Math.max((artH * 1.20) + labelBand, _srh_mm2pt(100) / sf);
   try {targetDoc.artboards[0].artboardRect = [0, totalH, totalW, 0];} catch(_eCfAb0) { }
 
@@ -8889,13 +8889,19 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
 
   var labelLayer = null;
   try {labelLayer = targetDoc.layers.add(); labelLayer.name = _SRH_CUTFILE_LABEL_LAYER_NAME; targetDoc.activeLayer = labelLayer;} catch(_eCfLayer0) {labelLayer = null;}
-  var labelMargin = _srh_mm2pt(4) / sf;
+  var topMargin = totalH * 0.03;
+  var labelGap = totalH * 0.03;
   var fileSize = _srh_ptDoc(11);
   var materialSize = _srh_ptDoc(14);
-  var fileTf = _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - labelMargin, Math.max(1, totalW), fileSize, Justification.CENTER, true);
+  var fileTf = _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - topMargin, Math.max(1, totalW * 0.80), fileSize, Justification.CENTER, true);
   try {fileTf.name = _SRH_CUTFILE_FILE_PATH_TEXT_NAME;} catch(_eCfFileName0) { }
   try {fileTf.note = _SRH_CUTFILE_FILE_PATH_TEXT_NAME;} catch(_eCfFileNote0) { }
-  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', labelMargin, totalH - labelMargin - (_srh_mm2pt(14) / sf), Math.max(1, totalW - labelMargin * 2), materialSize, Justification.LEFT, false);
+  var materialY = totalH - topMargin - labelGap;
+  try {
+    var fileBounds = fileTf.visibleBounds;
+    if(fileBounds && fileBounds.length === 4) materialY = fileBounds[3] - labelGap;
+  } catch(_eCfMatY0) { }
+  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', totalW / 2, materialY, Math.max(1, totalW * 0.10), materialSize, Justification.CENTER, true);
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
   return 'Created ' + kind + ' cutfile from ' + sourceCount + ' selected item(s). Artboard fitted with labels.';
@@ -8907,7 +8913,8 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
   try {ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;} catch(_eCfTickAb0) {ab = null;}
   if(!ab || ab.length !== 4) return false;
   var totalW = ab[2] - ab[0];
-  if(!(totalW > 0)) return false;
+  var totalH = ab[1] - ab[3];
+  if(!(totalW > 0) || !(totalH > 0)) return false;
   var sf = _srh_getScaleFactor();
   if(!(sf > 0)) sf = 1;
   var filePath = _srh_cutfileGetSourceFilePath(doc);
@@ -8919,7 +8926,7 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
       if(!b || b.length !== 4) break;
       var w = b[2] - b[0];
       if(!(w > 0)) break;
-      var factor = totalW / w;
+      var factor = (totalW * 0.80) / w;
       var curSize = Number(tf.textRange.characterAttributes.size || _srh_ptDoc(11));
       var nextSize = curSize * factor;
       if(nextSize < 4) nextSize = 4;
@@ -8930,7 +8937,7 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
   } catch(_eCfTickFit0) { }
   try {
     var nb = tf.visibleBounds;
-    if(nb && nb.length === 4) tf.translate(((ab[0] + ab[2]) / 2) - ((nb[0] + nb[2]) / 2), (ab[1] - (_srh_mm2pt(4) / sf)) - nb[1]);
+    if(nb && nb.length === 4) tf.translate(((ab[0] + ab[2]) / 2) - ((nb[0] + nb[2]) / 2), (ab[1] - (totalH * 0.03)) - nb[1]);
   } catch(_eCfTickMove0) { }
   return true;
 }
