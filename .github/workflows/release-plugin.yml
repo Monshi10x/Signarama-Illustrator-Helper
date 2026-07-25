@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-plugin-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -20,6 +24,8 @@ jobs:
           cache: npm
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci --ignore-scripts
+      - name: Synchronize CEP manifest version
+        run: npm run version:sync
       - run: npm run lint
       - run: npm test
       - run: npm run build
@@ -28,6 +34,32 @@ jobs:
         with:
           name: plugin-candidate
           path: dist/
+
+  increment-version:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Increment patch version
+        run: |
+          npm version patch --no-git-tag-version
+          npm run version:sync
+          npm run lint
+      - name: Commit incremented version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json CSXS/manifest.xml
+          VERSION=$(node -p "require('./package.json').version")
+          git commit -m "chore: increment version to v${VERSION} [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
