@@ -1,13 +1,25 @@
 /* global SignaramaUpdaterUI */
 (function(root) {
   'use strict';
+  function el(id) {return document.getElementById(id);}
+  function log(message, level) {
+    var output = el('updateDevLog');
+    var text = '[' + new Date().toLocaleTimeString() + '] ' + (level || 'INFO') + '  ' + message;
+    if(output) {
+      var lines = output.textContent ? output.textContent.split('\n') : [];
+      lines.push(text); output.textContent = lines.slice(-200).join('\n'); output.scrollTop = output.scrollHeight;
+    }
+    if(root.console) {(level === 'ERROR' && root.console.error ? root.console.error : root.console.log).call(root.console, '[Updater] ' + message);}
+  }
   function init() {
-    if(typeof require !== 'function') return;
+    if(el('btnClearUpdateLog')) el('btnClearUpdateLog').addEventListener('click', function() {if(el('updateDevLog')) el('updateDevLog').textContent = ''; log('Developer log cleared.');});
+    log('Update panel initialising.');
+    if(typeof require !== 'function') {log('Node.js integration is unavailable; the updater cannot start.', 'ERROR'); return;}
     var runtime;
-    try {runtime = require('./js/update/runtime');} catch(_error) {return;}
-    var packageInfo = require('./package.json'), path = require('path');
+    try {runtime = require('./js/update/runtime');} catch(error) {log('Could not load the update runtime: ' + (error && error.message ? error.message : String(error)), 'ERROR'); return;}
+    var packageInfo, path;
+    try {packageInfo = require('./package.json'); path = require('path');} catch(error) {log('Could not read plugin information: ' + (error && error.message ? error.message : String(error)), 'ERROR'); return;}
     var current = null, downloaded = null;
-    function el(id) {return document.getElementById(id);}
     function visible(id, show) {var node = el(id); if(node) node.classList.toggle('hidden', !show);}
     function status(text) {if(el('updateStatus')) el('updateStatus').textContent = text;}
     function actions(available, ready) {
@@ -23,14 +35,16 @@
       visible('updateDetails', true); status('An update is available. Review the release notes before installing major updates.');
     }
     async function check(manual) {
+      log((manual ? 'Manual' : 'Automatic') + ' update check started for version ' + packageInfo.version + '.');
       actions(false, false); status('Checking for updates…'); el('btnCheckUpdates').disabled = true;
       try {
-        var result = await runtime.checkForUpdate(packageInfo.version, manual);
+        var result = await runtime.checkForUpdate(packageInfo.version, manual, function(message) {log(message);});
         if(result.status === 'available') showAvailable(result.manifest);
         else if(result.status === 'current') status('You are using the latest version.');
         else if(result.status === 'not-due') status('The next automatic update check is not due yet.');
         else status('This update has been skipped. Use Check for Updates to show it again.');
-      } catch(error) {status(/rate limit/i.test(error.message) ? 'The update service rate limit was reached. Please try again later.' : 'Unable to reach the update server. The plugin remains available offline.');}
+        log('Update check finished with status: ' + result.status + '.');
+      } catch(error) {log('Update check failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); status(/rate limit/i.test(error.message) ? 'The update service rate limit was reached. Please try again later.' : 'Unable to reach the update server. The plugin remains available offline.');}
       finally {el('btnCheckUpdates').disabled = false;}
     }
     el('updateVersions').textContent = 'Installed ' + packageInfo.version;
@@ -41,15 +55,16 @@
     el('btnUpdateLater').addEventListener('click', function() {actions(false, false); status('Reminder postponed until the next scheduled check.');});
     el('btnSkipUpdate').addEventListener('click', function() {var value = runtime.readPreferences(); value.ignoredVersion = current.version; runtime.writePreferences(value); actions(false, false); status('Version ' + current.version + ' will be skipped.');});
     el('btnUpdateNow').addEventListener('click', async function() {
+      log('Download requested for version ' + current.version + '.');
       actions(false, false); visible('updateProgress', true); status('Downloading update…');
       try {
         downloaded = await runtime.downloadUpdate(current, function(received, total) {el('updateProgress').value = total ? Math.min(100, received / total * 100) : 0; status('Downloading update… ' + received + (total ? ' / ' + total + ' bytes' : ' bytes'));});
-        visible('updateProgress', false); actions(false, true); status('The update is ready to install. Illustrator must restart.');
-      } catch(error) {visible('updateProgress', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
+        visible('updateProgress', false); actions(false, true); status('The update is ready to install. Illustrator must restart.'); log('Download completed and passed SHA-256 verification.');
+      } catch(error) {log('Update download failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); visible('updateProgress', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
     });
     el('btnInstallUpdate').addEventListener('click', function() {
-      try {var extensionPath = root.__adobe_cep__ ? decodeURI(root.__adobe_cep__.getSystemPath('extension')).replace(/^file:\/\//, '') : path.resolve(__dirname); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.');}
-      catch(_error) {status('Installation handoff failed. Nothing was replaced.');}
+      try {log('Handing the verified package to the installer.'); var extensionPath = root.__adobe_cep__ ? decodeURI(root.__adobe_cep__.getSystemPath('extension')).replace(/^file:\/\//, '') : path.resolve(__dirname); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.'); log('Installer started; waiting for Illustrator to close.');}
+      catch(error) {log('Installation handoff failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); status('Installation handoff failed. Nothing was replaced.');}
     });
     setTimeout(function() {check(false);}, 1500);
   }
