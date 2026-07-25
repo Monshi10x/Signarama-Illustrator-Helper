@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const vm = require('vm');
 const {execFileSync} = require('child_process');
 const semver = require('../js/update/semver');
 const manifest = require('../js/update/manifest');
@@ -61,4 +62,39 @@ test('failed replacement restores the existing installation and external setting
   execFileSync('zip', ['-q', '-r', zip, '.'], {cwd: source});
   await assert.rejects(updater.install({installPath: install, packagePath: zip, installedVersion: '1.0.0', targetVersion: '2.0.0', pluginId: 'com.signarama.helper'}, {beforeReplacement: () => {throw new Error('simulated replacement failure');}}));
   assert.equal(fs.readFileSync(path.join(install, 'index.html'), 'utf8'), 'old'); assert.equal(fs.readFileSync(settings, 'utf8'), '{"preserved":true}');
+});
+
+test('update UI loads modules from the decoded CEP extension path and shows update notification', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'update', 'ui.js'), 'utf8');
+  const listeners = {}, required = []; let scheduled;
+  const elements = new Proxy({}, {get(target, id) {
+    if(!target[id]) target[id] = {addEventListener() {}, classList: {toggle(name, hidden) {if(name === 'hidden') this.hidden = hidden;}, hidden: true}, appendChild() {}, textContent: '', value: '', checked: false, disabled: false};
+    return target[id];
+  }});
+  const runtime = {
+    readPreferences: () => ({automaticUpdatesEnabled: true, updateChannel: 'stable'}),
+    writePreferences() {},
+    checkForUpdate: async () => ({status: 'available', manifest: {version: '1.0.1', publishedAt: '2026-07-25T08:00:00Z', packageSize: 100}})
+  };
+  const context = {
+    document: {getElementById: (id) => elements[id], addEventListener: (name, callback) => {listeners[name] = callback;}},
+    console: {log() {}, error() {}},
+    process: {platform: 'win32'},
+    __dirname: '.',
+    __adobe_cep__: {getSystemPath: () => 'file:///C:/Program%20Files/Adobe/CEP/extensions/Signarama-Illustrator-Helper'},
+    setTimeout(callback) {scheduled = callback;},
+    require(request) {
+      required.push(request);
+      if(request === 'path') return path.win32;
+      if(/runtime\.js$/.test(request)) return runtime;
+      if(/package\.json$/.test(request)) return {version: '1.0.0'};
+      throw new Error('Unexpected require: ' + request);
+    }
+  };
+  vm.runInNewContext(source, context); listeners.DOMContentLoaded();
+  assert.ok(required.includes('C:\\Program Files\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper\\js\\update\\runtime.js'));
+  assert.ok(required.includes('C:\\Program Files\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper\\package.json'));
+  scheduled();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements.updateNotification.classList.hidden, false);
 });

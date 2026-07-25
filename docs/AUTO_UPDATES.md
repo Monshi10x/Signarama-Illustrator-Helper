@@ -42,11 +42,11 @@ At most ten update log files are retained. Logs contain non-sensitive status and
 
 ## Versions, builds, and releases
 
-`package.json` is the version source of truth. `npm run lint` rejects a mismatch with both CEP version attributes. Keep `package.json` and `CSXS/manifest.xml` synchronized when bumping a version:
+`package.json` is the version source of truth. `npm run lint` rejects a mismatch with both CEP version attributes. Every validated push to `main` or `master` automatically increments the patch version, synchronizes both CEP manifest attributes, and commits the result with `[skip ci]`. The repository must allow GitHub Actions write access to the protected branch. For a manual version change, keep the files synchronized with:
 
 ```bash
 npm version patch --no-git-tag-version
-# Update both version attributes in CSXS/manifest.xml to the same value.
+npm run version:sync
 npm run lint
 npm test
 npm run build
