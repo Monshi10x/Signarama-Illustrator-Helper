@@ -11,14 +11,24 @@
     }
     if(root.console) {(level === 'ERROR' && root.console.error ? root.console.error : root.console.log).call(root.console, '[Updater] ' + message);}
   }
+  function extensionDirectory(path) {
+    var directory = root.__adobe_cep__ ? root.__adobe_cep__.getSystemPath('extension') : __dirname;
+    directory = decodeURI(directory);
+    if(/^file:\/\//i.test(directory)) directory = process.platform === 'win32' ? directory.replace(/^file:\/\/\/?/i, '') : directory.replace(/^file:\/\//i, '');
+    return path.resolve(directory);
+  }
   function init() {
     if(el('btnClearUpdateLog')) el('btnClearUpdateLog').addEventListener('click', function() {if(el('updateDevLog')) el('updateDevLog').textContent = ''; log('Developer log cleared.');});
     log('Update panel initialising.');
     if(typeof require !== 'function') {log('Node.js integration is unavailable; the updater cannot start.', 'ERROR'); return;}
-    var runtime;
-    try {runtime = require('./js/update/runtime');} catch(error) {log('Could not load the update runtime: ' + (error && error.message ? error.message : String(error)), 'ERROR'); return;}
-    var packageInfo, path;
-    try {packageInfo = require('./package.json'); path = require('path');} catch(error) {log('Could not read plugin information: ' + (error && error.message ? error.message : String(error)), 'ERROR'); return;}
+    var runtime, packageInfo, path, extensionPath;
+    try {
+      path = require('path');
+      extensionPath = extensionDirectory(path);
+      runtime = require(path.join(extensionPath, 'js', 'update', 'runtime.js'));
+      packageInfo = require(path.join(extensionPath, 'package.json'));
+      log('Update runtime loaded from ' + extensionPath + '.');
+    } catch(error) {log('Could not load the update runtime: ' + (error && error.message ? error.message : String(error)), 'ERROR'); return;}
     var current = null, downloaded = null;
     function visible(id, show) {var node = el(id); if(node) node.classList.toggle('hidden', !show);}
     function status(text) {if(el('updateStatus')) el('updateStatus').textContent = text;}
@@ -63,7 +73,7 @@
       } catch(error) {log('Update download failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); visible('updateProgress', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
     });
     el('btnInstallUpdate').addEventListener('click', function() {
-      try {log('Handing the verified package to the installer.'); var extensionPath = root.__adobe_cep__ ? decodeURI(root.__adobe_cep__.getSystemPath('extension')).replace(/^file:\/\//, '') : path.resolve(__dirname); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.'); log('Installer started; waiting for Illustrator to close.');}
+      try {log('Handing the verified package to the installer.'); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.'); log('Installer started; waiting for Illustrator to close.');}
       catch(error) {log('Installation handoff failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); status('Installation handoff failed. Nothing was replaced.');}
     });
     setTimeout(function() {check(false);}, 1500);
