@@ -42,7 +42,7 @@ At most ten update log files are retained. Logs contain non-sensitive status and
 
 ## Versions, builds, and releases
 
-`package.json` is the version source of truth. `npm run lint` rejects a mismatch with both CEP version attributes. Every validated push to `main` or `master` automatically increments the patch version, synchronizes both CEP manifest attributes, and commits the result with `[skip ci]`. The repository must allow GitHub Actions write access to the protected branch. For a manual version change, keep the files synchronized with:
+`package.json` is the version source of truth. Before validation, CI synchronizes both CEP manifest attributes to it so a previously mismatched branch can recover instead of blocking the version job. `npm run lint` then verifies the synchronized values. Every validated push to `main` or `master` automatically increments the patch version, synchronizes both CEP manifest attributes, and commits the result with `[skip ci]`. The repository must allow GitHub Actions write access to the protected branch. For a manual version change, keep the files synchronized with:
 
 ```bash
 npm version patch --no-git-tag-version
