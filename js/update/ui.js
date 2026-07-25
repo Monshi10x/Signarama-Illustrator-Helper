@@ -38,6 +38,7 @@
     }
     function showAvailable(manifest) {
       current = manifest; actions(true, false);
+      visible('updateNotification', true);
       el('updateVersions').textContent = 'Installed ' + packageInfo.version + ' · Available ' + manifest.version;
       var size = manifest.packageSize ? (manifest.packageSize / 1048576).toFixed(1) + ' MB' : 'Size unavailable';
       el('updateDetails').textContent = 'Published ' + new Date(manifest.publishedAt).toLocaleDateString() + ' · ' + size;
@@ -50,7 +51,7 @@
       try {
         var result = await runtime.checkForUpdate(packageInfo.version, manual, function(message) {log(message);});
         if(result.status === 'available') showAvailable(result.manifest);
-        else if(result.status === 'current') status('You are using the latest version.');
+        else if(result.status === 'current') {visible('updateNotification', false); status('You are using the latest version.');}
         else if(result.status === 'not-due') status('The next automatic update check is not due yet.');
         else status('This update has been skipped. Use Check for Updates to show it again.');
         log('Update check finished with status: ' + result.status + '.');
@@ -63,7 +64,7 @@
     el('automaticUpdatesEnabled').addEventListener('change', savePrefs); el('updateChannel').addEventListener('change', savePrefs);
     el('btnCheckUpdates').addEventListener('click', function() {check(true);});
     el('btnUpdateLater').addEventListener('click', function() {actions(false, false); status('Reminder postponed until the next scheduled check.');});
-    el('btnSkipUpdate').addEventListener('click', function() {var value = runtime.readPreferences(); value.ignoredVersion = current.version; runtime.writePreferences(value); actions(false, false); status('Version ' + current.version + ' will be skipped.');});
+    el('btnSkipUpdate').addEventListener('click', function() {var value = runtime.readPreferences(); value.ignoredVersion = current.version; runtime.writePreferences(value); actions(false, false); visible('updateNotification', false); status('Version ' + current.version + ' will be skipped.');});
     el('btnUpdateNow').addEventListener('click', async function() {
       log('Download requested for version ' + current.version + '.');
       actions(false, false); visible('updateProgress', true); status('Downloading update…');

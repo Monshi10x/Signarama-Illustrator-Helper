@@ -64,20 +64,25 @@ test('failed replacement restores the existing installation and external setting
   assert.equal(fs.readFileSync(path.join(install, 'index.html'), 'utf8'), 'old'); assert.equal(fs.readFileSync(settings, 'utf8'), '{"preserved":true}');
 });
 
-test('update UI loads modules from the decoded CEP extension path', () => {
+test('update UI loads modules from the decoded CEP extension path and shows update notification', async () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'js', 'update', 'ui.js'), 'utf8');
-  const listeners = {}, required = [], elements = new Proxy({}, {get(target, id) {
-    if(!target[id]) target[id] = {addEventListener() {}, classList: {toggle() {}}, textContent: '', value: '', checked: false, disabled: false};
+  const listeners = {}, required = []; let scheduled;
+  const elements = new Proxy({}, {get(target, id) {
+    if(!target[id]) target[id] = {addEventListener() {}, classList: {toggle(name, hidden) {if(name === 'hidden') this.hidden = hidden;}, hidden: true}, appendChild() {}, textContent: '', value: '', checked: false, disabled: false};
     return target[id];
   }});
-  const runtime = {readPreferences: () => ({automaticUpdatesEnabled: true, updateChannel: 'stable'}), writePreferences() {}};
+  const runtime = {
+    readPreferences: () => ({automaticUpdatesEnabled: true, updateChannel: 'stable'}),
+    writePreferences() {},
+    checkForUpdate: async () => ({status: 'available', manifest: {version: '1.0.1', publishedAt: '2026-07-25T08:00:00Z', packageSize: 100}})
+  };
   const context = {
     document: {getElementById: (id) => elements[id], addEventListener: (name, callback) => {listeners[name] = callback;}},
     console: {log() {}, error() {}},
     process: {platform: 'win32'},
     __dirname: '.',
     __adobe_cep__: {getSystemPath: () => 'file:///C:/Program%20Files/Adobe/CEP/extensions/Signarama-Illustrator-Helper'},
-    setTimeout() {},
+    setTimeout(callback) {scheduled = callback;},
     require(request) {
       required.push(request);
       if(request === 'path') return path.win32;
@@ -89,4 +94,7 @@ test('update UI loads modules from the decoded CEP extension path', () => {
   vm.runInNewContext(source, context); listeners.DOMContentLoaded();
   assert.ok(required.includes('C:\\Program Files\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper\\js\\update\\runtime.js'));
   assert.ok(required.includes('C:\\Program Files\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper\\package.json'));
+  scheduled();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements.updateNotification.classList.hidden, false);
 });

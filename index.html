@@ -28,6 +28,7 @@
     .brand-title { font-weight:800; }
     .tabs { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid #333; background:#161616; flex-wrap:wrap; }
     .tab {
+      position:relative;
       appearance:none;
       border:1px solid #333;
       background:#202020;
@@ -37,6 +38,18 @@
       font-size:12px;
       font-weight:700;
       cursor:pointer;
+    }
+    .update-notification {
+      position:absolute;
+      top:-6px;
+      right:-5px;
+      width:10px;
+      height:10px;
+      border:2px solid #161616;
+      border-radius:50%;
+      background:#ffcc00;
+      box-shadow:0 0 5px rgba(255,204,0,.8);
+      pointer-events:none;
     }
     .tab.active {
       background:var(--signarama-red);
@@ -717,7 +730,7 @@
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
     <button class="tab" data-tab="tab-nest" type="button">Nest</button>
-    <button class="tab" data-tab="tab-updates" type="button">Updates</button>
+    <button class="tab" data-tab="tab-updates" type="button">Updates<span id="updateNotification" class="update-notification hidden" aria-label="Update available" role="status"></span></button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
 
