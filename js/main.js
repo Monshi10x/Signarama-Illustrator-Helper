@@ -233,6 +233,7 @@
     const settings = {};
     $all('input[id], select[id], textarea[id]').forEach((el) => {
       if(!el || !el.id) return;
+      if(el.id === 'automaticUpdatesEnabled' || el.id === 'updateChannel') return;
       if(el.id === 'dimensionThemeProfileSelect') return;
       const type = (el.type || '').toLowerCase();
       if(type === 'checkbox' || type === 'radio') settings[el.id] = !!el.checked;
@@ -249,6 +250,7 @@
     try {
       Object.keys(settings).forEach((key) => {
         if(key === '__activeTab') return;
+        if(key === 'automaticUpdatesEnabled' || key === 'updateChannel') return;
         if(key === 'dimensionThemeProfileSelect') return;
         const el = $(key);
         if(!el) return;
@@ -284,6 +286,7 @@
     schedulePanelSettingsSave = scheduleSave;
 
     $all('input[id], select[id], textarea[id]').forEach((el) => {
+      if(el.id === 'automaticUpdatesEnabled' || el.id === 'updateChannel') return;
       el.addEventListener('input', scheduleSave);
       el.addEventListener('change', scheduleSave);
     });
