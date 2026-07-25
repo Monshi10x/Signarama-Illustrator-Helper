@@ -24,6 +24,8 @@ jobs:
           cache: npm
       - run: npm install --package-lock-only --ignore-scripts
       - run: npm ci --ignore-scripts
+      - name: Synchronize CEP manifest version
+        run: npm run version:sync
       - run: npm run lint
       - run: npm test
       - run: npm run build
