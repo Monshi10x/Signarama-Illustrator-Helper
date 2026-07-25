@@ -25,7 +25,10 @@
       <DispatchInfo>
         <Resources>
           <MainPath>./index.html</MainPath>
-          <CEFCommandLine/>
+          <CEFCommandLine>
+            <!-- Required only for the isolated updater modules and local file verification. -->
+            <Parameter>--enable-nodejs</Parameter>
+          </CEFCommandLine>
         </Resources>
         <Lifecycle>
           <AutoVisible>true</AutoVisible>

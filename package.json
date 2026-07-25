@@ -1,0 +1,15 @@
+{
+  "name": "signarama-illustrator-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Signarama Helper CEP extension for Adobe Illustrator",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "lint": "node scripts/validate-release.js",
+    "build": "node scripts/build.js",
+    "package": "node scripts/package-plugin.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
