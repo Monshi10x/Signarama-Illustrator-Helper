@@ -335,6 +335,24 @@
     .update-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .update-actions .btn2 { flex:1 1 140px; }
     .update-progress { width:100%; height:8px; accent-color:var(--signarama-red); }
+    .update-log {
+      box-sizing:border-box;
+      width:100%;
+      min-height:132px;
+      max-height:240px;
+      margin:0;
+      padding:10px;
+      overflow:auto;
+      border:1px solid #3c3c3c;
+      border-radius:4px;
+      background:#181818;
+      color:#d8d8d8;
+      font:11px/1.5 Consolas, "Courier New", monospace;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      user-select:text;
+    }
+    .update-log:empty::before { content:"No update activity yet."; color:#888; }
     .corebridge-fetch-status {
       display:none;
       align-items:center;
@@ -1757,6 +1775,13 @@
         <label class="chk"><input id="automaticUpdatesEnabled" type="checkbox" checked><span>Check automatically every 24 hours</span></label>
         <label class="fld" style="margin-top:10px;"><span>Channel</span><select id="updateChannel"><option value="stable">Stable</option><option value="beta">Beta (experimental)</option></select></label>
         <div class="small" style="margin-top:10px;">Updates are downloaded only from the project's GitHub Releases and are SHA-256 verified before installation.</div>
+      </div>
+      <div class="card">
+        <div class="cardHead">
+          <div><div class="cardTitle">Developer log</div><div class="small">Live update actions and error details for troubleshooting.</div></div>
+          <button id="btnClearUpdateLog" class="btn2" type="button">Clear</button>
+        </div>
+        <pre id="updateDevLog" class="update-log" role="log" aria-live="polite" aria-relevant="additions"></pre>
       </div>
     </section>
 
