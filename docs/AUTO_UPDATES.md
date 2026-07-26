@@ -42,11 +42,11 @@ At most ten update log files are retained. Logs contain non-sensitive status and
 
 ## Versions, builds, and releases
 
-`package.json` is the version source of truth. `npm run lint` rejects a mismatch with both CEP version attributes. Keep `package.json` and `CSXS/manifest.xml` synchronized when bumping a version:
+`package.json` is the version source of truth. Before validation, CI synchronizes both CEP manifest attributes to it so a previously mismatched branch can recover instead of blocking the version job. `npm run lint` then verifies the synchronized values. Every validated push to `main` or `master` automatically increments the patch version, synchronizes both CEP manifest attributes, commits the result with `[skip ci]`, tags that commit, and publishes a stable GitHub Release containing the updater assets. The repository must allow GitHub Actions write access to the protected branch. For a manual version change, keep the files synchronized with:
 
 ```bash
 npm version patch --no-git-tag-version
-# Update both version attributes in CSXS/manifest.xml to the same value.
+npm run version:sync
 npm run lint
 npm test
 npm run build
@@ -58,7 +58,7 @@ git push origin HEAD
 git push origin --tags
 ```
 
-The tag workflow installs from `package-lock.json`, lints, tests, builds, packages, computes SHA-256, generates `update.json`, uploads candidate artifacts, and attaches the ZIP, manifest, and `SHA256SUMS` to the GitHub Release. It uses only the repository-scoped `GITHUB_TOKEN`; no custom secret is required. Configure Actions with **Read and write permissions** for repository contents. Protect `main`/`master` and require the validation job. Branch pushes build a candidate but never publish stable.
+The automatic branch workflow and the manual tag workflow build, package, compute SHA-256, generate `update.json`, and attach the ZIP, manifest, and `SHA256SUMS` to a GitHub Release. The extension discovers versions from these published releases—not from branch files or version-only commits. The workflows use only the repository-scoped `GITHUB_TOKEN`; no custom secret is required. Configure Actions with **Read and write permissions** for repository contents and releases. Protect `main`/`master` while allowing this workflow to push its version commit and tag.
 
 For a beta, set a SemVer prerelease in both version locations (for example `1.1.0-beta.1`), commit, and tag it exactly:
 

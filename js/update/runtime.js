@@ -62,23 +62,30 @@ async function json(url) {
   for await (const chunk of response) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
-async function checkForUpdate(installedVersion, manual) {
+async function checkForUpdate(installedVersion, manual, onActivity) {
+  const activity = typeof onActivity === 'function' ? onActivity : () => {};
   const prefs = readPreferences(), now = Date.now();
-  if(!manual && (!prefs.automaticUpdatesEnabled || (prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) return {status: 'not-due'};
+  activity('Reading update preferences (' + prefs.updateChannel + ' channel).');
+  if(!manual && (!prefs.automaticUpdatesEnabled || (prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) {activity('Automatic check is not due.'); return {status: 'not-due'};}
   let releases;
-  try {releases = await json(API); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
+  activity('Requesting releases from api.github.com.');
+  try {releases = await json(API); activity('Received ' + releases.length + ' published release' + (releases.length === 1 ? '' : 's') + '.'); if(!releases.length) activity('No GitHub Releases are published. Branch version changes are not downloadable updates.'); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
   catch(error) {logEvent('check-failed', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'failed', errorCode: 'CHECK_FAILED', message: error.message}); throw error;}
   prefs.lastCheckedAt = new Date().toISOString(); writePreferences(prefs);
   for(const release of releases) {
     if(release.draft || (prefs.updateChannel === 'stable' && release.prerelease)) continue;
     const asset = (release.assets || []).find((item) => item.name === 'update.json');
     if(!asset) continue;
+    activity('Inspecting update manifest for ' + (release.tag_name || release.name || 'release') + '.');
     const candidate = await json(asset.browser_download_url);
     const checked = manifestUtil.validate(candidate, {pluginId: PLUGIN_ID, pluginType: 'cep', owner: OWNER, repository: REPOSITORY});
-    if(!checked.valid || !semver.isNewer(candidate.version, installedVersion)) continue;
+    if(!checked.valid) {activity('Ignored an invalid update manifest: ' + checked.errors.join(', ') + '.'); continue;}
+    if(!semver.isNewer(candidate.version, installedVersion)) {activity('Version ' + candidate.version + ' is not newer than installed version ' + installedVersion + '.'); continue;}
     if(!manual && prefs.ignoredVersion === candidate.version && !candidate.mandatory) return {status: 'ignored'};
+    activity('Update ' + candidate.version + ' is available.');
     return {status: 'available', manifest: candidate};
   }
+  activity('No newer compatible release was found.');
   return {status: 'current'};
 }
 async function downloadUpdate(manifest, onProgress) {
