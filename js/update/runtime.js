@@ -122,12 +122,12 @@ async function downloadUpdate(manifest, onProgress) {
 async function launchUpdater(packagePath, manifest, installPath) {
   const configPath = path.join(ensureDirectories(), 'updates', 'pending-update.json');
   fs.writeFileSync(configPath, JSON.stringify({packagePath, installPath, installedVersion: require('../../package.json').version, targetVersion: manifest.version, pluginId: PLUGIN_ID}, null, 2), {mode: 0o600});
-  const updaterPath = path.join(__dirname, 'updater.js');
+  const updaterPath = path.join(__dirname, process.platform === 'win32' ? 'updater.ps1' : 'updater.js');
   let child, elevated = false;
   if(requiresElevation(installPath)) {
     const quote = (value) => String(value).replace(/'/g, "''");
-    const command = `Start-Process -FilePath '${quote(process.execPath)}' -ArgumentList @('${quote(updaterPath)}','${quote(configPath)}') -Verb RunAs -PassThru | Select-Object -ExpandProperty Id`;
-    logEvent('updater-elevation-requested', {targetVersion: manifest.version, executable: process.execPath});
+    const command = `Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','"${quote(updaterPath)}"','"${quote(configPath)}"') -Verb RunAs -PassThru | Select-Object -ExpandProperty Id`;
+    logEvent('updater-elevation-requested', {targetVersion: manifest.version, executable: 'powershell.exe', updaterPath});
     child = spawn('powershell.exe', ['-NoProfile', '-Command', command], {windowsHide: false});
     elevated = true;
     let output = '', errors = '';
@@ -140,7 +140,7 @@ async function launchUpdater(packagePath, manifest, installPath) {
         else reject(new Error(errors.trim() || 'Windows elevation was cancelled or failed (exit ' + code + ')'));
       });
     }).catch((error) => {logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}); throw error;});
-    logEvent('updater-launched', {targetVersion: manifest.version, executable: process.execPath, elevationRequested: true, processId: +(output.trim()) || null});
+    logEvent('updater-launched', {targetVersion: manifest.version, executable: 'powershell.exe', updaterPath, elevationRequested: true, processId: +(output.trim()) || null});
   } else {
     child = spawn(process.execPath, [updaterPath, configPath], {detached: true, stdio: 'ignore'});
     child.on('error', (error) => logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}));
