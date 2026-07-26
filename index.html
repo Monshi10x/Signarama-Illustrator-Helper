@@ -1314,6 +1314,13 @@
     <!-- TAB: COREBRIDGE -->
     <section id="tab-corebridge" class="wrap hidden" role="tabpanel">
       <div class="corebridge-primary">
+        <label class="fld" style="margin-top:10px;">
+          <span>Fetched path</span>
+          <select id="corebridgeProxyBaseUrl">
+            <option value="http://localhost:8080">http://localhost:8080</option>
+            <option value="https://signschedulerapp.ts.r.appspot.com">https://signschedulerapp.ts.r.appspot.com</option>
+          </select>
+        </label>
         <div class="grid2" style="margin-top:10px;">
           <label class="fld">
             <span>Job number</span>
@@ -1601,6 +1608,10 @@
           <div class="cardTitle">Document Colours</div>
           <span class="info" data-tip="Lists unique vector colours. Change a picker to update items using the previous colour.">i</span>
         </div>
+        <div id="coloursScanProgressWrap" class="hidden" style="margin-bottom:10px;">
+          <div id="coloursScanProgressText" class="small">Scanning objects: 0 / 0</div>
+          <progress id="coloursScanProgress" class="update-progress" max="1" value="0"></progress>
+        </div>
         <div id="coloursList" class="wrap" style="padding:0;"></div>
         <div class="row" style="margin-top:10px;">
           <button id="btnRefreshColours" class="btn2" type="button">Refresh Colours</button>
@@ -1609,6 +1620,19 @@
         <div id="coloursCount" class="small" style="margin-top:8px;">Document colours: 0</div>
         <div id="colourModeBanner" style="display:none; margin-top:12px; padding:8px 10px; border-radius:8px; background:#b00020; color:#fff; font-size:12px; font-weight:600;">
           Current document colour mode is RGB
+        </div>
+        <div style="margin-top:12px;">
+          <button id="btnColourSettings" class="btn2" type="button" aria-expanded="false" aria-controls="colourSettingsPanel">Colour Settings</button>
+        </div>
+        <div id="colourSettingsPanel" class="hidden" style="margin-top:10px; padding:10px; border:1px solid #333; border-radius:8px; background:#151515;">
+          <div class="small" style="margin-bottom:8px;">Rich black target (CMYK)</div>
+          <div class="grid2">
+            <label class="fld">Cyan<input id="richBlackC" type="number" min="0" max="100" step="0.1" value="60"></label>
+            <label class="fld">Magenta<input id="richBlackM" type="number" min="0" max="100" step="0.1" value="60"></label>
+            <label class="fld">Yellow<input id="richBlackY" type="number" min="0" max="100" step="0.1" value="60"></label>
+            <label class="fld">Black<input id="richBlackK" type="number" min="0" max="100" step="0.1" value="100"></label>
+          </div>
+          <div class="small" style="margin-top:8px;">Used by the rich-black warning and fix button.</div>
         </div>
       </div>
     </section>

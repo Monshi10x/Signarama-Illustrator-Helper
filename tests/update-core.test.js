@@ -50,6 +50,54 @@ test('Windows installer displays each operator-facing update phase', () => {
   assert.match(script, /Update failed:/);
 });
 
+test('colour scan ignores group containers and exposes chunk progress', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  assert.match(script, /item\.typename !== "GroupItem"/);
+  assert.match(script, /signarama_helper_stepDocumentColorScan/);
+  assert.match(script, /position:state\.position, total:state\.total/);
+  assert.doesNotMatch(script, /if\(it\.typename === "GroupItem"\) \{\s*_srh_walkPageItems\(it, cb\)/);
+});
+
+test('colour rows support copy, paste, and deferred rich-black repair', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  assert.match(script, /copyButton\.textContent = 'Copy'/);
+  assert.match(script, /pasteButton\.textContent = 'Paste'/);
+  assert.match(script, /Colour values pasted\. Click Apply to update the document\./);
+  assert.match(script, /Rich black values populated \('/);
+  assert.doesNotMatch(script, /applyValues\(\(\) => \{showToast\('Rich black updated/);
+});
+
+test('colour settings control the rich-black target and paste compatibility', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  for(const id of ['richBlackC', 'richBlackM', 'richBlackY', 'richBlackK']) assert.match(html, new RegExp('id="' + id + '"'));
+  assert.match(script, /getRichBlackTarget\(\)/);
+  assert.match(script, /btn\.dataset\.colourMode !== copiedColourValues\.mode/);
+  assert.match(script, /label\.style\.flex = '0 0 46px'/);
+});
+
+test('lightboxes use the visible view center and Proofs exposes fixed fetch hosts', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  assert.match(host, /var viewCenter = doc\.views\[0\]\.centerPoint/);
+  assert.match(html, /<select id="corebridgeProxyBaseUrl">/);
+  assert.match(html, /value="http:\/\/localhost:8080"/);
+  assert.match(html, /value="https:\/\/signschedulerapp\.ts\.r\.appspot\.com"/);
+  assert.match(main, /function corebridgeProxyBaseUrl\(\)/);
+  assert.doesNotMatch(main, /const corebridgeProxyBaseUrl =/);
+});
+
+test('LED and letter layouts use viewport center and lightbox measures exclude strokes', () => {
+  const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  assert.match(host, /function _srh_getViewportCenter/);
+  assert.match(host, /var viewCenter2 = _getViewCenter\(doc\)/);
+  assert.match(host, /var targetCenter = _srh_getViewportCenter\(doc, activeRect\)/);
+  assert.match(host, /runGroups\[tg\]\.translate\(dx,dy\)/);
+  assert.match(host, /Lightbox dimensions describe the path geometry, never the stroke extents/);
+  assert.match(host, /try \{b = item\.geometricBounds;\}/);
+});
+
 test('release selection respects stable and beta channels', () => {
   const releases = [{version: '3.0.0', draft: true, hasRequiredAsset: true}, {version: '2.0.0-beta.1', prerelease: true, hasRequiredAsset: true}, {version: '1.5.0', hasRequiredAsset: false}, {version: '1.4.0', hasRequiredAsset: true}, {version: '0.9.0', hasRequiredAsset: true}];
   assert.equal(manifest.selectRelease(releases, '1.0.0', 'stable').version, '1.4.0');
