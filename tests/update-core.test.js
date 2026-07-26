@@ -58,6 +58,15 @@ test('colour scan ignores group containers and exposes chunk progress', () => {
   assert.doesNotMatch(script, /if\(it\.typename === "GroupItem"\) \{\s*_srh_walkPageItems\(it, cb\)/);
 });
 
+test('colour rows support copy, paste, and deferred rich-black repair', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  assert.match(script, /copyButton\.textContent = 'Copy'/);
+  assert.match(script, /pasteButton\.textContent = 'Paste'/);
+  assert.match(script, /Colour values pasted\. Click Apply to update the document\./);
+  assert.match(script, /Rich black values populated\. Click Apply to update the document\./);
+  assert.doesNotMatch(script, /applyValues\(\(\) => \{showToast\('Rich black updated/);
+});
+
 test('release selection respects stable and beta channels', () => {
   const releases = [{version: '3.0.0', draft: true, hasRequiredAsset: true}, {version: '2.0.0-beta.1', prerelease: true, hasRequiredAsset: true}, {version: '1.5.0', hasRequiredAsset: false}, {version: '1.4.0', hasRequiredAsset: true}, {version: '0.9.0', hasRequiredAsset: true}];
   assert.equal(manifest.selectRelease(releases, '1.0.0', 'stable').version, '1.4.0');

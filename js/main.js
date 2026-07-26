@@ -184,6 +184,7 @@
   let corebridgeFlashTickPollInFlight = false;
   let coloursPendingApplyFns = [];
   let coloursHasPendingChanges = false;
+  let copiedColourValues = null;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -4021,6 +4022,27 @@
           row.appendChild(swatch);
           row.appendChild(label);
           inputWraps.forEach(w => row.appendChild(w));
+          const copyButton = document.createElement('button');
+          copyButton.type = 'button'; copyButton.className = 'btn2'; copyButton.textContent = 'Copy';
+          copyButton.title = 'Copy this row colour values'; copyButton.style.padding = '3px 7px'; copyButton.style.flex = '0 0 auto';
+          copyButton.addEventListener('click', () => {
+            copiedColourValues = {mode: colourEditState.mode, values: inputs.map(inp => inp.value)};
+            Array.prototype.forEach.call(list.querySelectorAll('[data-colour-paste]'), btn => {btn.disabled = false;});
+            showToast('Colour values copied.', {type:'success', title:'Colours'});
+          });
+          const pasteButton = document.createElement('button');
+          pasteButton.type = 'button'; pasteButton.className = 'btn2'; pasteButton.textContent = 'Paste';
+          pasteButton.title = 'Paste copied colour values into this row'; pasteButton.style.padding = '3px 7px'; pasteButton.style.flex = '0 0 auto';
+          pasteButton.setAttribute('data-colour-paste', 'true');
+          pasteButton.disabled = !copiedColourValues || copiedColourValues.mode !== colourEditState.mode;
+          pasteButton.addEventListener('click', () => {
+            if(!copiedColourValues || copiedColourValues.mode !== colourEditState.mode) {showToast('Copy a colour from this document mode first.', {type:'warn', title:'Colours'}); return;}
+            inputs.forEach((inp, idx) => {if(copiedColourValues.values[idx] != null) inp.value = copiedColourValues.values[idx];});
+            markRowDirty(); previewSwatch();
+            showToast('Colour values pasted. Click Apply to update the document.', {type:'success', title:'Colours'});
+          });
+          row.appendChild(copyButton);
+          row.appendChild(pasteButton);
           if(showBlackHazard) {
             const hazard = document.createElement('span');
             hazard.textContent = '\u26A0';
@@ -4038,8 +4060,8 @@
               fix.style.padding = '2px 6px'; fix.style.minWidth = '28px'; fix.style.flex = '0 0 auto';
               fix.addEventListener('click', () => {
                 inputs[0].value = '60'; inputs[1].value = '60'; inputs[2].value = '60'; inputs[3].value = '100';
-                previewSwatch();
-                applyValues(() => {showToast('Rich black updated to C60 M60 Y60 K100.', {type:'success', title:'Colours'}); refreshColours();});
+                markRowDirty(); previewSwatch();
+                showToast('Rich black values populated. Click Apply to update the document.', {type:'success', title:'Colours'});
               });
               row.appendChild(fix);
             }
