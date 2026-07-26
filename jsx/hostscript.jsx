@@ -602,7 +602,8 @@ function _srh_walkPageItems(container, cb) {
     var it = items[i];
     if(!it) continue;
     if(it.typename === "GroupItem") {
-      _srh_walkPageItems(it, cb);
+      // Document/layer pageItems is flat; group descendants appear separately.
+      // Ignore the container so each real artwork object is visited only once.
       continue;
     }
     if(it.typename === "CompoundPathItem") {
@@ -732,6 +733,57 @@ function signarama_helper_getDocumentColors() {
   } catch(_eFallback) { }
 
   return JSON.stringify({colors: list, debug: debug, mode: mode});
+}
+
+var _srhColourScanState = null;
+function _srh_colourScanAdd(color, typeLabel) {
+  var state = _srhColourScanState;
+  if(!state || !color || color.typename === "NoColor" || color.typename === "GradientColor" || color.typename === "PatternColor") return;
+  var typeKey = typeLabel || "fill";
+  if(state.mode === "RGB") {
+    var rgb = _srh_colorToRgb(color), rgbKey = rgb ? _srh_rgbKey(rgb) : "", rgbComposite = rgbKey + "|" + typeKey;
+    if(!rgbKey || state.seen[rgbComposite]) return;
+    state.seen[rgbComposite] = true;
+    state.list.push({key:rgbKey, type:typeKey, hex:_srh_rgbToHex(rgb), r:_srh_round(rgb.r,2), g:_srh_round(rgb.g,2), b:_srh_round(rgb.b,2), label:typeKey.toUpperCase()+"  "+_srh_rgbLabel(rgb)});
+    return;
+  }
+  var cmyk = _srh_colorToCmyk(color), key = cmyk ? _srh_colorKey(cmyk) : "", composite = key + "|" + typeKey;
+  if(!key || state.seen[composite]) return;
+  state.seen[composite] = true;
+  state.list.push({key:key, type:typeKey, hex:_srh_cmykToHex(cmyk), c:_srh_round(cmyk.c,2), m:_srh_round(cmyk.m,2), y:_srh_round(cmyk.y,2), k:_srh_round(cmyk.k,2), label:typeKey.toUpperCase()+"  "+_srh_cmykLabel(cmyk)});
+}
+function signarama_helper_beginDocumentColorScan() {
+  if(!app.documents.length) return JSON.stringify({done:true, position:0, total:0, colors:[], mode:"CMYK"});
+  var doc = app.activeDocument, items = [];
+  // document.pageItems is already a flat collection. Ignore group containers so
+  // descendants are not visited once through the group and again in the document.
+  for(var i=0; i<doc.pageItems.length; i++) {
+    var item = doc.pageItems[i];
+    if(item && item.typename !== "GroupItem") items.push(item);
+  }
+  _srhColourScanState = {items:items, position:0, total:items.length, seen:{}, list:[], mode:doc.documentColorSpace === DocumentColorSpace.RGB ? "RGB" : "CMYK", pathItems:0, textFrames:0, scanned:0};
+  return JSON.stringify({done:items.length===0, position:0, total:items.length, mode:_srhColourScanState.mode, colors:items.length ? null : []});
+}
+function signarama_helper_stepDocumentColorScan(batchSize) {
+  var state = _srhColourScanState;
+  if(!state) return JSON.stringify({error:"Colour scan was not started."});
+  var end = Math.min(state.total, state.position + Math.max(1, Number(batchSize)||100));
+  for(; state.position<end; state.position++) {
+    var it = state.items[state.position];
+    if(!it || it.typename === "RasterItem" || it.typename === "PlacedItem") continue;
+    try {if(it.locked || it.hidden || (it.layer && (it.layer.locked || !it.layer.visible))) continue;} catch(_eScanVisibility) { }
+    if(it.typename === "PathItem") {
+      state.pathItems++; try {if(it.filled) _srh_colourScanAdd(it.fillColor,"fill");} catch(_eScanFill) {} try {if(it.stroked) _srh_colourScanAdd(it.strokeColor,"stroke");} catch(_eScanStroke) {} state.scanned++;
+    } else if(it.typename === "CompoundPathItem") {
+      for(var p=0; p<it.pathItems.length; p++) {var pi=it.pathItems[p]; try {if(pi.filled) _srh_colourScanAdd(pi.fillColor,"fill");} catch(_eCpf) {} try {if(pi.stroked) _srh_colourScanAdd(pi.strokeColor,"stroke");} catch(_eCps) {}} state.scanned++;
+    } else if(it.typename === "TextFrame") {
+      state.textFrames++; try {var tr=it.textRange.characterAttributes; _srh_colourScanAdd(tr.fillColor,"fill"); _srh_colourScanAdd(tr.strokeColor,"stroke");} catch(_eScanText) {} state.scanned++;
+    }
+  }
+  var done = state.position >= state.total;
+  var result = {done:done, position:state.position, total:state.total, mode:state.mode};
+  if(done) {result.colors=state.list; result.debug={totalItems:state.total, scanned:state.scanned, pathItems:state.pathItems, textFrames:state.textFrames, fallbackUsed:false}; _srhColourScanState=null;}
+  return JSON.stringify(result);
 }
 
 function signarama_helper_getDocumentColorMode() {

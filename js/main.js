@@ -184,6 +184,7 @@
   let corebridgeFlashTickPollInFlight = false;
   let coloursPendingApplyFns = [];
   let coloursHasPendingChanges = false;
+  let copiedColourValues = null;
   let isLargeArtboard = false;
   let refreshLightboxArtboardScaleNotice = null;
   let activateTabFn = null;
@@ -3683,11 +3684,15 @@
         banner.textContent = 'Current document colour mode is RGB';
       }
 
-      callJSX('signarama_helper_getDocumentColors()', function(res) {
+      const progressWrap = $('coloursScanProgressWrap');
+      const progressBar = $('coloursScanProgress');
+      const progressText = $('coloursScanProgressText');
+      if(progressWrap) progressWrap.classList.remove('hidden');
+      function scanStep(command) { callJSX(command, function(res) {
         if(!res) {
           log('Colours: no response from JSX.');
           if(showToastOnComplete) showToast('No response from colour scan.', {type: 'warn', title: 'Refresh colours'});
-          return;
+          if(progressWrap) progressWrap.classList.add('hidden'); return;
         }
         let data = null;
         let debug = null;
@@ -3699,7 +3704,13 @@
         if(!data) {
           log('Colours raw response: ' + res);
           if(showToastOnComplete) showToast('Failed to parse colour scan response.', {type: 'error', title: 'Refresh colours'});
-          return;
+          if(progressWrap) progressWrap.classList.add('hidden'); return;
+        }
+        if(data && typeof data.position === 'number') {
+          if(progressBar) {progressBar.max = Math.max(1, data.total || 0); progressBar.value = data.position || 0;}
+          if(progressText) progressText.textContent = 'Scanning objects: ' + (data.position || 0) + ' / ' + (data.total || 0);
+          if(!data.done) {setTimeout(() => scanStep('signarama_helper_stepDocumentColorScan(125)'), 0); return;}
+          if(progressWrap) progressWrap.classList.add('hidden');
         }
         if(data && data.colors && Array.isArray(data.colors)) {
           debug = data.debug || null;
@@ -4011,6 +4022,27 @@
           row.appendChild(swatch);
           row.appendChild(label);
           inputWraps.forEach(w => row.appendChild(w));
+          const copyButton = document.createElement('button');
+          copyButton.type = 'button'; copyButton.className = 'btn2'; copyButton.textContent = 'Copy';
+          copyButton.title = 'Copy this row colour values'; copyButton.style.padding = '3px 7px'; copyButton.style.flex = '0 0 auto';
+          copyButton.addEventListener('click', () => {
+            copiedColourValues = {mode: colourEditState.mode, values: inputs.map(inp => inp.value)};
+            Array.prototype.forEach.call(list.querySelectorAll('[data-colour-paste]'), btn => {btn.disabled = false;});
+            showToast('Colour values copied.', {type:'success', title:'Colours'});
+          });
+          const pasteButton = document.createElement('button');
+          pasteButton.type = 'button'; pasteButton.className = 'btn2'; pasteButton.textContent = 'Paste';
+          pasteButton.title = 'Paste copied colour values into this row'; pasteButton.style.padding = '3px 7px'; pasteButton.style.flex = '0 0 auto';
+          pasteButton.setAttribute('data-colour-paste', 'true');
+          pasteButton.disabled = !copiedColourValues || copiedColourValues.mode !== colourEditState.mode;
+          pasteButton.addEventListener('click', () => {
+            if(!copiedColourValues || copiedColourValues.mode !== colourEditState.mode) {showToast('Copy a colour from this document mode first.', {type:'warn', title:'Colours'}); return;}
+            inputs.forEach((inp, idx) => {if(copiedColourValues.values[idx] != null) inp.value = copiedColourValues.values[idx];});
+            markRowDirty(); previewSwatch();
+            showToast('Colour values pasted. Click Apply to update the document.', {type:'success', title:'Colours'});
+          });
+          row.appendChild(copyButton);
+          row.appendChild(pasteButton);
           if(showBlackHazard) {
             const hazard = document.createElement('span');
             hazard.textContent = '\u26A0';
@@ -4021,6 +4053,18 @@
             hazard.style.marginLeft = '2px';
             hazard.style.flex = '0 0 auto';
             row.appendChild(hazard);
+            if(colourEditState.mode === 'CMYK') {
+              const fix = document.createElement('button');
+              fix.type = 'button'; fix.className = 'btn2'; fix.textContent = '\u2692';
+              fix.title = 'Fix rich black to C60 M60 Y60 K100';
+              fix.style.padding = '2px 6px'; fix.style.minWidth = '28px'; fix.style.flex = '0 0 auto';
+              fix.addEventListener('click', () => {
+                inputs[0].value = '60'; inputs[1].value = '60'; inputs[2].value = '60'; inputs[3].value = '100';
+                markRowDirty(); previewSwatch();
+                showToast('Rich black values populated. Click Apply to update the document.', {type:'success', title:'Colours'});
+              });
+              row.appendChild(fix);
+            }
           }
           list.appendChild(row);
         });
@@ -4062,7 +4106,8 @@
             try {nextFocus.select();} catch(_eSel3) { }
           }
         }
-      });
+      }); }
+      scanStep('signarama_helper_beginDocumentColorScan()');
     });
   }
 
