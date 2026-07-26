@@ -3,7 +3,7 @@
   if(typeof module === 'object' && module.exports) module.exports = api;
   else root.SignaramaUpdateManifest = api;
 }(this, function(semver) {
-  var ALLOWED_HOSTS = ['github.com', 'api.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com'];
+  var ALLOWED_HOSTS = ['github.com', 'api.github.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com', 'release-assets.githubusercontent.com'];
   function httpsUrl(value, allowedHosts) {
     try {
       var parsed = new URL(value);
