@@ -18,6 +18,10 @@ function dataRoot() {
   const base = process.platform === 'win32' ? (process.env.APPDATA || os.homedir()) : path.join(os.homedir(), 'Library', 'Application Support');
   return path.join(base, 'Signarama', 'Illustrator Helper');
 }
+function requiresElevation(installPath, platform) {
+  const targetPlatform = platform || process.platform;
+  return targetPlatform === 'win32' && /^[a-z]:\\program files(?: \(x86\))?\\/i.test(path.win32.resolve(installPath));
+}
 function ensureDirectories() {
   const root = dataRoot();
   ['downloads', 'staging', 'backups', 'logs'].forEach((name) => fs.mkdirSync(path.join(root, 'updates', name), {recursive: true}));
@@ -28,6 +32,16 @@ function logEvent(event, details) {
   const files = fs.readdirSync(dir).filter((name) => /\.jsonl$/.test(name)).sort().reverse();
   files.slice(10).forEach((name) => {try {fs.unlinkSync(path.join(dir, name));} catch(_ignore) {}});
   fs.appendFileSync(path.join(dir, new Date().toISOString().slice(0, 10) + '.jsonl'), JSON.stringify(Object.assign({timestamp: new Date().toISOString(), event}, details || {})) + '\n');
+}
+function recentLogEvents(limit) {
+  const dir = path.join(ensureDirectories(), 'updates', 'logs');
+  const files = fs.readdirSync(dir).filter((name) => /\.jsonl$/.test(name)).sort().reverse();
+  const events = [];
+  for(const file of files) {
+    const lines = fs.readFileSync(path.join(dir, file), 'utf8').split(/\r?\n/).filter(Boolean).reverse();
+    for(const line of lines) {try {events.push(JSON.parse(line));} catch(_ignore) {} if(events.length >= (limit || 20)) return events.reverse();}
+  }
+  return events.reverse();
 }
 function preferencesPath() {return path.join(ensureDirectories(), 'update-preferences.json');}
 function readPreferences() {
@@ -62,23 +76,31 @@ async function json(url) {
   for await (const chunk of response) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
-async function checkForUpdate(installedVersion, manual) {
+async function checkForUpdate(installedVersion, manual, onActivity, force) {
+  const activity = typeof onActivity === 'function' ? onActivity : () => {};
   const prefs = readPreferences(), now = Date.now();
-  if(!manual && (!prefs.automaticUpdatesEnabled || (prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) return {status: 'not-due'};
+  activity('Reading update preferences (' + prefs.updateChannel + ' channel).');
+  if(!manual && (!prefs.automaticUpdatesEnabled || (!force && prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) {activity('Automatic check is not due.'); return {status: 'not-due'};}
   let releases;
-  try {releases = await json(API); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
+  activity('Requesting releases from ' + API + '.');
+  try {releases = await json(API); activity('Received ' + releases.length + ' published release' + (releases.length === 1 ? '' : 's') + '.'); if(!releases.length) activity('No GitHub Releases are published. Branch version changes are not downloadable updates.'); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
   catch(error) {logEvent('check-failed', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'failed', errorCode: 'CHECK_FAILED', message: error.message}); throw error;}
   prefs.lastCheckedAt = new Date().toISOString(); writePreferences(prefs);
+  if(!releases.length) return {status: 'no-releases'};
   for(const release of releases) {
     if(release.draft || (prefs.updateChannel === 'stable' && release.prerelease)) continue;
     const asset = (release.assets || []).find((item) => item.name === 'update.json');
     if(!asset) continue;
+    activity('Inspecting update manifest for ' + (release.tag_name || release.name || 'release') + '.');
     const candidate = await json(asset.browser_download_url);
     const checked = manifestUtil.validate(candidate, {pluginId: PLUGIN_ID, pluginType: 'cep', owner: OWNER, repository: REPOSITORY});
-    if(!checked.valid || !semver.isNewer(candidate.version, installedVersion)) continue;
+    if(!checked.valid) {activity('The latest release has an invalid update manifest: ' + checked.errors.join(', ') + '.'); return {status: 'invalid-release'};}
+    if(!semver.isNewer(candidate.version, installedVersion)) {activity('Installed version ' + installedVersion + ' is current (latest published version: ' + candidate.version + ').'); return {status: 'current'};}
     if(!manual && prefs.ignoredVersion === candidate.version && !candidate.mandatory) return {status: 'ignored'};
+    activity('Update ' + candidate.version + ' is available.');
     return {status: 'available', manifest: candidate};
   }
+  activity('No compatible published release with update metadata was found.');
   return {status: 'current'};
 }
 async function downloadUpdate(manifest, onProgress) {
@@ -97,11 +119,35 @@ async function downloadUpdate(manifest, onProgress) {
     fs.renameSync(temporary, target); logEvent('download-complete', {targetVersion: manifest.version, downloadDomain: new URL(manifest.downloadUrl).hostname, downloadStatus: 'success', checksumResult: 'verified'}); return target;
   } catch(error) {output.destroy(); try {fs.unlinkSync(temporary);} catch(_ignore) {} logEvent('download-failed', {targetVersion: manifest.version, downloadDomain: new URL(manifest.downloadUrl).hostname, downloadStatus: 'failed', checksumResult: /verification/i.test(error.message) ? 'mismatch' : 'not-verified', errorCode: 'DOWNLOAD_FAILED', message: error.message}); throw error;}
 }
-function launchUpdater(packagePath, manifest, installPath) {
+async function launchUpdater(packagePath, manifest, installPath) {
   const configPath = path.join(ensureDirectories(), 'updates', 'pending-update.json');
   fs.writeFileSync(configPath, JSON.stringify({packagePath, installPath, installedVersion: require('../../package.json').version, targetVersion: manifest.version, pluginId: PLUGIN_ID}, null, 2), {mode: 0o600});
-  const child = spawn(process.execPath, [path.join(__dirname, 'updater.js'), configPath], {detached: true, stdio: 'ignore'});
-  child.unref(); return configPath;
+  const updaterPath = path.join(__dirname, process.platform === 'win32' ? 'updater.ps1' : 'updater.js');
+  let child, elevated = false;
+  if(requiresElevation(installPath)) {
+    const quote = (value) => String(value).replace(/'/g, "''");
+    const command = `Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File','"${quote(updaterPath)}"','"${quote(configPath)}"') -Verb RunAs -PassThru | Select-Object -ExpandProperty Id`;
+    logEvent('updater-elevation-requested', {targetVersion: manifest.version, executable: 'powershell.exe', updaterPath});
+    child = spawn('powershell.exe', ['-NoProfile', '-Command', command], {windowsHide: false});
+    elevated = true;
+    let output = '', errors = '';
+    child.stdout.on('data', (chunk) => {output += chunk.toString();});
+    child.stderr.on('data', (chunk) => {errors += chunk.toString();});
+    await new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if(code === 0) resolve();
+        else reject(new Error(errors.trim() || 'Windows elevation was cancelled or failed (exit ' + code + ')'));
+      });
+    }).catch((error) => {logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}); throw error;});
+    logEvent('updater-launched', {targetVersion: manifest.version, executable: 'powershell.exe', updaterPath, elevationRequested: true, processId: +(output.trim()) || null});
+  } else {
+    child = spawn(process.execPath, [updaterPath, configPath], {detached: true, stdio: 'ignore'});
+    child.on('error', (error) => logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}));
+    logEvent('updater-launched', {targetVersion: manifest.version, executable: process.execPath, elevationRequested: false, processId: child.pid || null});
+    child.unref();
+  }
+  return configPath;
 }
 
-module.exports = {PLUGIN_ID, OWNER, REPOSITORY, dataRoot, readPreferences, writePreferences, checkForUpdate, downloadUpdate, launchUpdater};
+module.exports = {PLUGIN_ID, OWNER, REPOSITORY, dataRoot, requiresElevation, readPreferences, writePreferences, recentLogEvents, checkForUpdate, downloadUpdate, launchUpdater};
