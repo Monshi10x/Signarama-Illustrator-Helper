@@ -119,20 +119,35 @@ async function downloadUpdate(manifest, onProgress) {
     fs.renameSync(temporary, target); logEvent('download-complete', {targetVersion: manifest.version, downloadDomain: new URL(manifest.downloadUrl).hostname, downloadStatus: 'success', checksumResult: 'verified'}); return target;
   } catch(error) {output.destroy(); try {fs.unlinkSync(temporary);} catch(_ignore) {} logEvent('download-failed', {targetVersion: manifest.version, downloadDomain: new URL(manifest.downloadUrl).hostname, downloadStatus: 'failed', checksumResult: /verification/i.test(error.message) ? 'mismatch' : 'not-verified', errorCode: 'DOWNLOAD_FAILED', message: error.message}); throw error;}
 }
-function launchUpdater(packagePath, manifest, installPath) {
+async function launchUpdater(packagePath, manifest, installPath) {
   const configPath = path.join(ensureDirectories(), 'updates', 'pending-update.json');
   fs.writeFileSync(configPath, JSON.stringify({packagePath, installPath, installedVersion: require('../../package.json').version, targetVersion: manifest.version, pluginId: PLUGIN_ID}, null, 2), {mode: 0o600});
   const updaterPath = path.join(__dirname, 'updater.js');
   let child, elevated = false;
   if(requiresElevation(installPath)) {
     const quote = (value) => String(value).replace(/'/g, "''");
-    const command = `Start-Process -FilePath '${quote(process.execPath)}' -ArgumentList @('${quote(updaterPath)}','${quote(configPath)}') -Verb RunAs`;
-    child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {detached: true, stdio: 'ignore'});
+    const command = `Start-Process -FilePath '${quote(process.execPath)}' -ArgumentList @('${quote(updaterPath)}','${quote(configPath)}') -Verb RunAs -PassThru | Select-Object -ExpandProperty Id`;
+    logEvent('updater-elevation-requested', {targetVersion: manifest.version, executable: process.execPath});
+    child = spawn('powershell.exe', ['-NoProfile', '-Command', command], {windowsHide: false});
     elevated = true;
-  } else child = spawn(process.execPath, [updaterPath, configPath], {detached: true, stdio: 'ignore'});
-  child.on('error', (error) => logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}));
-  logEvent('updater-launched', {targetVersion: manifest.version, executable: process.execPath, elevationRequested: elevated, processId: child.pid || null});
-  child.unref(); return configPath;
+    let output = '', errors = '';
+    child.stdout.on('data', (chunk) => {output += chunk.toString();});
+    child.stderr.on('data', (chunk) => {errors += chunk.toString();});
+    await new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if(code === 0) resolve();
+        else reject(new Error(errors.trim() || 'Windows elevation was cancelled or failed (exit ' + code + ')'));
+      });
+    }).catch((error) => {logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}); throw error;});
+    logEvent('updater-launched', {targetVersion: manifest.version, executable: process.execPath, elevationRequested: true, processId: +(output.trim()) || null});
+  } else {
+    child = spawn(process.execPath, [updaterPath, configPath], {detached: true, stdio: 'ignore'});
+    child.on('error', (error) => logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}));
+    logEvent('updater-launched', {targetVersion: manifest.version, executable: process.execPath, elevationRequested: false, processId: child.pid || null});
+    child.unref();
+  }
+  return configPath;
 }
 
 module.exports = {PLUGIN_ID, OWNER, REPOSITORY, dataRoot, requiresElevation, readPreferences, writePreferences, recentLogEvents, checkForUpdate, downloadUpdate, launchUpdater};
