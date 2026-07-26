@@ -10506,12 +10506,22 @@ function _srh_setLightboxItemTag(item, role, lightboxId) {
 function _srh_getItemBounds(item) {
   if(!item) return null;
   var b = null;
-  try {b = item.visibleBounds;} catch(_e0) { }
+  // Lightbox dimensions describe the path geometry, never the stroke extents.
+  try {b = item.geometricBounds;} catch(_e0) { }
   if(!b || b.length !== 4) {
-    try {b = item.geometricBounds;} catch(_e1) {b = null;}
+    try {b = item.visibleBounds;} catch(_e1) {b = null;}
   }
   if(!b || b.length !== 4) return null;
   return {left: b[0], top: b[1], right: b[2], bottom: b[3]};
+}
+
+function _srh_getViewportCenter(doc, fallbackRect) {
+  var center = [(fallbackRect[0] + fallbackRect[2]) / 2, (fallbackRect[1] + fallbackRect[3]) / 2];
+  try {
+    var viewCenter = doc.views[0].centerPoint;
+    if(viewCenter && viewCenter.length >= 2 && isFinite(Number(viewCenter[0])) && isFinite(Number(viewCenter[1]))) center = [Number(viewCenter[0]), Number(viewCenter[1])];
+  } catch(_eViewportCenter) { }
+  return center;
 }
 
 function _srh_buildLightboxSignature(bounds, supportCenters) {
@@ -10674,15 +10684,9 @@ function signarama_helper_createLightbox(jsonStr) {
   var lightboxId = _srh_generateLightboxId();
 
   var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // fallback [L,T,R,B]
-  var centerX = (ab[0] + ab[2]) / 2;
-  var centerY = (ab[1] + ab[3]) / 2;
-  try {
-    var viewCenter = doc.views[0].centerPoint;
-    if(viewCenter && viewCenter.length >= 2 && isFinite(Number(viewCenter[0])) && isFinite(Number(viewCenter[1]))) {
-      centerX = Number(viewCenter[0]);
-      centerY = Number(viewCenter[1]);
-    }
-  } catch(_eLightboxViewCenter) { }
+  var viewportCenter = _srh_getViewportCenter(doc, ab);
+  var centerX = viewportCenter[0];
+  var centerY = viewportCenter[1];
   var left = centerX - (w / 2);
   var top = centerY + (h / 2);
 
@@ -10820,8 +10824,9 @@ function signarama_helper_createLightboxWithLedPanel(jsonStr) {
   var ledOffsetMm = Number(opts.ledOffsetMm || 0);
   if(wMm > 0 && hMm > 0 && ledOffsetMm > 0) {
     var ab = app.activeDocument.artboards[app.activeDocument.artboards.getActiveArtboardIndex()].artboardRect;
-    var centerX = (ab[0] + ab[2]) / 2;
-    var centerY = (ab[1] + ab[3]) / 2;
+    var viewportCenter = _srh_getViewportCenter(app.activeDocument, ab);
+    var centerX = viewportCenter[0];
+    var centerY = viewportCenter[1];
     var wPt = _srh_mm2ptDoc(wMm);
     var hPt = _srh_mm2ptDoc(hMm);
     var ledOffsetPt = _srh_mm2ptDoc(ledOffsetMm);
@@ -10929,15 +10934,19 @@ function signarama_helper_drawLedLayout(jsonStr) {
     var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
     return {left: ab[0], top: ab[1], right: ab[2], bottom: ab[3]};
   }
+  function _getViewCenter(doc) {
+    var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
+    return _srh_getViewportCenter(doc, ab);
+  }
 
   function _getTargetBounds(doc) {
     if(boundsOverridePt && boundsOverridePt.left != null) {
       return [boundsOverridePt];
     }
     if(forceBounds && (layoutWidthMm > 0) && (layoutHeightMm > 0)) {
-      var ab = _getArtboardBounds(doc);
-      var centerX = (ab.left + ab.right) / 2;
-      var centerY = (ab.top + ab.bottom) / 2;
+      var viewCenter = _getViewCenter(doc);
+      var centerX = viewCenter[0];
+      var centerY = viewCenter[1];
       var wPt = _srh_mm2ptDoc(layoutWidthMm);
       var hPt = _srh_mm2ptDoc(layoutHeightMm);
       return {
@@ -10950,9 +10959,9 @@ function signarama_helper_drawLedLayout(jsonStr) {
     var selBounds = ignoreSelection ? [] : _getSelectionBounds(doc);
     if(selBounds && selBounds.length) return selBounds;
     if((layoutWidthMm > 0) && (layoutHeightMm > 0)) {
-      var ab2 = _getArtboardBounds(doc);
-      var cx = (ab2.left + ab2.right) / 2;
-      var cy = (ab2.top + ab2.bottom) / 2;
+      var viewCenter2 = _getViewCenter(doc);
+      var cx = viewCenter2[0];
+      var cy = viewCenter2[1];
       var wPt2 = _srh_mm2ptDoc(layoutWidthMm);
       var hPt2 = _srh_mm2ptDoc(layoutHeightMm);
       return [{
@@ -11472,6 +11481,9 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   var ledLayer = _srh_getOrCreateLayer(doc, 'Letter Layout LEDs');
   var lineLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Center Lines');
   var groupLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Groups');
+  var ledRunGroup = ledLayer.groupItems.add();
+  var lineRunGroup = lineLayer.groupItems.add();
+  var labelRunGroup = groupLayer.groupItems.add();
   var tempLayer = _srh_getOrCreateLayer(doc, '__SRH Letter Layout Temp');
   try {tempLayer.locked = false;} catch(_eLlt0) { }
   try {tempLayer.visible = true;} catch(_eLlt1) { }
@@ -11538,7 +11550,7 @@ function signarama_helper_drawLetterLayout(jsonStr) {
           for(var dist = 0; dist <= pathLen + 0.0001; dist += centerSpacingPt) {
             var sample = _srh_letter_pointAndTangentAtDistance(poly, dist);
             if(!sample) continue;
-            _srh_letter_drawModule(ledLayer, lineLayer, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red);
+            _srh_letter_drawModule(ledRunGroup, lineRunGroup, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red);
             pathPlaced++;
             totalPlaced++;
             if(groupBounds === null) {
@@ -11553,7 +11565,7 @@ function signarama_helper_drawLetterLayout(jsonStr) {
 
           if(groupBounds && pathPlaced > 0) {
             try {
-              var label = groupLayer.textFrames.pointText([(groupBounds.left + groupBounds.right) * 0.5, groupBounds.bottom - _srh_mm2ptDoc(5)]);
+              var label = labelRunGroup.textFrames.pointText([(groupBounds.left + groupBounds.right) * 0.5, groupBounds.bottom - _srh_mm2ptDoc(5)]);
               label.contents = pathPlaced + ' LEDs';
               try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eLlt4) { }
               try {label.textRange.characterAttributes.size = _srh_ptDoc(10);} catch(_eLlt5) { }
@@ -11573,6 +11585,24 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   try {tempLayer.locked = false;} catch(_eLlt8a) { }
   try {tempLayer.visible = true;} catch(_eLlt8b) { }
   try {tempLayer.remove();} catch(_eLlt8) { }
+  if(totalPlaced > 0) {
+    var runBounds = null;
+    var runGroups = [ledRunGroup, lineRunGroup, labelRunGroup];
+    for(var rg=0; rg<runGroups.length; rg++) {
+      var rgb = null;
+      try {rgb = runGroups[rg].geometricBounds;} catch(_eRunBounds) {rgb = null;}
+      if(!rgb || rgb.length !== 4) continue;
+      if(!runBounds) runBounds = {left:rgb[0], top:rgb[1], right:rgb[2], bottom:rgb[3]};
+      else {if(rgb[0]<runBounds.left) runBounds.left=rgb[0]; if(rgb[1]>runBounds.top) runBounds.top=rgb[1]; if(rgb[2]>runBounds.right) runBounds.right=rgb[2]; if(rgb[3]<runBounds.bottom) runBounds.bottom=rgb[3];}
+    }
+    if(runBounds) {
+      var activeRect = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
+      var targetCenter = _srh_getViewportCenter(doc, activeRect);
+      var dx = targetCenter[0] - ((runBounds.left + runBounds.right) / 2);
+      var dy = targetCenter[1] - ((runBounds.top + runBounds.bottom) / 2);
+      for(var tg=0; tg<runGroups.length; tg++) {try {runGroups[tg].translate(dx,dy);} catch(_eRunMove) { }}
+    }
+  }
   _srh_bringLayerToFront(lineLayer);
   _srh_bringLayerToFront(ledLayer);
   _srh_bringLayerToFront(groupLayer);
