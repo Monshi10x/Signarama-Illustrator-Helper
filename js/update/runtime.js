@@ -72,6 +72,7 @@ async function checkForUpdate(installedVersion, manual, onActivity) {
   try {releases = await json(API); activity('Received ' + releases.length + ' published release' + (releases.length === 1 ? '' : 's') + '.'); if(!releases.length) activity('No GitHub Releases are published. Branch version changes are not downloadable updates.'); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
   catch(error) {logEvent('check-failed', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'failed', errorCode: 'CHECK_FAILED', message: error.message}); throw error;}
   prefs.lastCheckedAt = new Date().toISOString(); writePreferences(prefs);
+  if(!releases.length) return {status: 'no-releases'};
   for(const release of releases) {
     if(release.draft || (prefs.updateChannel === 'stable' && release.prerelease)) continue;
     const asset = (release.assets || []).find((item) => item.name === 'update.json');

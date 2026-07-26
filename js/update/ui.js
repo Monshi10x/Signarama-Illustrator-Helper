@@ -52,6 +52,7 @@
         var result = await runtime.checkForUpdate(packageInfo.version, manual, function(message) {log(message);});
         if(result.status === 'available') showAvailable(result.manifest);
         else if(result.status === 'current') {visible('updateNotification', false); status('You are using the latest version.');}
+        else if(result.status === 'no-releases') status('No published GitHub Release is available. A branch version or tag alone cannot be installed.');
         else if(result.status === 'not-due') status('The next automatic update check is not due yet.');
         else status('This update has been skipped. Use Check for Updates to show it again.');
         log('Update check finished with status: ' + result.status + '.');

@@ -58,7 +58,7 @@ git push origin HEAD
 git push origin --tags
 ```
 
-The automatic branch workflow and the manual tag workflow build, package, compute SHA-256, generate `update.json`, and attach the ZIP, manifest, and `SHA256SUMS` to a GitHub Release. The extension discovers versions from these published releases—not from branch files or version-only commits. The workflows use only the repository-scoped `GITHUB_TOKEN`; no custom secret is required. Configure Actions with **Read and write permissions** for repository contents and releases. Protect `main`/`master` while allowing this workflow to push its version commit and tag.
+The automatic branch workflow and the manual tag workflow build, package, compute SHA-256, generate `update.json`, and attach the ZIP, manifest, and `SHA256SUMS` to a GitHub Release. The automatic workflow lets the release action create the tag only when it publishes the release, avoiding orphan version tags when packaging fails. It then queries the same unauthenticated GitHub API used by the extension and fails unless the release is publicly discoverable, non-draft, stable, and contains all updater assets. The extension discovers versions from these published releases—not from branch files or version-only commits. The repository itself must be public because the installed extension intentionally contains no GitHub credential. The workflows use only the repository-scoped `GITHUB_TOKEN`; no custom secret is required. Configure Actions with **Read and write permissions** for repository contents and releases. Protect `main`/`master` while allowing this workflow to push its version commit.
 
 For a beta, set a SemVer prerelease in both version locations (for example `1.1.0-beta.1`), commit, and tag it exactly:
 
