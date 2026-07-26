@@ -76,11 +76,11 @@ async function json(url) {
   for await (const chunk of response) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
-async function checkForUpdate(installedVersion, manual, onActivity) {
+async function checkForUpdate(installedVersion, manual, onActivity, force) {
   const activity = typeof onActivity === 'function' ? onActivity : () => {};
   const prefs = readPreferences(), now = Date.now();
   activity('Reading update preferences (' + prefs.updateChannel + ' channel).');
-  if(!manual && (!prefs.automaticUpdatesEnabled || (prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) {activity('Automatic check is not due.'); return {status: 'not-due'};}
+  if(!manual && (!prefs.automaticUpdatesEnabled || (!force && prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) {activity('Automatic check is not due.'); return {status: 'not-due'};}
   let releases;
   activity('Requesting releases from ' + API + '.');
   try {releases = await json(API); activity('Received ' + releases.length + ' published release' + (releases.length === 1 ? '' : 's') + '.'); if(!releases.length) activity('No GitHub Releases are published. Branch version changes are not downloadable updates.'); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
@@ -94,13 +94,13 @@ async function checkForUpdate(installedVersion, manual, onActivity) {
     activity('Inspecting update manifest for ' + (release.tag_name || release.name || 'release') + '.');
     const candidate = await json(asset.browser_download_url);
     const checked = manifestUtil.validate(candidate, {pluginId: PLUGIN_ID, pluginType: 'cep', owner: OWNER, repository: REPOSITORY});
-    if(!checked.valid) {activity('Ignored an invalid update manifest: ' + checked.errors.join(', ') + '.'); continue;}
-    if(!semver.isNewer(candidate.version, installedVersion)) {activity('Version ' + candidate.version + ' is not newer than installed version ' + installedVersion + '.'); continue;}
+    if(!checked.valid) {activity('The latest release has an invalid update manifest: ' + checked.errors.join(', ') + '.'); return {status: 'invalid-release'};}
+    if(!semver.isNewer(candidate.version, installedVersion)) {activity('Installed version ' + installedVersion + ' is current (latest published version: ' + candidate.version + ').'); return {status: 'current'};}
     if(!manual && prefs.ignoredVersion === candidate.version && !candidate.mandatory) return {status: 'ignored'};
     activity('Update ' + candidate.version + ' is available.');
     return {status: 'available', manifest: candidate};
   }
-  activity('No newer compatible release was found.');
+  activity('No compatible published release with update metadata was found.');
   return {status: 'current'};
 }
 async function downloadUpdate(manifest, onProgress) {

@@ -50,14 +50,15 @@
       if(manifest.releaseNotesUrl) {var link = document.createElement('a'); link.href = manifest.releaseNotesUrl; link.textContent = ' · View release notes'; link.target = '_blank'; link.rel = 'noopener noreferrer'; el('updateDetails').appendChild(link);}
       visible('updateDetails', true); status('An update is available. Review the release notes before installing major updates.');
     }
-    async function check(manual) {
+    async function check(manual, force) {
       log((manual ? 'Manual' : 'Automatic') + ' update check started for version ' + packageInfo.version + '.');
-      actions(false, false); status('Checking for updates…'); el('btnCheckUpdates').disabled = true;
+      actions(false, false); visible('updateRestartPrompt', false); status('Checking for updates…'); el('btnCheckUpdates').disabled = true;
       try {
-        var result = await runtime.checkForUpdate(packageInfo.version, manual, function(message) {log(message);});
+        var result = await runtime.checkForUpdate(packageInfo.version, manual, function(message) {log(message);}, force);
         if(result.status === 'available') showAvailable(result.manifest);
         else if(result.status === 'current') {visible('updateNotification', false); status('You are using the latest version.');}
         else if(result.status === 'no-releases') status('No published GitHub Release is available. A branch version or tag alone cannot be installed.');
+        else if(result.status === 'invalid-release') status('The latest release metadata is invalid. Nothing was downloaded.');
         else if(result.status === 'not-due') status('The next automatic update check is not due yet.');
         else status('This update has been skipped. Use Check for Updates to show it again.');
         log('Update check finished with status: ' + result.status + '.');
@@ -76,14 +77,15 @@
       actions(false, false); visible('updateProgress', true); status('Downloading update…');
       try {
         downloaded = await runtime.downloadUpdate(current, function(received, total) {el('updateProgress').value = total ? Math.min(100, received / total * 100) : 0; status('Downloading update… ' + received + (total ? ' / ' + total + ' bytes' : ' bytes'));});
-        visible('updateProgress', false); actions(false, true); status('The update is ready to install. Illustrator must restart.'); log('Download completed and passed SHA-256 verification.');
-      } catch(error) {log('Update download failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); visible('updateProgress', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
+        visible('updateProgress', false); actions(false, true); el('updateRestartPrompt').textContent = 'Save every open Illustrator document before continuing. After approving Windows UAC, close Illustrator and reopen it when installation has finished.'; visible('updateRestartPrompt', true); status('Update verified. Save your work before installing.'); log('Download completed and passed SHA-256 verification.');
+      } catch(error) {log('Update download failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); visible('updateProgress', false); visible('updateRestartPrompt', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
     });
     el('btnInstallUpdate').addEventListener('click', async function() {
-      try {var needsElevation = process.platform === 'win32' && /^c:\\program files(?: \(x86\))?\\/i.test(extensionPath); log('Handing the verified package to the installer.'); if(needsElevation) {status('Waiting for the Windows UAC prompt…'); log('Requesting Windows administrator approval.');} await runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.'); log('Installer started; waiting for Illustrator to close.');}
+      if(root.confirm && !root.confirm('Save all open Illustrator documents before installing. Continue only when your work is saved.')) {log('Installation cancelled so the operator can save their work.'); return;}
+      try {var needsElevation = process.platform === 'win32' && /^c:\\program files(?: \(x86\))?\\/i.test(extensionPath); log('Handing the verified package to the installer.'); if(needsElevation) {status('Waiting for the Windows UAC prompt…'); log('Requesting Windows administrator approval.');} await runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); el('updateRestartPrompt').textContent = 'Installer is ready. Close Illustrator now, wait a few seconds, then reopen Illustrator to finish the update.'; visible('updateRestartPrompt', true); status('Close and reopen Illustrator to finish installing the update.'); log('Installer started; waiting for Illustrator to close.');}
       catch(error) {log('Installation handoff failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); status('Installation handoff failed. Nothing was replaced.');}
     });
-    setTimeout(function() {check(false);}, 1500);
+    setTimeout(function() {check(false, true);}, 1500);
   }
   root.SignaramaUpdaterUI = {init: init};
   document.addEventListener('DOMContentLoaded', init);
