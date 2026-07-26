@@ -28,6 +28,12 @@ test('update manifests are strictly validated', () => {
   assert.equal(manifest.validate(validManifest({downloadUrl: 'https://github.com/other/repo/releases/download/v1.6.2/signarama-helper-v1.6.2.zip'}), {owner: 'Monshi10x', repository: 'Signarama-Illustrator-Helper'}).valid, false);
 });
 
+test('GitHub release redirect hosts are permitted without allowing lookalike domains', () => {
+  assert.equal(manifest.isAllowedHttpsUrl('https://release-assets.githubusercontent.com/github-production-release-asset/file?token=temporary'), true);
+  assert.equal(manifest.isAllowedHttpsUrl('https://release-assets.githubusercontent.com.evil.example/file'), false);
+  assert.equal(manifest.isAllowedHttpsUrl('http://release-assets.githubusercontent.com/file'), false);
+});
+
 test('release selection respects stable and beta channels', () => {
   const releases = [{version: '3.0.0', draft: true, hasRequiredAsset: true}, {version: '2.0.0-beta.1', prerelease: true, hasRequiredAsset: true}, {version: '1.5.0', hasRequiredAsset: false}, {version: '1.4.0', hasRequiredAsset: true}, {version: '0.9.0', hasRequiredAsset: true}];
   assert.equal(manifest.selectRelease(releases, '1.0.0', 'stable').version, '1.4.0');
