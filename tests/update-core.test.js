@@ -11,6 +11,7 @@ const semver = require('../js/update/semver');
 const manifest = require('../js/update/manifest');
 const archive = require('../js/update/archive');
 const updater = require('../js/update/updater');
+const updateRuntime = require('../js/update/runtime');
 
 const validManifest = (overrides) => Object.assign({schemaVersion: 1, channel: 'stable', version: '1.6.2', publishedAt: '2026-07-25T08:00:00Z', pluginType: 'cep', pluginId: 'com.signarama.helper', packageType: 'zip', downloadUrl: 'https://github.com/Monshi10x/Signarama-Illustrator-Helper/releases/download/v1.6.2/signarama-helper-v1.6.2.zip', sha256: 'a'.repeat(64), packageSize: 100, releaseNotesUrl: 'https://github.com/Monshi10x/Signarama-Illustrator-Helper/releases/tag/v1.6.2', mandatory: false}, overrides);
 
@@ -32,6 +33,13 @@ test('GitHub release redirect hosts are permitted without allowing lookalike dom
   assert.equal(manifest.isAllowedHttpsUrl('https://release-assets.githubusercontent.com/github-production-release-asset/file?token=temporary'), true);
   assert.equal(manifest.isAllowedHttpsUrl('https://release-assets.githubusercontent.com.evil.example/file'), false);
   assert.equal(manifest.isAllowedHttpsUrl('http://release-assets.githubusercontent.com/file'), false);
+});
+
+test('system-wide Windows CEP installations require elevation', () => {
+  assert.equal(updateRuntime.requiresElevation('C:\\Program Files (x86)\\Common Files\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper', 'win32'), true);
+  assert.equal(updateRuntime.requiresElevation('C:\\Program Files\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper', 'win32'), true);
+  assert.equal(updateRuntime.requiresElevation('C:\\Users\\designer\\AppData\\Roaming\\Adobe\\CEP\\extensions\\Signarama-Illustrator-Helper', 'win32'), false);
+  assert.equal(updateRuntime.requiresElevation('/Library/Application Support/Adobe/CEP/extensions/Signarama-Illustrator-Helper', 'darwin'), false);
 });
 
 test('release selection respects stable and beta channels', () => {
@@ -80,6 +88,7 @@ test('update UI loads modules from the decoded CEP extension path and shows upda
   const runtime = {
     readPreferences: () => ({automaticUpdatesEnabled: true, updateChannel: 'stable'}),
     writePreferences() {},
+    recentLogEvents: () => [],
     checkForUpdate: async () => ({status: 'available', manifest: {version: '1.0.1', publishedAt: '2026-07-25T08:00:00Z', packageSize: 100}})
   };
   const context = {

@@ -28,6 +28,11 @@
       runtime = require(path.join(extensionPath, 'js', 'update', 'runtime.js'));
       packageInfo = require(path.join(extensionPath, 'package.json'));
       log('Update runtime loaded from ' + extensionPath + '.');
+      runtime.recentLogEvents(8).forEach(function(entry) {
+        if(entry.event === 'installation-failed' || entry.event === 'rollback-failed' || entry.event === 'updater-launch-failed') log('Previous installer error: ' + (entry.message || entry.event), 'ERROR');
+        else if(entry.event === 'installation-complete') log('Previous installer completed version ' + entry.targetVersion + '.');
+        else if(entry.event === 'updater-launched') log('Previous installer launch: elevation=' + entry.elevationRequested + ', executable=' + entry.executable + '.');
+      });
     } catch(error) {log('Could not load the update runtime: ' + (error && error.message ? error.message : String(error)), 'ERROR'); return;}
     var current = null, downloaded = null;
     function visible(id, show) {var node = el(id); if(node) node.classList.toggle('hidden', !show);}
@@ -75,7 +80,7 @@
       } catch(error) {log('Update download failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); visible('updateProgress', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
     });
     el('btnInstallUpdate').addEventListener('click', function() {
-      try {log('Handing the verified package to the installer.'); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.'); log('Installer started; waiting for Illustrator to close.');}
+      try {var needsElevation = process.platform === 'win32' && /^c:\\program files(?: \(x86\))?\\/i.test(extensionPath); log('Handing the verified package to the installer.'); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status(needsElevation ? 'Approve the Windows UAC prompt, then save your work and close Illustrator.' : 'Updater started. Save your work and close Illustrator; it will not be force-quit.'); log(needsElevation ? 'Elevated installer requested; approve UAC, then close Illustrator.' : 'Installer started; waiting for Illustrator to close.');}
       catch(error) {log('Installation handoff failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); status('Installation handoff failed. Nothing was replaced.');}
     });
     setTimeout(function() {check(false);}, 1500);
