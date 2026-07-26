@@ -43,11 +43,15 @@ $Replaced = $false
 
 try {
   Write-UpdateLog 'update-started' @{installedVersion=$Config.installedVersion; targetVersion=$Config.targetVersion; installer='powershell'}
+  Write-Host ''
+  Write-Host 'Waiting for user to close Illustrator. Do not close this PowerShell window.' -ForegroundColor Yellow
+  Write-Host ''
   $Deadline = (Get-Date).AddMinutes(30)
   while(Get-Process -Name Illustrator -ErrorAction SilentlyContinue) {
     if((Get-Date) -gt $Deadline) {throw 'Illustrator remains open after 30 minutes'}
     Start-Sleep -Seconds 2
   }
+  Write-Host 'Illustrator is closed. Installing update...' -ForegroundColor Cyan
   Assert-SafeArchive $Config.packagePath
   New-Item -ItemType Directory -Path $Staging -Force | Out-Null
   Expand-Archive -LiteralPath $Config.packagePath -DestinationPath $Staging -Force
@@ -67,7 +71,14 @@ try {
   }
   Remove-Item -LiteralPath $ConfigPath -Force
   Write-UpdateLog 'installation-complete' @{installedVersion=$Config.installedVersion; targetVersion=$Config.targetVersion; backupPath=$Backup; installationResult='success'}
+  Write-Host ''
+  Write-Host 'Update installed. You can now reopen Illustrator.' -ForegroundColor Green
+  Start-Sleep -Seconds 8
 } catch {
   Write-UpdateLog 'installation-failed' @{installedVersion=$Config.installedVersion; targetVersion=$Config.targetVersion; installationResult='failed'; errorCode='INSTALL_FAILED'; message=$_.Exception.Message}
+  Write-Host ''
+  Write-Host ("Update failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
+  Write-Host 'See the Updates developer log after reopening Illustrator.' -ForegroundColor Yellow
+  Start-Sleep -Seconds 15
   exit 1
 }
