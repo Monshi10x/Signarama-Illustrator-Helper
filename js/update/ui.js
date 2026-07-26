@@ -79,8 +79,8 @@
         visible('updateProgress', false); actions(false, true); status('The update is ready to install. Illustrator must restart.'); log('Download completed and passed SHA-256 verification.');
       } catch(error) {log('Update download failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); visible('updateProgress', false); status(/verification/i.test(error.message) ? 'Package verification failed. Nothing was installed.' : 'Download failed. Nothing was installed.');}
     });
-    el('btnInstallUpdate').addEventListener('click', function() {
-      try {var needsElevation = process.platform === 'win32' && /^c:\\program files(?: \(x86\))?\\/i.test(extensionPath); log('Handing the verified package to the installer.'); runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status(needsElevation ? 'Approve the Windows UAC prompt, then save your work and close Illustrator.' : 'Updater started. Save your work and close Illustrator; it will not be force-quit.'); log(needsElevation ? 'Elevated installer requested; approve UAC, then close Illustrator.' : 'Installer started; waiting for Illustrator to close.');}
+    el('btnInstallUpdate').addEventListener('click', async function() {
+      try {var needsElevation = process.platform === 'win32' && /^c:\\program files(?: \(x86\))?\\/i.test(extensionPath); log('Handing the verified package to the installer.'); if(needsElevation) {status('Waiting for the Windows UAC prompt…'); log('Requesting Windows administrator approval.');} await runtime.launchUpdater(downloaded, current, extensionPath); actions(false, false); status('Updater started. Save your work and close Illustrator; it will not be force-quit.'); log('Installer started; waiting for Illustrator to close.');}
       catch(error) {log('Installation handoff failed: ' + (error && error.stack ? error.stack : String(error)), 'ERROR'); status('Installation handoff failed. Nothing was replaced.');}
     });
     setTimeout(function() {check(false);}, 1500);
