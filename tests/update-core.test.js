@@ -50,6 +50,14 @@ test('Windows installer displays each operator-facing update phase', () => {
   assert.match(script, /Update failed:/);
 });
 
+test('colour scan ignores group containers and exposes chunk progress', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  assert.match(script, /item\.typename !== "GroupItem"/);
+  assert.match(script, /signarama_helper_stepDocumentColorScan/);
+  assert.match(script, /position:state\.position, total:state\.total/);
+  assert.doesNotMatch(script, /if\(it\.typename === "GroupItem"\) \{\s*_srh_walkPageItems\(it, cb\)/);
+});
+
 test('release selection respects stable and beta channels', () => {
   const releases = [{version: '3.0.0', draft: true, hasRequiredAsset: true}, {version: '2.0.0-beta.1', prerelease: true, hasRequiredAsset: true}, {version: '1.5.0', hasRequiredAsset: false}, {version: '1.4.0', hasRequiredAsset: true}, {version: '0.9.0', hasRequiredAsset: true}];
   assert.equal(manifest.selectRelease(releases, '1.0.0', 'stable').version, '1.4.0');
