@@ -1614,6 +1614,19 @@
         <div id="colourModeBanner" style="display:none; margin-top:12px; padding:8px 10px; border-radius:8px; background:#b00020; color:#fff; font-size:12px; font-weight:600;">
           Current document colour mode is RGB
         </div>
+        <div style="margin-top:12px;">
+          <button id="btnColourSettings" class="btn2" type="button" aria-expanded="false" aria-controls="colourSettingsPanel">Colour Settings</button>
+        </div>
+        <div id="colourSettingsPanel" class="hidden" style="margin-top:10px; padding:10px; border:1px solid #333; border-radius:8px; background:#151515;">
+          <div class="small" style="margin-bottom:8px;">Rich black target (CMYK)</div>
+          <div class="grid2">
+            <label class="fld">Cyan<input id="richBlackC" type="number" min="0" max="100" step="0.1" value="60"></label>
+            <label class="fld">Magenta<input id="richBlackM" type="number" min="0" max="100" step="0.1" value="60"></label>
+            <label class="fld">Yellow<input id="richBlackY" type="number" min="0" max="100" step="0.1" value="60"></label>
+            <label class="fld">Black<input id="richBlackK" type="number" min="0" max="100" step="0.1" value="100"></label>
+          </div>
+          <div class="small" style="margin-top:8px;">Used by the rich-black warning and fix button.</div>
+        </div>
       </div>
     </section>
 

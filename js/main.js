@@ -3630,6 +3630,14 @@
   function wireColours() {
     const refreshBtn = $('btnRefreshColours');
     if(refreshBtn) refreshBtn.onclick = () => refreshColours({showToastOnComplete: true});
+    const settingsBtn = $('btnColourSettings');
+    const settingsPanel = $('colourSettingsPanel');
+    if(settingsBtn && settingsPanel) settingsBtn.onclick = () => {
+      const show = settingsPanel.classList.contains('hidden');
+      settingsPanel.classList.toggle('hidden', !show);
+      settingsBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    };
+    ['richBlackC', 'richBlackM', 'richBlackY', 'richBlackK'].forEach(id => {const input = $(id); if(input) input.addEventListener('change', () => refreshColours());});
     const applyBtn = $('btnApplyColours');
     function refreshApplyButtonState() {
       if(!applyBtn) return;
@@ -3771,10 +3779,14 @@
         }
         function isNearRichBlack(cmyk, tolerance) {
           const tol = isFinite(tolerance) ? tolerance : 8;
-          return Math.abs(cmyk.c - 60) <= tol &&
-            Math.abs(cmyk.m - 60) <= tol &&
-            Math.abs(cmyk.y - 60) <= tol &&
-            Math.abs(cmyk.k - 100) <= 3;
+          const target = getRichBlackTarget();
+          return Math.abs(cmyk.c - target.c) <= tol &&
+            Math.abs(cmyk.m - target.m) <= tol &&
+            Math.abs(cmyk.y - target.y) <= tol &&
+            Math.abs(cmyk.k - target.k) <= 3;
+        }
+        function getRichBlackTarget() {
+          return {c:clamp(num(($('richBlackC') && $('richBlackC').value) || 60),0,100), m:clamp(num(($('richBlackM') && $('richBlackM').value) || 60),0,100), y:clamp(num(($('richBlackY') && $('richBlackY').value) || 60),0,100), k:clamp(num(($('richBlackK') && $('richBlackK').value) || 100),0,100)};
         }
         function isBlackLike(cmyk, hex) {
           const byCmyk = cmyk.k >= 90 && (cmyk.c + cmyk.m + cmyk.y) <= 210;
@@ -3825,8 +3837,8 @@
           label.style.display = 'flex';
           label.style.flexDirection = 'column';
           label.style.gap = '2px';
-          label.style.minWidth = '76px';
-          label.style.flex = '0 0 76px';
+          label.style.minWidth = '46px';
+          label.style.flex = '0 0 46px';
           const labelTop = document.createElement('div');
           labelTop.textContent = typeText;
           labelTop.style.fontSize = '12px';
@@ -4027,14 +4039,15 @@
           copyButton.title = 'Copy this row colour values'; copyButton.style.padding = '3px 7px'; copyButton.style.flex = '0 0 auto';
           copyButton.addEventListener('click', () => {
             copiedColourValues = {mode: colourEditState.mode, values: inputs.map(inp => inp.value)};
-            Array.prototype.forEach.call(list.querySelectorAll('[data-colour-paste]'), btn => {btn.disabled = false;});
+            Array.prototype.forEach.call(list.querySelectorAll('[data-colour-paste]'), btn => {btn.disabled = btn.dataset.colourMode !== copiedColourValues.mode || Number(btn.dataset.colourCount) !== copiedColourValues.values.length;});
             showToast('Colour values copied.', {type:'success', title:'Colours'});
           });
           const pasteButton = document.createElement('button');
           pasteButton.type = 'button'; pasteButton.className = 'btn2'; pasteButton.textContent = 'Paste';
           pasteButton.title = 'Paste copied colour values into this row'; pasteButton.style.padding = '3px 7px'; pasteButton.style.flex = '0 0 auto';
           pasteButton.setAttribute('data-colour-paste', 'true');
-          pasteButton.disabled = !copiedColourValues || copiedColourValues.mode !== colourEditState.mode;
+          pasteButton.dataset.colourMode = colourEditState.mode; pasteButton.dataset.colourCount = String(inputs.length);
+          pasteButton.disabled = !copiedColourValues || copiedColourValues.mode !== colourEditState.mode || copiedColourValues.values.length !== inputs.length;
           pasteButton.addEventListener('click', () => {
             if(!copiedColourValues || copiedColourValues.mode !== colourEditState.mode) {showToast('Copy a colour from this document mode first.', {type:'warn', title:'Colours'}); return;}
             inputs.forEach((inp, idx) => {if(copiedColourValues.values[idx] != null) inp.value = copiedColourValues.values[idx];});
@@ -4044,9 +4057,11 @@
           row.appendChild(copyButton);
           row.appendChild(pasteButton);
           if(showBlackHazard) {
+            const richBlackTarget = getRichBlackTarget();
+            const richBlackText = 'C' + round1(richBlackTarget.c) + ' M' + round1(richBlackTarget.m) + ' Y' + round1(richBlackTarget.y) + ' K' + round1(richBlackTarget.k);
             const hazard = document.createElement('span');
             hazard.textContent = '\u26A0';
-            hazard.title = 'Black colour is not close to target rich black (C60 M60 Y60 K100).';
+            hazard.title = 'Black colour is not close to target rich black (' + richBlackText + ').';
             hazard.style.color = '#ffba00';
             hazard.style.fontWeight = '800';
             hazard.style.fontSize = '16px';
@@ -4056,12 +4071,12 @@
             if(colourEditState.mode === 'CMYK') {
               const fix = document.createElement('button');
               fix.type = 'button'; fix.className = 'btn2'; fix.textContent = '\u2692';
-              fix.title = 'Fix rich black to C60 M60 Y60 K100';
+              fix.title = 'Fix rich black to ' + richBlackText;
               fix.style.padding = '2px 6px'; fix.style.minWidth = '28px'; fix.style.flex = '0 0 auto';
               fix.addEventListener('click', () => {
-                inputs[0].value = '60'; inputs[1].value = '60'; inputs[2].value = '60'; inputs[3].value = '100';
+                inputs[0].value = richBlackTarget.c; inputs[1].value = richBlackTarget.m; inputs[2].value = richBlackTarget.y; inputs[3].value = richBlackTarget.k;
                 markRowDirty(); previewSwatch();
-                showToast('Rich black values populated. Click Apply to update the document.', {type:'success', title:'Colours'});
+                showToast('Rich black values populated (' + richBlackText + '). Click Apply to update the document.', {type:'success', title:'Colours'});
               });
               row.appendChild(fix);
             }

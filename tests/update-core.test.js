@@ -63,8 +63,17 @@ test('colour rows support copy, paste, and deferred rich-black repair', () => {
   assert.match(script, /copyButton\.textContent = 'Copy'/);
   assert.match(script, /pasteButton\.textContent = 'Paste'/);
   assert.match(script, /Colour values pasted\. Click Apply to update the document\./);
-  assert.match(script, /Rich black values populated\. Click Apply to update the document\./);
+  assert.match(script, /Rich black values populated \('/);
   assert.doesNotMatch(script, /applyValues\(\(\) => \{showToast\('Rich black updated/);
+});
+
+test('colour settings control the rich-black target and paste compatibility', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  for(const id of ['richBlackC', 'richBlackM', 'richBlackY', 'richBlackK']) assert.match(html, new RegExp('id="' + id + '"'));
+  assert.match(script, /getRichBlackTarget\(\)/);
+  assert.match(script, /btn\.dataset\.colourMode !== copiedColourValues\.mode/);
+  assert.match(script, /label\.style\.flex = '0 0 46px'/);
 });
 
 test('release selection respects stable and beta channels', () => {
