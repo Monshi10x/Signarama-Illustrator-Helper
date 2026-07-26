@@ -10673,9 +10673,16 @@ function signarama_helper_createLightbox(jsonStr) {
   var stroke1px = _srh_pxStrokeDoc(1);
   var lightboxId = _srh_generateLightboxId();
 
-  var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // [L,T,R,B]
+  var ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect; // fallback [L,T,R,B]
   var centerX = (ab[0] + ab[2]) / 2;
   var centerY = (ab[1] + ab[3]) / 2;
+  try {
+    var viewCenter = doc.views[0].centerPoint;
+    if(viewCenter && viewCenter.length >= 2 && isFinite(Number(viewCenter[0])) && isFinite(Number(viewCenter[1]))) {
+      centerX = Number(viewCenter[0]);
+      centerY = Number(viewCenter[1]);
+    }
+  } catch(_eLightboxViewCenter) { }
   var left = centerX - (w / 2);
   var top = centerY + (h / 2);
 

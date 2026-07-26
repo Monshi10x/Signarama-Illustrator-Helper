@@ -894,9 +894,14 @@
       corebridgeItemNumber.addEventListener('change', invalidateCorebridgeFetchCache);
     }
     const corebridgeFetchTimeoutMs = 20000;
-    const corebridgeProxyBaseUrl = 'http://localhost:8080';//'https://signschedulerapp.ts.r.appspot.com';
-    const corebridgePrimaryDataUrl = corebridgeProxyBaseUrl + '/CB_DesignBoard_Data';
-    const corebridgePartSearchEntriesUrl = corebridgeProxyBaseUrl + '/CB_OrderEntryProducts_PartSearchEntries';
+    function corebridgeProxyBaseUrl() {
+      const select = $('corebridgeProxyBaseUrl');
+      return select ? select.value : 'http://localhost:8080';
+    }
+    function corebridgePrimaryDataUrl() {return corebridgeProxyBaseUrl() + '/CB_DesignBoard_Data';}
+    function corebridgePartSearchEntriesUrl() {return corebridgeProxyBaseUrl() + '/CB_OrderEntryProducts_PartSearchEntries';}
+    const corebridgeProxySelect = $('corebridgeProxyBaseUrl');
+    if(corebridgeProxySelect) corebridgeProxySelect.addEventListener('change', () => {invalidateCorebridgeFetchCache(); preloadCorebridgePartSearchEntries();});
     async function preloadCorebridgePartSearchEntries() {
       function tryParseJsonLoose(value) {
         if(value == null) return null;
@@ -934,7 +939,7 @@
         return [];
       }
       try {
-        const res = await fetch(corebridgePartSearchEntriesUrl + '?_ts=' + Date.now(), {
+        const res = await fetch(corebridgePartSearchEntriesUrl() + '?_ts=' + Date.now(), {
           method: 'GET',
           cache: 'no-store',
           headers: {pragma: 'no-cache', 'cache-control': 'no-cache'}
@@ -1162,7 +1167,7 @@
       if(!orderId || !accountId || !accountName) throw new Error('Missing cbOrderId/cbAccountId/cbAccountName.');
 
       const fixedUrl =
-        corebridgeProxyBaseUrl +
+        corebridgeProxyBaseUrl() +
         '/CB_OrderData_QuoteLevel?orderId=' +
         encodeURIComponent(orderId) +
         '&accountId=' +
@@ -1186,7 +1191,7 @@
       const orderProductId = String(opts.orderProductId == null ? '' : opts.orderProductId).trim();
       if(!orderProductId) throw new Error('Missing orderProductId.');
       const url =
-        corebridgeProxyBaseUrl +
+        corebridgeProxyBaseUrl() +
         '/CB_ProductNotesAll?orderProductId=' +
         encodeURIComponent(orderProductId);
       const res = await fetchWithTimeout(url, {
@@ -1862,7 +1867,7 @@
     async function fetchCorebridgeFilteredData(options) {
       if(corebridgeFetchPromise) return corebridgeFetchPromise;
       const opts = options || {};
-      const url = corebridgePrimaryDataUrl + '?_ts=' + Date.now();
+      const url = corebridgePrimaryDataUrl() + '?_ts=' + Date.now();
       const criteria = getCorebridgeCriteriaFromFields();
       const jobNumber = criteria.jobNumber;
       const itemNumber = criteria.itemNumber;
@@ -1989,7 +1994,7 @@
       } catch(err) {
         const msg = (err && err.message) ? err.message : String(err);
         renderCorebridgeDataDump(
-          'URL: ' + corebridgePrimaryDataUrl + '\n' +
+          'URL: ' + corebridgePrimaryDataUrl() + '\n' +
           'Fetched: ' + (new Date()).toLocaleString() + '\n\n' +
           'ERROR:\n' + msg
         );
