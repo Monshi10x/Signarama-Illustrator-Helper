@@ -6,7 +6,9 @@ const crypto = require('crypto');
 const pkg = require('../package.json');
 const channel = process.env.UPDATE_CHANNEL || (pkg.version.includes('-') ? 'beta' : 'stable');
 const repository = process.env.GITHUB_REPOSITORY || 'Monshi10x/Signarama-Illustrator-Helper';
-const tag = process.env.GITHUB_REF_NAME || `v${pkg.version}`;
+// GITHUB_REF_NAME is read-only in Actions and remains the branch name during
+// automatic branch releases, so UPDATE_TAG is the explicit override there.
+const tag = process.env.UPDATE_TAG || process.env.GITHUB_REF_NAME || `v${pkg.version}`;
 if(tag !== `v${pkg.version}`) throw new Error(`Tag ${tag} does not match package version ${pkg.version}`);
 if(channel === 'stable' && pkg.version.includes('-')) throw new Error('A prerelease cannot be published to stable');
 const name = `signarama-helper-v${pkg.version}.zip`, file = path.join('dist', name);

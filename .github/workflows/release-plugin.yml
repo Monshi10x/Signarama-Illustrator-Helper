@@ -69,7 +69,7 @@ jobs:
         run: npm run build && npm run package
       - name: Generate update manifest
         env:
-          GITHUB_REF_NAME: v${{ steps.version.outputs.version }}
+          UPDATE_TAG: v${{ steps.version.outputs.version }}
         run: node scripts/generate-update-manifest.js
       - name: Publish incremented release
         env:
