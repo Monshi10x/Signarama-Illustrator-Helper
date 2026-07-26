@@ -28,6 +28,7 @@
     .brand-title { font-weight:800; }
     .tabs { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid #333; background:#161616; flex-wrap:wrap; }
     .tab {
+      position:relative;
       appearance:none;
       border:1px solid #333;
       background:#202020;
@@ -37,6 +38,18 @@
       font-size:12px;
       font-weight:700;
       cursor:pointer;
+    }
+    .update-notification {
+      position:absolute;
+      top:-6px;
+      right:-5px;
+      width:10px;
+      height:10px;
+      border:2px solid #161616;
+      border-radius:50%;
+      background:#ffcc00;
+      box-shadow:0 0 5px rgba(255,204,0,.8);
+      pointer-events:none;
     }
     .tab.active {
       background:var(--signarama-red);
@@ -335,6 +348,25 @@
     .update-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .update-actions .btn2 { flex:1 1 140px; }
     .update-progress { width:100%; height:8px; accent-color:var(--signarama-red); }
+    .update-restart-prompt { margin-top:10px; padding:10px; border:1px solid #8f6b00; border-radius:6px; background:#332900; color:#ffe58a; font-size:12px; line-height:1.45; }
+    .update-log {
+      box-sizing:border-box;
+      width:100%;
+      min-height:132px;
+      max-height:240px;
+      margin:0;
+      padding:10px;
+      overflow:auto;
+      border:1px solid #3c3c3c;
+      border-radius:4px;
+      background:#181818;
+      color:#d8d8d8;
+      font:11px/1.5 Consolas, "Courier New", monospace;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      user-select:text;
+    }
+    .update-log:empty::before { content:"No update activity yet."; color:#888; }
     .corebridge-fetch-status {
       display:none;
       align-items:center;
@@ -699,7 +731,7 @@
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
     <button class="tab" data-tab="tab-nest" type="button">Nest</button>
-    <button class="tab" data-tab="tab-updates" type="button">Updates</button>
+    <button class="tab" data-tab="tab-updates" type="button">Updates<span id="updateNotification" class="update-notification hidden" aria-label="Update available" role="status"></span></button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
 
@@ -1744,19 +1776,27 @@
         <div id="updateStatus" class="small" role="status" aria-live="polite">Updates have not been checked yet.</div>
         <progress id="updateProgress" class="update-progress hidden" max="100" value="0"></progress>
         <div id="updateDetails" class="small hidden" style="margin-top:10px;"></div>
+        <div id="updateRestartPrompt" class="update-restart-prompt hidden" role="alert"></div>
         <div class="update-actions">
           <button id="btnCheckUpdates" class="btn2" type="button">Check for Updates</button>
           <button id="btnUpdateNow" class="btn2 hidden" type="button">Update Now</button>
           <button id="btnUpdateLater" class="btn2 hidden" type="button">Remind Me Later</button>
           <button id="btnSkipUpdate" class="btn2 hidden" type="button">Skip This Version</button>
-          <button id="btnInstallUpdate" class="btn2 hidden" type="button">Install and Restart</button>
+          <button id="btnInstallUpdate" class="btn2 hidden" type="button">Install After Saving</button>
         </div>
       </div>
       <div class="card">
         <div class="cardHead"><div class="cardTitle">Update preferences</div></div>
-        <label class="chk"><input id="automaticUpdatesEnabled" type="checkbox" checked><span>Check automatically every 24 hours</span></label>
+        <label class="chk"><input id="automaticUpdatesEnabled" type="checkbox" checked><span>Check automatically when Illustrator opens</span></label>
         <label class="fld" style="margin-top:10px;"><span>Channel</span><select id="updateChannel"><option value="stable">Stable</option><option value="beta">Beta (experimental)</option></select></label>
         <div class="small" style="margin-top:10px;">Updates are downloaded only from the project's GitHub Releases and are SHA-256 verified before installation.</div>
+      </div>
+      <div class="card">
+        <div class="cardHead">
+          <div><div class="cardTitle">Developer log</div><div class="small">Live update actions and error details for troubleshooting.</div></div>
+          <button id="btnClearUpdateLog" class="btn2" type="button">Clear</button>
+        </div>
+        <pre id="updateDevLog" class="update-log" role="log" aria-live="polite" aria-relevant="additions"></pre>
       </div>
     </section>
 
