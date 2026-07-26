@@ -18,6 +18,10 @@ function dataRoot() {
   const base = process.platform === 'win32' ? (process.env.APPDATA || os.homedir()) : path.join(os.homedir(), 'Library', 'Application Support');
   return path.join(base, 'Signarama', 'Illustrator Helper');
 }
+function requiresElevation(installPath, platform) {
+  const targetPlatform = platform || process.platform;
+  return targetPlatform === 'win32' && /^[a-z]:\\program files(?: \(x86\))?\\/i.test(path.win32.resolve(installPath));
+}
 function ensureDirectories() {
   const root = dataRoot();
   ['downloads', 'staging', 'backups', 'logs'].forEach((name) => fs.mkdirSync(path.join(root, 'updates', name), {recursive: true}));
@@ -28,6 +32,16 @@ function logEvent(event, details) {
   const files = fs.readdirSync(dir).filter((name) => /\.jsonl$/.test(name)).sort().reverse();
   files.slice(10).forEach((name) => {try {fs.unlinkSync(path.join(dir, name));} catch(_ignore) {}});
   fs.appendFileSync(path.join(dir, new Date().toISOString().slice(0, 10) + '.jsonl'), JSON.stringify(Object.assign({timestamp: new Date().toISOString(), event}, details || {})) + '\n');
+}
+function recentLogEvents(limit) {
+  const dir = path.join(ensureDirectories(), 'updates', 'logs');
+  const files = fs.readdirSync(dir).filter((name) => /\.jsonl$/.test(name)).sort().reverse();
+  const events = [];
+  for(const file of files) {
+    const lines = fs.readFileSync(path.join(dir, file), 'utf8').split(/\r?\n/).filter(Boolean).reverse();
+    for(const line of lines) {try {events.push(JSON.parse(line));} catch(_ignore) {} if(events.length >= (limit || 20)) return events.reverse();}
+  }
+  return events.reverse();
 }
 function preferencesPath() {return path.join(ensureDirectories(), 'update-preferences.json');}
 function readPreferences() {
@@ -108,8 +122,17 @@ async function downloadUpdate(manifest, onProgress) {
 function launchUpdater(packagePath, manifest, installPath) {
   const configPath = path.join(ensureDirectories(), 'updates', 'pending-update.json');
   fs.writeFileSync(configPath, JSON.stringify({packagePath, installPath, installedVersion: require('../../package.json').version, targetVersion: manifest.version, pluginId: PLUGIN_ID}, null, 2), {mode: 0o600});
-  const child = spawn(process.execPath, [path.join(__dirname, 'updater.js'), configPath], {detached: true, stdio: 'ignore'});
+  const updaterPath = path.join(__dirname, 'updater.js');
+  let child, elevated = false;
+  if(requiresElevation(installPath)) {
+    const quote = (value) => String(value).replace(/'/g, "''");
+    const command = `Start-Process -FilePath '${quote(process.execPath)}' -ArgumentList @('${quote(updaterPath)}','${quote(configPath)}') -Verb RunAs`;
+    child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {detached: true, stdio: 'ignore'});
+    elevated = true;
+  } else child = spawn(process.execPath, [updaterPath, configPath], {detached: true, stdio: 'ignore'});
+  child.on('error', (error) => logEvent('updater-launch-failed', {errorCode: 'LAUNCH_FAILED', message: error.message}));
+  logEvent('updater-launched', {targetVersion: manifest.version, executable: process.execPath, elevationRequested: elevated, processId: child.pid || null});
   child.unref(); return configPath;
 }
 
-module.exports = {PLUGIN_ID, OWNER, REPOSITORY, dataRoot, readPreferences, writePreferences, checkForUpdate, downloadUpdate, launchUpdater};
+module.exports = {PLUGIN_ID, OWNER, REPOSITORY, dataRoot, requiresElevation, readPreferences, writePreferences, recentLogEvents, checkForUpdate, downloadUpdate, launchUpdater};
