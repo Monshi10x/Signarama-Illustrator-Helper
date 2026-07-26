@@ -69,7 +69,7 @@ async function checkForUpdate(installedVersion, manual, onActivity) {
   if(!manual && (!prefs.automaticUpdatesEnabled || (prefs.lastCheckedAt && now - Date.parse(prefs.lastCheckedAt) < 86400000))) {activity('Automatic check is not due.'); return {status: 'not-due'};}
   let releases;
   activity('Requesting releases from api.github.com.');
-  try {releases = await json(API); activity('Received ' + releases.length + ' release' + (releases.length === 1 ? '' : 's') + '.'); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
+  try {releases = await json(API); activity('Received ' + releases.length + ' published release' + (releases.length === 1 ? '' : 's') + '.'); if(!releases.length) activity('No GitHub Releases are published. Branch version changes are not downloadable updates.'); logEvent('check-complete', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'success'});}
   catch(error) {logEvent('check-failed', {installedVersion, downloadDomain: 'api.github.com', checkStatus: 'failed', errorCode: 'CHECK_FAILED', message: error.message}); throw error;}
   prefs.lastCheckedAt = new Date().toISOString(); writePreferences(prefs);
   for(const release of releases) {
