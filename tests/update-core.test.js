@@ -42,6 +42,14 @@ test('system-wide Windows CEP installations require elevation', () => {
   assert.equal(updateRuntime.requiresElevation('/Library/Application Support/Adobe/CEP/extensions/Signarama-Illustrator-Helper', 'darwin'), false);
 });
 
+test('Windows installer displays each operator-facing update phase', () => {
+  const script = fs.readFileSync(path.join(__dirname, '..', 'js', 'update', 'updater.ps1'), 'utf8');
+  assert.match(script, /Waiting for user to close Illustrator\. Do not close this PowerShell window\./);
+  assert.match(script, /Installing update\.\.\./);
+  assert.match(script, /Update installed\. You can now reopen Illustrator\./);
+  assert.match(script, /Update failed:/);
+});
+
 test('release selection respects stable and beta channels', () => {
   const releases = [{version: '3.0.0', draft: true, hasRequiredAsset: true}, {version: '2.0.0-beta.1', prerelease: true, hasRequiredAsset: true}, {version: '1.5.0', hasRequiredAsset: false}, {version: '1.4.0', hasRequiredAsset: true}, {version: '0.9.0', hasRequiredAsset: true}];
   assert.equal(manifest.selectRelease(releases, '1.0.0', 'stable').version, '1.4.0');
