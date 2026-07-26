@@ -8,11 +8,11 @@ The existing panel settings are written by ExtendScript to an OS user-data locat
 
 ## Design and behavior
 
-The panel checks `https://api.github.com/repos/Monshi10x/Signarama-Illustrator-Helper/releases` asynchronously 1.5 seconds after startup and at most once per 24 hours. **Check for Updates** bypasses that interval. Stable is the default channel and ignores drafts and prereleases; beta allows prereleases. Releases without `update.json`, malformed manifests, disallowed download hosts, wrong plugin IDs/types, or non-newer semantic versions are ignored.
+The panel checks `https://api.github.com/repos/Monshi10x/Signarama-Illustrator-Helper/releases` asynchronously 1.5 seconds after every panel startup, unless automatic checks are disabled. **Check for Updates** always performs a fresh check. Stable is the default channel and ignores drafts and prereleases; beta allows prereleases. The checker inspects only the newest compatible published release with `update.json` and compares that version with the installed version; it does not download manifests for every historical release. Malformed manifests, disallowed download hosts, wrong plugin IDs/types, or non-newer semantic versions are rejected. GitHub release downloads may redirect from `github.com` to the exact `release-assets.githubusercontent.com` asset host; both are allowlisted while lookalike domains and non-HTTPS URLs remain rejected.
 
 The Updates tab shows checking, current, available, downloading, ready, postponed, skipped, and safe error states. Available releases show installed/available versions, date, size, and the release-notes URL. Major releases are never installed silently. Automatic checking can be disabled. A dismissed version is not shown automatically again unless mandatory or superseded, while a manual check can show it.
 
-The CEP panel downloads a ZIP into the external update data directory and verifies its exact size (when declared) and SHA-256 before enabling installation. It then starts a detached Node updater using an argument array, never a constructed shell command. The updater waits up to 30 minutes for Illustrator to be closed and never force-quits it. It validates every archive entry against absolute paths and traversal, extracts into staging, validates `CSXS/manifest.xml`, plugin ID, version, and `index.html`, and only then renames the current installation to a versioned backup. Directory renames provide atomic replacement where the filesystem permits. Any replacement or post-install validation error restores the backup. The user manually reopens Illustrator after installation.
+The CEP panel downloads a ZIP into the external update data directory and verifies its exact size (when declared) and SHA-256 before enabling installation. On Windows, system-wide CEP installations under Program Files request elevation through a visible PowerShell `Start-Process -Verb RunAs` broker and run the standalone `updater.ps1`; the CEP host executable is never treated as Node.js. The panel waits for the broker and reports cancellation or launch errors instead of assuming it started. The user must approve the Windows UAC prompt. The PowerShell window explicitly reports when it is waiting for Illustrator to close, installing, complete, or failed, and must remain open until completion. The updater waits up to 30 minutes for Illustrator to be closed and never force-quits it, because doing so could discard or interrupt unsaved work. It validates every archive entry against absolute paths and traversal, extracts into staging, validates `CSXS/manifest.xml`, plugin ID, version, and `index.html`, and only then renames the current installation to a versioned backup. Directory renames provide atomic replacement where the filesystem permits. Any replacement or post-install validation error restores the backup. Recent installer launch, completion, and failure events are shown in the developer log on the next panel load. The user manually reopens Illustrator after installation.
 
 Update logic is separated into:
 
@@ -42,11 +42,11 @@ At most ten update log files are retained. Logs contain non-sensitive status and
 
 ## Versions, builds, and releases
 
-`package.json` is the version source of truth. `npm run lint` rejects a mismatch with both CEP version attributes. Keep `package.json` and `CSXS/manifest.xml` synchronized when bumping a version:
+`package.json` is the version source of truth. Before validation, CI synchronizes both CEP manifest attributes to it so a previously mismatched branch can recover instead of blocking the version job. `npm run lint` then verifies the synchronized values. Every validated push to `main` or `master` automatically increments the patch version, synchronizes both CEP manifest attributes, commits the result with `[skip ci]`, tags that commit, and publishes a stable GitHub Release containing the updater assets. The repository must allow GitHub Actions write access to the protected branch. For a manual version change, keep the files synchronized with:
 
 ```bash
 npm version patch --no-git-tag-version
-# Update both version attributes in CSXS/manifest.xml to the same value.
+npm run version:sync
 npm run lint
 npm test
 npm run build
@@ -58,7 +58,7 @@ git push origin HEAD
 git push origin --tags
 ```
 
-The tag workflow installs from `package-lock.json`, lints, tests, builds, packages, computes SHA-256, generates `update.json`, uploads candidate artifacts, and attaches the ZIP, manifest, and `SHA256SUMS` to the GitHub Release. It uses only the repository-scoped `GITHUB_TOKEN`; no custom secret is required. Configure Actions with **Read and write permissions** for repository contents. Protect `main`/`master` and require the validation job. Branch pushes build a candidate but never publish stable.
+The automatic branch workflow and the manual tag workflow build, package, compute SHA-256, generate `update.json`, and attach the ZIP, manifest, and `SHA256SUMS` to a GitHub Release. For an automatic branch release, the workflow passes the intended version tag through `UPDATE_TAG` because GitHub keeps its reserved `GITHUB_REF_NAME` set to the branch name. The automatic workflow uses GitHub CLI to create a published release and its tag together after packaging succeeds, avoiding orphan version tags. It then queries the same unauthenticated GitHub API used by the extension and fails unless the release is publicly discoverable, non-draft, stable, and contains all updater assets; the successful check prints the public release URL in the Actions log. The extension discovers versions from these published releases—not from the version displayed in branch files or from tags alone. Confirm releases at `https://github.com/Monshi10x/Signarama-Illustrator-Helper/releases`. The repository itself must be public because the installed extension intentionally contains no GitHub credential. The workflows use only the repository-scoped `GITHUB_TOKEN`; no custom secret is required. Configure Actions with **Read and write permissions** for repository contents and releases. Protect `main`/`master` while allowing this workflow to push its version commit.
 
 For a beta, set a SemVer prerelease in both version locations (for example `1.1.0-beta.1`), commit, and tag it exactly:
 
