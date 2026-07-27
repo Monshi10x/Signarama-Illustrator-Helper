@@ -83,8 +83,12 @@ test('lightboxes use the visible view center and Proofs exposes fixed fetch host
   assert.match(host, /var viewCenter = doc\.views\[0\]\.centerPoint/);
   assert.match(html, /<select id="corebridgeProxyBaseUrl">/);
   assert.match(html, /value="http:\/\/localhost:8080"/);
-  assert.match(html, /value="https:\/\/signschedulerapp\.ts\.r\.appspot\.com"/);
+  assert.match(html, /value="https:\/\/signschedulerapp\.ts\.r\.appspot\.com" selected/);
+  assert.match(html, /<span>Proof Template<\/span>/);
+  assert.match(html, /data-template-filename="PROOF TEMPLATE - Landscape  v2\.ai"/);
   assert.match(main, /function corebridgeProxyBaseUrl\(\)/);
+  assert.match(main, /extensionPath \+ '\/Proof Templates\/' \+ proofTemplateFilename/);
+  assert.match(main, /return select \? select\.value : 'https:\/\/signschedulerapp\.ts\.r\.appspot\.com'/);
   assert.doesNotMatch(main, /const corebridgeProxyBaseUrl =/);
 });
 
