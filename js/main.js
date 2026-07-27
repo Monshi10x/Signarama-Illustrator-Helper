@@ -753,6 +753,11 @@
     const corebridgeJobNumber = $('corebridgeJobNumber');
     const corebridgeItemNumber = $('corebridgeItemNumber');
     const corebridgeProofPath = $('corebridgeProofPath');
+    if(corebridgeProofPath && !corebridgeProofPath.value) {
+      const proofTemplateFilename = corebridgeProofPath.getAttribute('data-template-filename') || 'PROOF TEMPLATE - Landscape  v2.ai';
+      const extensionPath = cs.getSystemPath(SystemPath.EXTENSION).replace(/[\\/]+$/, '');
+      corebridgeProofPath.value = extensionPath + '/Proof Templates/' + proofTemplateFilename;
+    }
     const corebridgeProofMappings = $('corebridgeProofMappings');
     const corebridgeFlashFields = $('corebridgeFlashFields');
     const corebridgeDerivedMappingsPreview = document.querySelector('textarea[data-corebridge-derived-mappings]');
@@ -896,7 +901,7 @@
     const corebridgeFetchTimeoutMs = 20000;
     function corebridgeProxyBaseUrl() {
       const select = $('corebridgeProxyBaseUrl');
-      return select ? select.value : 'http://localhost:8080';
+      return select ? select.value : 'https://signschedulerapp.ts.r.appspot.com';
     }
     function corebridgePrimaryDataUrl() {return corebridgeProxyBaseUrl() + '/CB_DesignBoard_Data';}
     function corebridgePartSearchEntriesUrl() {return corebridgeProxyBaseUrl() + '/CB_OrderEntryProducts_PartSearchEntries';}
