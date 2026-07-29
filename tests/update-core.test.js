@@ -92,6 +92,26 @@ test('lightboxes use the visible view center and Proofs exposes fixed fetch host
   assert.doesNotMatch(main, /const corebridgeProxyBaseUrl =/);
 });
 
+test('Proofs refreshes on every visit and every ten minutes', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  assert.match(main, /tabId === 'tab-corebridge'[\s\S]*scheduleCorebridgeInitialFetch\(\)/);
+  assert.match(main, /executeCorebridgePullData\(\{toastOnSuccess: false, toastOnError: false\}\)/);
+  assert.match(main, /10 \* 60 \* 1000/);
+  assert.match(main, /corebridgeInitialFetchStarted = false;/);
+});
+
+test('Scripts tab supports bundled files, selected files, and pasted code', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  assert.match(html, /data-tab="tab-scripts"/);
+  for(const id of ['predefinedScriptsList', 'btnRunScriptFile', 'scriptCode', 'btnRunScriptCode']) assert.match(html, new RegExp('id="' + id + '"'));
+  assert.match(main, /signarama_helper_listPredefinedScripts\(\)/);
+  assert.match(host, /function signarama_helper_chooseAndRunScriptFile\(\)/);
+  assert.match(host, /function signarama_helper_runScriptCode\(source\)/);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'jsx', 'scripts', 'Select All Artwork.jsx')), true);
+});
+
 test('LED and letter layouts use viewport center and lightbox measures exclude strokes', () => {
   const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
   assert.match(host, /function _srh_getViewportCenter/);

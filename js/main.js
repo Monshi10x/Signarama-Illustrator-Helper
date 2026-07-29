@@ -193,6 +193,7 @@
   let schedulePanelSettingsSave = null;
   let scheduleDimensionSelectionHintRefresh = null;
   let scheduleCorebridgeInitialFetch = null;
+  let scheduleScriptListRefresh = null;
   const SRH_NEST_BACKUP_KEY = 'srhNestResultBackup';
   const SRH_NEST_FORCE_TAB_KEY = 'srhNestForceTabRestore';
   const SRH_NEST_RUNTIME_KEY = 'srhNestRuntimeState';
@@ -422,6 +423,9 @@
       }
       if(tabId === 'tab-corebridge' && typeof scheduleCorebridgeInitialFetch === 'function') {
         scheduleCorebridgeInitialFetch();
+      }
+      if(tabId === 'tab-scripts' && typeof scheduleScriptListRefresh === 'function') {
+        scheduleScriptListRefresh();
       }
     }
     activateTabFn = activate;
@@ -2012,11 +2016,12 @@
       if(corebridgeInitialFetchStarted) return;
       corebridgeInitialFetchStarted = true;
       try {
-        await fetchCorebridgeFilteredData({showLoading: true, renderDump: false, executeSecondaryFetches: false});
-        log('Corebridge initial lookup data pulled.');
+        await executeCorebridgePullData({toastOnSuccess: false, toastOnError: false});
+        log('Corebridge proof data refreshed.');
       } catch(err) {
+        log('Corebridge proof data refresh failed: ' + ((err && err.message) ? err.message : err));
+      } finally {
         corebridgeInitialFetchStarted = false;
-        log('Corebridge initial lookup pull failed: ' + ((err && err.message) ? err.message : err));
       }
     }
     scheduleCorebridgeInitialFetch = function() {
@@ -2025,6 +2030,9 @@
     if(document.querySelector('.tab[data-tab="tab-corebridge"].active') || (document.querySelector('.tab[data-tab="tab-corebridge"]') && !document.getElementById('tab-corebridge').classList.contains('hidden'))) {
       scheduleCorebridgeInitialFetch();
     }
+    setInterval(function() {
+      scheduleCorebridgeInitialFetch();
+    }, 10 * 60 * 1000);
     if(corebridgePullData) {
       corebridgePullData.onclick = async () => {
         try {
@@ -2193,6 +2201,7 @@
     wireLetterLayout();
     wireColours();
     wireNest();
+    wireScripts();
 
     const clear = $('btnClearLog');
     if(clear) clear.onclick = () => {const el = $('log'); if(el) el.textContent = ''; showToast('Console cleared.', {type: 'info', title: 'Log', duration: 2500});};
@@ -2210,6 +2219,80 @@
         {logFn: log, toastTitle: 'Debug gradient 10/90'}
       ));
     }
+  }
+
+  function wireScripts() {
+    const list = $('predefinedScriptsList');
+    const refresh = $('btnRefreshScripts');
+    const runFile = $('btnRunScriptFile');
+    const runCode = $('btnRunScriptCode');
+    const code = $('scriptCode');
+    const clear = $('btnClearScriptLog');
+    const output = $('scriptsLog');
+
+    function scriptLog(message) {
+      if(!output) return;
+      output.textContent += String(message == null ? '' : message) + '\n';
+      output.scrollTop = output.scrollHeight;
+    }
+    function reportResult(result, title) {
+      const text = String(result == null ? '' : result);
+      scriptLog(text || 'Completed (no return value).');
+      notifyOperationResult(text || 'Completed (no return value).', {toastTitle: title || 'Script'});
+    }
+    function runScriptPath(path, title) {
+      scriptLog('Running: ' + path);
+      callJSX('signarama_helper_runScriptFile("' + jsxEscapeDoubleQuoted(path) + '")', function(result) {
+        reportResult(result, title || 'Run script');
+      });
+    }
+    function refreshList() {
+      if(!list) return;
+      list.innerHTML = '<div class="small">Loading scripts...</div>';
+      callJSX('signarama_helper_listPredefinedScripts()', function(result) {
+        let scripts = [];
+        try {scripts = JSON.parse(String(result || '[]'));} catch(_eScriptList) {scripts = [];}
+        list.innerHTML = '';
+        if(!scripts.length) {
+          list.innerHTML = '<div class="small">No .jsx or .js scripts found in jsx/scripts.</div>';
+          return;
+        }
+        scripts.forEach(function(script) {
+          const row = document.createElement('div');
+          row.className = 'script-list-row';
+          const name = document.createElement('div');
+          name.className = 'script-list-name';
+          name.textContent = script.name;
+          name.title = script.path;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn2';
+          button.textContent = 'Run';
+          button.addEventListener('click', function() {runScriptPath(script.path, script.name);});
+          row.appendChild(name);
+          row.appendChild(button);
+          list.appendChild(row);
+        });
+      });
+    }
+
+    scheduleScriptListRefresh = function() {setTimeout(refreshList, 0);};
+    if(refresh) refresh.onclick = refreshList;
+    if(runFile) runFile.onclick = function() {
+      callJSX('signarama_helper_chooseAndRunScriptFile()', function(result) {reportResult(result, 'Run script file');});
+    };
+    if(runCode) runCode.onclick = function() {
+      const source = String((code && code.value) || '');
+      if(!source.trim()) {
+        showToast('Paste some script code first.', {type: 'warn', title: 'Scripts'});
+        return;
+      }
+      scriptLog('Running pasted code...');
+      callJSX('signarama_helper_runScriptCode("' + jsxEscapeDoubleQuoted(source) + '")', function(result) {
+        reportResult(result, 'Run pasted code');
+      });
+    };
+    if(clear) clear.onclick = function() {if(output) output.textContent = '';};
   }
 
   function wireNest() {

@@ -1,6 +1,70 @@
 //#target illustrator;
 app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
 
+/* ---------------- Script runner ---------------- */
+function _srh_scriptResult(value) {
+  if(typeof value === 'undefined') return 'Completed (no return value).';
+  if(value === null) return 'Completed (null).';
+  try {return String(value);} catch(_eScriptResult) {return 'Completed.';}
+}
+
+function _srh_predefinedScriptsFolder() {
+  var hostFile = new File($.fileName);
+  return new Folder(hostFile.parent.fsName + '/scripts');
+}
+
+function signarama_helper_listPredefinedScripts() {
+  try {
+    var folder = _srh_predefinedScriptsFolder();
+    if(!folder.exists) return '[]';
+    var files = folder.getFiles(function(entry) {
+      return entry instanceof File && /\.(jsx|js)$/i.test(entry.name);
+    });
+    files.sort(function(a, b) {
+      var aa = String(a.name).toLowerCase();
+      var bb = String(b.name).toLowerCase();
+      return aa < bb ? -1 : (aa > bb ? 1 : 0);
+    });
+    var result = [];
+    for(var i = 0; i < files.length; i++) result.push({name: decodeURI(files[i].name), path: files[i].fsName});
+    return JSON.stringify(result);
+  } catch(e) {
+    return JSON.stringify([]);
+  }
+}
+
+function signarama_helper_runScriptFile(filePath) {
+  try {
+    var file = new File(String(filePath || ''));
+    if(!file.exists) return 'Error: Script file was not found.';
+    if(!/\.(jsx|js)$/i.test(file.name)) return 'Error: Select a .jsx or .js script.';
+    return _srh_scriptResult($.evalFile(file));
+  } catch(e) {
+    return 'Error: ' + e;
+  }
+}
+
+function signarama_helper_chooseAndRunScriptFile() {
+  try {
+    var file = File.openDialog('Select an Illustrator script', function(entry) {
+      return entry instanceof Folder || /\.(jsx|js)$/i.test(entry.name);
+    }, false);
+    if(!file) return 'Script selection cancelled.';
+    return signarama_helper_runScriptFile(file.fsName);
+  } catch(e) {
+    return 'Error: ' + e;
+  }
+}
+
+function signarama_helper_runScriptCode(source) {
+  try {
+    if(!String(source || '').replace(/\s/g, '')) return 'Error: No script code was provided.';
+    return _srh_scriptResult(eval(String(source)));
+  } catch(e) {
+    return 'Error: ' + e;
+  }
+}
+
 /* ---------------- JSON polyfill (ExtendScript) ---------------- */
 if(typeof JSON === 'undefined') {JSON = {};}
 if(!JSON.parse) {JSON.parse = function(s) {return eval('(' + s + ')');};}
