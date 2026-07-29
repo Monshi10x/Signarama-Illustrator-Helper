@@ -229,6 +229,17 @@
       outline:none;
     }
     input:focus, select:focus { border-color:#555; }
+    textarea {
+      background:#101010; color:#eee;
+      border:1px solid #333; border-radius:10px;
+      padding:8px 10px; font-size:13px;
+      box-shadow: inset 0px 1px 2px rgba(255,255,255,0.08);
+      outline:none; resize:vertical;
+    }
+    textarea:focus { border-color:#555; }
+    .script-list { display:grid; gap:8px; }
+    .script-list-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px; align-items:center; }
+    .script-list-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .btn2 {
       background:#2a2a2a; color:#eee;
       border:1px solid #444; border-radius:12px;
@@ -731,6 +742,7 @@
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
     <button class="tab" data-tab="tab-nest" type="button">Nest</button>
+    <button class="tab" data-tab="tab-scripts" type="button">Scripts</button>
     <button class="tab" data-tab="tab-updates" type="button">Updates<span id="updateNotification" class="update-notification hidden" aria-label="Update available" role="status"></span></button>
     <button class="tab" data-tab="tab-testing" type="button">Testing</button>
   </div>
@@ -1598,6 +1610,45 @@
         <div class="small" style="margin-top:8px;">
           Note: uses the current selection only. Invalid inward offset fragments are skipped and remaining paths continue.
         </div>
+      </div>
+    </section>
+
+    <!-- TAB: SCRIPTS -->
+    <section id="tab-scripts" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead">
+          <div>
+            <div class="cardTitle">Pre-defined scripts</div>
+            <div class="small">Scripts stored in the extension's jsx/scripts folder.</div>
+          </div>
+          <button id="btnRefreshScripts" class="btn2" type="button">Refresh</button>
+        </div>
+        <div id="predefinedScriptsList" class="script-list">
+          <div class="small">Open this tab to load scripts.</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cardHead"><div class="cardTitle">Run a script file</div></div>
+        <div class="small">Choose an Illustrator JSX or JavaScript file from your computer.</div>
+        <button id="btnRunScriptFile" class="btn" type="button" style="margin-top:10px;">
+          <span class="btnText">Select and run .jsx or .js file</span>
+          <span class="info" data-tip="Opens a file picker and executes the selected script in Illustrator.">i</span>
+        </button>
+      </div>
+      <div class="card">
+        <div class="cardHead"><div class="cardTitle">Run pasted code</div></div>
+        <label class="fld">
+          <span>ExtendScript / JavaScript code</span>
+          <textarea id="scriptCode" style="height:220px;width:100%;box-sizing:border-box;" placeholder="// Paste Illustrator JSX or JavaScript here"></textarea>
+        </label>
+        <button id="btnRunScriptCode" class="btn danger" type="button" style="margin-top:10px;">
+          <span class="btnText">Run code</span>
+          <span class="info" data-tip="Executes the pasted code directly in Illustrator.">i</span>
+        </button>
+      </div>
+      <div class="card">
+        <div class="cardHead"><div class="cardTitle">Script output</div><button id="btnClearScriptLog" class="btn2" type="button">Clear</button></div>
+        <div id="scriptsLog" class="log" role="log" aria-live="polite"></div>
       </div>
     </section>
 
