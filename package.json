@@ -1,6 +1,6 @@
 {
   "name": "signarama-illustrator-helper",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "private": true,
   "description": "Signarama Helper CEP extension for Adobe Illustrator",
   "scripts": {

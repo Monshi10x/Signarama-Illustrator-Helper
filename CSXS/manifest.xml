@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ExtensionManifest Version="7.0"
   ExtensionBundleId="com.signarama.helper"
-  ExtensionBundleVersion="1.0.15"
+  ExtensionBundleVersion="1.0.16"
   ExtensionBundleName="Signarama Helper">
 
   <ExtensionList>
-    <Extension Id="com.signarama.helper" Version="1.0.15"/>
+    <Extension Id="com.signarama.helper" Version="1.0.16"/>
   </ExtensionList>
 
   <ExecutionEnvironment>
