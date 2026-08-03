@@ -16,14 +16,20 @@ test('cutfile artboards are centered on the initial maximum-size canvas', () => 
   assert.match(hostscript, /artboardRect\s*=\s*\[artLeft, artTop, artRight, artBottom\]/);
 });
 
-test('the active cutfile tick never changes a clean saved document', () => {
+test('the active cutfile tick only writes a file path when it changed', () => {
   const tickStart = hostscript.indexOf('function signarama_helper_cutfile_tickFilePathLabels()');
-  const tickEnd = hostscript.indexOf('function signarama_helper_makeRouterCutfile()', tickStart);
-  const tickFunction = hostscript.slice(tickStart, tickEnd);
+  const resizeStart = hostscript.indexOf('function _srh_cutfileResizeFilePathTextToArtboard');
+  const resizeFunction = hostscript.slice(resizeStart, tickStart);
 
-  assert.match(tickFunction, /if\(doc\.saved\) return/);
-  assert.ok(
-    tickFunction.indexOf('if(doc.saved) return') < tickFunction.indexOf('doc.layers.getByName'),
-    'saved guard must run before a cutfile label is accessed or changed'
-  );
+  assert.match(resizeFunction, /if\(currentContents === filePath\) return false/);
+  assert.ok(resizeFunction.indexOf('currentContents === filePath') < resizeFunction.indexOf('tf.contents = filePath'));
+});
+
+test('cutfile creation fits the view to the fitted artboard', () => {
+  const createStart = hostscript.indexOf('function _srh_cutfileCreateFromSelection');
+  const resizeStart = hostscript.indexOf('function _srh_cutfileResizeFilePathTextToArtboard');
+  const createFunction = hostscript.slice(createStart, resizeStart);
+
+  assert.match(createFunction, /targetDoc\.artboards\.setActiveArtboardIndex\(0\)/);
+  assert.match(createFunction, /app\.executeMenuCommand\('fitin'\)/);
 });

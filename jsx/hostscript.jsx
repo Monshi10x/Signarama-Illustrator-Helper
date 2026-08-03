@@ -9042,11 +9042,19 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', canvasCenterX, materialY, Math.max(1, totalW * 0.10), materialSize, Justification.CENTER, true);
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
+  try {targetDoc.artboards.setActiveArtboardIndex(0);} catch(_eCfViewAb0) { }
+  try {app.executeMenuCommand('fitin');} catch(_eCfViewFit0) { }
   return 'Created ' + kind + ' cutfile from ' + sourceCount + ' selected item(s). Artboard fitted with labels.';
 }
 
 function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
   if(!doc || !tf) return false;
+  var filePath = _srh_cutfileGetSourceFilePath(doc);
+  var currentContents = '';
+  try {currentContents = String(tf.contents || '');} catch(_eCfTickReadContent0) {currentContents = '';}
+  // Assigning an unchanged value still marks an Illustrator document as modified.
+  // Do not touch any text or geometry unless the displayed path really changed.
+  if(currentContents === filePath) return false;
   var ab = null;
   try {ab = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;} catch(_eCfTickAb0) {ab = null;}
   if(!ab || ab.length !== 4) return false;
@@ -9055,7 +9063,6 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
   if(!(totalW > 0) || !(totalH > 0)) return false;
   var sf = _srh_getScaleFactor();
   if(!(sf > 0)) sf = 1;
-  var filePath = _srh_cutfileGetSourceFilePath(doc);
   try {tf.contents = filePath;} catch(_eCfTickContent0) { }
   try {tf.textRange.characterAttributes.size = _srh_ptDoc(11);} catch(_eCfTickSize0) { }
   try {
