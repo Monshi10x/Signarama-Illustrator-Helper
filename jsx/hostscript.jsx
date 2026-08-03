@@ -8948,14 +8948,26 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
 
   var initialSizePt = _srh_mm2pt(initialSizeMm);
   var targetDoc = null;
+  // rulerUnits is read-only on an Illustrator Document. Units must be supplied
+  // through DocumentPreset while the document is being created.
   try {
-    targetDoc = app.documents.add(sourceDoc.documentColorSpace, initialSizePt, initialSizePt);
+    var docPreset = new DocumentPreset();
+    docPreset.width = initialSizePt;
+    docPreset.height = initialSizePt;
+    docPreset.units = RulerUnits.Millimeters;
+    docPreset.colorMode = sourceDoc.documentColorSpace;
+    var startupPreset = (sourceDoc.documentColorSpace === DocumentColorSpace.RGB) ? 'Web' : 'Print';
+    targetDoc = app.documents.addDocument(startupPreset, docPreset, false);
   } catch(_eCfDoc0) {
-    try {targetDoc = app.documents.add(DocumentColorSpace.CMYK, initialSizePt, initialSizePt);} catch(_eCfDoc1) {targetDoc = null;}
+    // Older hosts may reject a localized startup-preset name. Set the document
+    // creation preference to Illustrator's millimetres value before falling back.
+    try {app.preferences.setIntegerPreference('rulerType', 1);} catch(_eCfUnitsFallback0) { }
+    try {targetDoc = app.documents.add(sourceDoc.documentColorSpace, initialSizePt, initialSizePt);} catch(_eCfDoc1) {targetDoc = null;}
   }
   if(!targetDoc) return 'Error: Could not create ' + kind + ' cutfile document.';
-  try {targetDoc.rulerUnits = RulerUnits.Millimeters;} catch(_eCfUnits0) { }
-  try {app.preferences.setIntegerPreference('rulerType', RulerUnits.Millimeters);} catch(_eCfUnits1) { }
+
+  var initialArtboard = null;
+  try {initialArtboard = targetDoc.artboards[0].artboardRect;} catch(_eCfInitialAb0) {initialArtboard = null;}
 
   try {targetDoc.activate();} catch(_eCfAct1) { }
   try {app.paste();} catch(_eCfPaste0) {return 'Error: Could not paste selection into the ' + kind + ' cutfile document.';}
@@ -8997,10 +9009,20 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   var totalW = Math.max(artW * 1.20, minW);
   var labelBand = Math.max(_srh_mm2pt(50) / sf, totalW * 0.24);
   var totalH = Math.max((artH * 1.20) + labelBand, _srh_mm2pt(100) / sf);
-  try {targetDoc.artboards[0].artboardRect = [0, totalH, totalW, 0];} catch(_eCfAb0) { }
+  var canvasCenterX = 0;
+  var canvasCenterY = 0;
+  if(initialArtboard && initialArtboard.length === 4) {
+    canvasCenterX = (Number(initialArtboard[0]) + Number(initialArtboard[2])) / 2;
+    canvasCenterY = (Number(initialArtboard[1]) + Number(initialArtboard[3])) / 2;
+  }
+  var artLeft = canvasCenterX - (totalW / 2);
+  var artRight = canvasCenterX + (totalW / 2);
+  var artTop = canvasCenterY + (totalH / 2);
+  var artBottom = canvasCenterY - (totalH / 2);
+  try {targetDoc.artboards[0].artboardRect = [artLeft, artTop, artRight, artBottom];} catch(_eCfAb0) { }
 
-  var desiredLeft = marginX + ((totalW - (artW + marginX * 2)) / 2);
-  var desiredTop = totalH - labelBand - marginY;
+  var desiredLeft = artLeft + marginX + ((totalW - (artW + marginX * 2)) / 2);
+  var desiredTop = artTop - labelBand - marginY;
   try {grp.translate(desiredLeft - b.left, desiredTop - b.top);} catch(_eCfMove0) { }
 
   var labelLayer = null;
@@ -9009,7 +9031,7 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
   var labelGap = totalH * 0.03;
   var fileSize = _srh_ptDoc(11);
   var materialSize = _srh_ptDoc(14);
-  var fileTf = _srh_cutfileAddFittedPointText(targetDoc, filePath, totalW / 2, totalH - topMargin, Math.max(1, totalW * 0.80), fileSize, Justification.CENTER, true);
+  var fileTf = _srh_cutfileAddFittedPointText(targetDoc, filePath, canvasCenterX, artTop - topMargin, Math.max(1, totalW * 0.80), fileSize, Justification.CENTER, true);
   try {fileTf.name = _SRH_CUTFILE_FILE_PATH_TEXT_NAME;} catch(_eCfFileName0) { }
   try {fileTf.note = _SRH_CUTFILE_FILE_PATH_TEXT_NAME;} catch(_eCfFileNote0) { }
   var materialY = totalH - topMargin - labelGap;
@@ -9017,7 +9039,7 @@ function _srh_cutfileCreateFromSelection(kind, initialSizeMm, scalePercent) {
     var fileBounds = fileTf.visibleBounds;
     if(fileBounds && fileBounds.length === 4) materialY = fileBounds[3] - labelGap;
   } catch(_eCfMatY0) { }
-  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', totalW / 2, materialY, Math.max(1, totalW * 0.10), materialSize, Justification.CENTER, true);
+  _srh_cutfileAddFittedPointText(targetDoc, 'Material: ', canvasCenterX, materialY, Math.max(1, totalW * 0.10), materialSize, Justification.CENTER, true);
 
   try {targetDoc.selection = null; grp.selected = true;} catch(_eCfSel1) { }
   return 'Created ' + kind + ' cutfile from ' + sourceCount + ' selected item(s). Artboard fitted with labels.';
@@ -9061,6 +9083,9 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
 function signarama_helper_cutfile_tickFilePathLabels() {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
+  // A scheduled tick must never dirty a document immediately after a save.
+  // Illustrator reports saved=true only when there are no pending changes.
+  try {if(doc.saved) return 'Cutfile labels already saved; active tick made no changes.';} catch(_eCfTickSaved0) { }
   var layer = null;
   try {layer = doc.layers.getByName(_SRH_CUTFILE_LABEL_LAYER_NAME);} catch(_eCfTickLayer0) {layer = null;}
   if(!layer) return 'No cutfile file path labels found.';
