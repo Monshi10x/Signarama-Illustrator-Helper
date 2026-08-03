@@ -25,6 +25,18 @@ test('the active cutfile tick only writes a file path when it changed', () => {
   assert.ok(resizeFunction.indexOf('currentContents === filePath') < resizeFunction.indexOf('tf.contents = filePath'));
 });
 
+test('a label-only path update is saved only when the document was already clean', () => {
+  const tickStart = hostscript.indexOf('function signarama_helper_cutfile_tickFilePathLabels()');
+  const tickEnd = hostscript.indexOf('function signarama_helper_makeRouterCutfile()', tickStart);
+  const tickFunction = hostscript.slice(tickStart, tickEnd);
+
+  assert.match(tickFunction, /wasCleanBeforeTick\s*=\s*!!doc\.saved/);
+  assert.match(tickFunction, /if\(updated && wasCleanBeforeTick\)/);
+  assert.match(tickFunction, /doc\.save\(\)/);
+  assert.ok(tickFunction.indexOf('wasCleanBeforeTick = !!doc.saved') < tickFunction.indexOf('_srh_cutfileResizeFilePathTextToArtboard'));
+  assert.ok(tickFunction.indexOf('if(updated && wasCleanBeforeTick)') < tickFunction.indexOf('doc.save()'));
+});
+
 test('cutfile creation fits the view to the fitted artboard', () => {
   const createStart = hostscript.indexOf('function _srh_cutfileCreateFromSelection');
   const resizeStart = hostscript.indexOf('function _srh_cutfileResizeFilePathTextToArtboard');

@@ -9090,9 +9090,10 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
 function signarama_helper_cutfile_tickFilePathLabels() {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
-  // A scheduled tick must never dirty a document immediately after a save.
-  // Illustrator reports saved=true only when there are no pending changes.
-  try {if(doc.saved) return 'Cutfile labels already saved; active tick made no changes.';} catch(_eCfTickSaved0) { }
+  // If a Save/Save As left the document clean, persist the label-only update as
+  // part of the same tick. Never auto-save when the operator has other edits.
+  var wasCleanBeforeTick = false;
+  try {wasCleanBeforeTick = !!doc.saved;} catch(_eCfTickSavedState0) {wasCleanBeforeTick = false;}
   var layer = null;
   try {layer = doc.layers.getByName(_SRH_CUTFILE_LABEL_LAYER_NAME);} catch(_eCfTickLayer0) {layer = null;}
   if(!layer) return 'No cutfile file path labels found.';
@@ -9109,6 +9110,14 @@ function signarama_helper_cutfile_tickFilePathLabels() {
       }
     }
   } catch(_eCfTickLoop0) { }
+  if(updated && wasCleanBeforeTick) {
+    try {
+      doc.save();
+      return 'Updated and saved ' + updated + ' cutfile file path label(s).';
+    } catch(_eCfTickSave0) {
+      return 'Updated ' + updated + ' cutfile file path label(s), but could not save the label update: ' + _eCfTickSave0;
+    }
+  }
   return updated ? ('Updated ' + updated + ' cutfile file path label(s).') : 'No cutfile file path labels updated.';
 }
 
