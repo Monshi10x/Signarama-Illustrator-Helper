@@ -1362,7 +1362,7 @@
         <div class="corebridge-proof-actions">
           <button class="btn" id="btnCorebridgeCreateProofFromData" type="button">
             <span class="btnText">Create Empty Proof</span>
-            <span class="info" data-tip="Opens the proof file and applies mappings to named text frames in the opened document. If data is not loaded yet, it pulls data first.">i</span>
+            <span class="info" data-tip="Opens the proof file and applies the currently loaded data to named text frames in the opened document.">i</span>
           </button>
           <button class="btn danger" id="btnCorebridgeCreateProofForSelected" type="button">
             <span class="btnText">Create Proof for Selected</span>
@@ -1389,18 +1389,16 @@
             <span class="info" data-tip="Copy -> Scale -> Scale strokes (optional rasterize)">i</span>
           </span>
         </button>
+        <button class="btn" id="btnCorebridgePullData" type="button">
+          <span class="btnText">Pull Data</span>
+          <span class="info" data-tip="Fetches async JSON, filters by job/item number, and renders matching results below.">i</span>
+        </button>
       </div>
       <div id="corebridgeFetchStatus" class="corebridge-fetch-status" aria-live="polite">
         <span class="corebridge-spinner" aria-hidden="true"></span>
         <span>Fetching Corebridge data....</span>
       </div>
       <div class="corebridge-dev-area">
-        <div id="corebridgePullControlsWrap" class="hidden">
-          <button class="btn" id="btnCorebridgePullData" type="button">
-            <span class="btnText">Pull Data</span>
-            <span class="info" data-tip="Fetches async JSON, filters by job/item number, and renders matching results below.">i</span>
-          </button>
-        </div>
         <div id="corebridgeDevDumpWrap" class="hidden">
           <div id="corebridgeDataDumpHost"></div>
         </div>
