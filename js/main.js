@@ -749,7 +749,6 @@
     const corebridgeCreateProofFromData = $('btnCorebridgeCreateProofFromData');
     const corebridgeCreateProofForSelected = $('btnCorebridgeCreateProofForSelected');
     const corebridgeDevMode = $('corebridgeDevMode');
-    const corebridgePullControlsWrap = $('corebridgePullControlsWrap');
     const corebridgeDevDumpWrap = $('corebridgeDevDumpWrap');
     const corebridgeProofMappingsWrap = $('corebridgeProofMappingsWrap');
     const corebridgeFlashFieldsWrap = $('corebridgeFlashFieldsWrap');
@@ -1023,7 +1022,6 @@
     }
     function refreshCorebridgeDevModeUi() {
       const show = !!(corebridgeDevMode && corebridgeDevMode.checked);
-      if(corebridgePullControlsWrap) corebridgePullControlsWrap.classList.toggle('hidden', !show);
       if(corebridgeDevDumpWrap) corebridgeDevDumpWrap.classList.toggle('hidden', !show);
       if(corebridgeProofMappingsWrap) corebridgeProofMappingsWrap.classList.toggle('hidden', !show);
       if(corebridgeFlashFieldsWrap) corebridgeFlashFieldsWrap.classList.toggle('hidden', !show);
@@ -2030,9 +2028,6 @@
     if(document.querySelector('.tab[data-tab="tab-corebridge"].active') || (document.querySelector('.tab[data-tab="tab-corebridge"]') && !document.getElementById('tab-corebridge').classList.contains('hidden'))) {
       scheduleCorebridgeInitialFetch();
     }
-    setInterval(function() {
-      scheduleCorebridgeInitialFetch();
-    }, 10 * 60 * 1000);
     if(corebridgePullData) {
       corebridgePullData.onclick = async () => {
         try {
@@ -2054,12 +2049,9 @@
     if(corebridgeCreateProofFromData) {
       async function runCorebridgeProofCreation(mode) {
         const criteriaNow = getCorebridgeCriteriaFromFields();
-        if(mode === 'selected' || corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData || !corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
-          try {
-            await executeCorebridgePullData({toastOnSuccess: false, toastOnError: true});
-          } catch(_eAutoPull) {
-            return;
-          }
+        if(corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData) {
+          showToast('Click Pull Data to load the current job and item first.', {type: 'warn', title: 'Corebridge'});
+          return;
         }
         if(!corebridgeLastFilteredData || !corebridgeLastFilteredData.length) {
           showToast('No filtered rows to map.', {type: 'warn', title: 'Corebridge'});

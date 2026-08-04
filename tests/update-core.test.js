@@ -92,12 +92,17 @@ test('lightboxes use the visible view center and Proofs exposes fixed fetch host
   assert.doesNotMatch(main, /const corebridgeProxyBaseUrl =/);
 });
 
-test('Proofs refreshes on every visit and every ten minutes', () => {
+test('Proofs only pulls data on tab visits and explicit button clicks', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
   assert.match(main, /tabId === 'tab-corebridge'[\s\S]*scheduleCorebridgeInitialFetch\(\)/);
   assert.match(main, /executeCorebridgePullData\(\{toastOnSuccess: false, toastOnError: false\}\)/);
-  assert.match(main, /10 \* 60 \* 1000/);
+  assert.match(main, /corebridgePullData\.onclick = async/);
+  assert.doesNotMatch(main, /10 \* 60 \* 1000/);
+  assert.doesNotMatch(main, /_eAutoPull/);
   assert.match(main, /corebridgeInitialFetchStarted = false;/);
+  assert.doesNotMatch(html, /id="corebridgePullControlsWrap"/);
+  assert.match(html, /id="btnCopyOutlineScaleA4"[\s\S]*id="btnCorebridgePullData"[\s\S]*<\/div>\s*<div id="corebridgeFetchStatus"/);
 });
 
 test('Scripts tab supports bundled files, selected files, and pasted code', () => {
