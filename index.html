@@ -961,6 +961,11 @@
         <span class="info" data-tip="Adds a centered label near the top of each artboard showing the current file path. Width=60% of artboard, offset=5mm. Text scales to the field width.">i</span>
       </button>
 
+      <button class="btn" id="btnRefreshCutfilePathLabel" type="button">
+        <span class="btnText">Refresh file path label</span>
+        <span class="info" data-tip="Updates cutfile path labels after Save As without saving the document.">i</span>
+      </button>
+
       <button class="btn" id="btnOutlineAllText" type="button">
         <span class="btnText">Outline all text</span>
         <span class="info" data-tip="Converts all text frames in the document to outlines.">i</span>
@@ -971,13 +976,6 @@
         <span class="info" data-tip="Sets all fills to none and all strokes to 1px black across the document.">i</span>
       </button>
 
-      <details class="card" style="margin-top:auto;">
-        <summary class="cardTitle">Dev mode</summary>
-        <label class="chk" for="cutfileDisableActiveTick" style="margin-top:10px;">
-          <input id="cutfileDisableActiveTick" type="checkbox">
-          <span>Turn off active tick</span>
-        </label>
-      </details>
     </section>
 
     <!-- TAB: DIMENSIONS -->
@@ -1468,7 +1466,7 @@
         </div>
         <div class="row" style="margin-top:6px; align-items:center;">
           <label class="chk">
-            <input id="lightboxUpdateMeasuresLive" type="checkbox" checked>
+            <input id="lightboxUpdateMeasuresLive" type="checkbox">
             <span>Update measures live</span>
           </label>
         </div>

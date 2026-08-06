@@ -198,3 +198,23 @@ test('update UI loads modules from the decoded CEP extension path and shows upda
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(elements.updateNotification.classList.hidden, false);
 });
+
+test('Proof creation reuses already-fetched rows after selecting a different item', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  assert.match(main, /function useCachedCorebridgeDataForCriteria\(criteria\)/);
+  assert.match(main, /corebridgeLastAllData\.filter\(\(row\) =>/);
+  assert.match(main, /useCachedCorebridgeDataForCriteria\(getCorebridgeCriteriaFromFields\(\)\)/);
+  assert.match(main, /\(corebridgeCriteriaChanged\(criteriaNow\) \|\| !corebridgeHasFetchedData\) && !useCachedCorebridgeDataForCriteria\(criteriaNow\)/);
+  assert.match(main, /if\(!corebridgeLastSecondaryFetchResults\)[\s\S]{0,300}executeCorebridgeSecondaryFetches/);
+});
+
+test('Corebridge flash arrows layer remains unlocked during proof workflows', () => {
+  const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  const start = host.indexOf('function _srh_corebridge_getArrowLayer');
+  const end = host.indexOf('function _srh_corebridge_findTextFrameByName', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const arrowLayerFunctions = host.slice(start, end);
+  assert.match(arrowLayerFunctions, /layer\.locked = false/);
+  assert.doesNotMatch(arrowLayerFunctions, /(?:layer|arrowLayer)\.locked = true/);
+});
