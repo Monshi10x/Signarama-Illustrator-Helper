@@ -176,12 +176,13 @@
   };
   let lightboxMeasureLiveTimer = null;
   let lightboxMeasureLiveInFlight = false;
-  let corebridgePageNumberWatchTimer = null;
-  let corebridgePageNumberWatcherErrorLogged = false;
+  let lightboxMeasureLiveDocumentKey = '';
+  let stopLightboxMeasureLiveFn = null;
   let corebridgeFlashTickPollTimer = null;
   let corebridgeFlashTickPollCount = 0;
   let corebridgeFlashLastTickCount = -1;
   let corebridgeFlashTickPollInFlight = false;
+  let stopCorebridgeFlashTickPollingFn = null;
   let coloursPendingApplyFns = [];
   let coloursHasPendingChanges = false;
   let copiedColourValues = null;
@@ -197,6 +198,11 @@
   const SRH_NEST_BACKUP_KEY = 'srhNestResultBackup';
   const SRH_NEST_FORCE_TAB_KEY = 'srhNestForceTabRestore';
   const SRH_NEST_RUNTIME_KEY = 'srhNestRuntimeState';
+
+  function stopLiveHostTimers(reason) {
+    if(stopCorebridgeFlashTickPollingFn) stopCorebridgeFlashTickPollingFn(reason || 'panel cleanup');
+    if(stopLightboxMeasureLiveFn) stopLightboxMeasureLiveFn();
+  }
 
   function saveNestRuntimeMarker(eventName, extra) {
     try {
@@ -363,13 +369,13 @@
     log('Panel booting…');
     saveNestRuntimeMarker('panel-boot');
 
-    cs.evalScript('app.name', function(name) {
+    enqueueEvalScript('app.name', function(name) {
       setStatus(name ? ('Connected: ' + name) : 'Not connected');
       log(name ? ('Connected to: ' + name) : 'Could not query app.name');
     });
 
     loadJSX(() => {
-      cs.evalScript('((typeof signarama_helper_fitArtboardToArtwork==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_fitArtboardToArtwork==="function")) ? "function" : "undefined")', function(type) {
+      enqueueEvalScript('((typeof signarama_helper_fitArtboardToArtwork==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_fitArtboardToArtwork==="function")) ? "function" : "undefined")', function(type) {
         log('JSX check: signarama_helper_fitArtboardToArtwork is ' + type);
         if(type !== 'function') log('ERROR: JSX not loaded (check path/case).');
         loadPanelSettings(function() {
@@ -398,9 +404,11 @@
       log('Unhandled rejection: ' + text);
     });
     window.addEventListener('beforeunload', function() {
+      stopLiveHostTimers('panel unload');
       saveNestRuntimeMarker('panel-beforeunload');
     });
     window.addEventListener('pagehide', function() {
+      stopLiveHostTimers('panel pagehide');
       saveNestRuntimeMarker('panel-pagehide');
     });
   }
@@ -410,6 +418,8 @@
     const panels = $all('[role="tabpanel"]');
 
     function activate(tabId) {
+      if(tabId !== 'tab-lightbox' && stopLightboxMeasureLiveFn) stopLightboxMeasureLiveFn();
+      if(tabId !== 'tab-corebridge' && stopCorebridgeFlashTickPollingFn) stopCorebridgeFlashTickPollingFn('tab leave');
       tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-tab') === tabId));
       panels.forEach(p => p.classList.toggle('hidden', p.id !== tabId));
       if(tabId === 'tab-colours' && typeof window.refreshColours === 'function') {
@@ -423,6 +433,9 @@
       }
       if(tabId === 'tab-corebridge' && typeof scheduleCorebridgeInitialFetch === 'function') {
         scheduleCorebridgeInitialFetch();
+        callJSX('signarama_helper_corebridge_updatePageNumbers()', function(res) {
+          if(/^Error:/i.test(String(res || ''))) log('Page number refresh error: ' + res);
+        });
       }
       if(tabId === 'tab-scripts' && typeof scheduleScriptListRefresh === 'function') {
         scheduleScriptListRefresh();
@@ -727,23 +740,6 @@
       const panel = $('tab-corebridge');
       return !!(panel && !panel.classList.contains('hidden'));
     }
-    function ensureCorebridgePageNumberWatcher() {
-      if(corebridgePageNumberWatchTimer) return;
-      corebridgePageNumberWatchTimer = setInterval(() => {
-        if(!isCorebridgeTabActiveForPolling()) return;
-        callJSX('((typeof signarama_helper_corebridge_updatePageNumbers === "function") ? signarama_helper_corebridge_updatePageNumbers : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_updatePageNumbers === "function") ? $.global.signarama_helper_corebridge_updatePageNumbers : function(){return "NO_FN";}))()', (res) => {
-          const txt = String(res || '');
-          if(/^Error:/i.test(txt) && !corebridgePageNumberWatcherErrorLogged) {
-            corebridgePageNumberWatcherErrorLogged = true;
-            log('Page number watcher error: ' + txt);
-          }
-          if(!/^Error:/i.test(txt)) corebridgePageNumberWatcherErrorLogged = false;
-        });
-      }, 1800);
-    }
-
-    ensureCorebridgePageNumberWatcher();
-
     const corebridgePullData = $('btnCorebridgePullData');
     const corebridgeOpenProof = $('btnCorebridgeOpenProof');
     const corebridgeCreateProofFromData = $('btnCorebridgeCreateProofFromData');
@@ -777,15 +773,24 @@
       corebridgeFlashLastTickCount = -1;
       corebridgeFlashTickPollInFlight = false;
     }
+    stopCorebridgeFlashTickPollingFn = stopCorebridgeFlashTickPolling;
     function startCorebridgeFlashTickPolling() {
       stopCorebridgeFlashTickPolling('restart');
       corebridgeFlashTickPollCount = 0;
       log('Corebridge flash poll start (safe tick every 500ms).');
       corebridgeFlashTickPollTimer = setInterval(() => {
-        if(!isCorebridgeTabActiveForPolling()) return;
+        if(!isCorebridgeTabActiveForPolling()) {
+          stopCorebridgeFlashTickPolling('tab leave');
+          return;
+        }
         if(corebridgeFlashTickPollInFlight) return;
         corebridgeFlashTickPollInFlight = true;
         corebridgeFlashTickPollCount++;
+        if(corebridgeFlashTickPollCount > 120) {
+          corebridgeFlashTickPollInFlight = false;
+          stopCorebridgeFlashTickPolling('hard timeout');
+          return;
+        }
         callJSX('((typeof signarama_helper_corebridge_flashTickTask === "function") ? signarama_helper_corebridge_flashTickTask : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_corebridge_flashTickTask === "function") ? $.global.signarama_helper_corebridge_flashTickTask : function(){return "ERROR|flashTickTask missing";}))()', (tickRes) => {
           corebridgeFlashTickPollInFlight = false;
           const tickTxt = String(tickRes || '').trim();
@@ -2163,27 +2168,29 @@
         };
       }
     }
+    function refreshCutfilePathLabels() {
+      runButtonJsxOperation('signarama_helper_cutfile_refreshFilePathLabels()', {logFn: log, toastTitle: 'Refresh file path label'});
+    }
+    function makeCutfile(fnCall, title) {
+      runButtonJsxOperation(fnCall, {logFn: log, toastTitle: title, onResult: function(res) {
+        const text = String(res || '');
+        if(!/^Error:/i.test(text) && !/^No\b/i.test(text)) refreshCutfilePathLabels();
+      }});
+    }
     const makeRouterCutfile = $('btnMakeRouterCutfile');
-    if(makeRouterCutfile) makeRouterCutfile.onclick = () => runButtonJsxOperation('signarama_helper_makeRouterCutfile()', {logFn: log, toastTitle: 'Make Router Cutfile'});
+    if(makeRouterCutfile) makeRouterCutfile.onclick = () => makeCutfile('signarama_helper_makeRouterCutfile()', 'Make Router Cutfile');
 
     const makeLaserCutfile = $('btnMakeLaserCutfile');
-    if(makeLaserCutfile) makeLaserCutfile.onclick = () => runButtonJsxOperation('signarama_helper_makeLaserCutfile()', {logFn: log, toastTitle: 'Make Laser Cutfile'});
+    if(makeLaserCutfile) makeLaserCutfile.onclick = () => makeCutfile('signarama_helper_makeLaserCutfile()', 'Make Laser Cutfile');
+
+    const refreshCutfilePath = $('btnRefreshCutfilePathLabel');
+    if(refreshCutfilePath) refreshCutfilePath.onclick = refreshCutfilePathLabels;
 
     const outlineAll = $('btnOutlineAllText');
     if(outlineAll) outlineAll.onclick = () => runButtonJsxOperation('signarama_helper_outlineAllText()', {logFn: log, toastTitle: 'Outline all text'});
 
     const setFillsStrokes = $('btnSetFillsStrokes');
     if(setFillsStrokes) setFillsStrokes.onclick = () => runButtonJsxOperation('signarama_helper_setAllFillsStrokes()', {logFn: log, toastTitle: 'Set fills/strokes'});
-
-    const cutfileDisableActiveTick = $('cutfileDisableActiveTick');
-    let cutfileTickBusy = false;
-    window.setInterval(function() {
-      if(cutfileTickBusy || (cutfileDisableActiveTick && cutfileDisableActiveTick.checked)) return;
-      cutfileTickBusy = true;
-      callJSX('signarama_helper_cutfile_tickFilePathLabels()', function() {
-        cutfileTickBusy = false;
-      });
-    }, 1000);
 
     wireDimensions();
     wireTransform();
@@ -3461,13 +3468,20 @@
       lightboxMeasureLiveInFlight = true;
       const payload = {
         force: !!force,
+        expectedDocumentKey: force ? '' : lightboxMeasureLiveDocumentKey,
+        includeDocumentIdentity: true,
         measureOptions: buildDimensionPayload(),
         isLargeArtboard: isLargeArtboard
       };
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       callJSX('signarama_helper_updateLightboxMeasures("' + json + '")', res => {
         lightboxMeasureLiveInFlight = false;
-        if(res && res !== 'No live measure changes.' && res !== 'No live lightbox found.') log(res);
+        const parts = String(res || '').split('|||');
+        const documentKey = parts.length > 1 ? parts.shift() : '';
+        const result = parts.length ? parts.join('|||') : String(res || '');
+        if(documentKey) lightboxMeasureLiveDocumentKey = documentKey;
+        if(result === 'Document changed.' || result === 'No live lightbox found.') stopLightboxMeasureLive();
+        if(result && result !== 'No live measure changes.' && result !== 'No live lightbox found.') log(result);
       });
     }
 
@@ -3476,11 +3490,20 @@
         clearInterval(lightboxMeasureLiveTimer);
         lightboxMeasureLiveTimer = null;
       }
+      lightboxMeasureLiveDocumentKey = '';
+      const liveCheckbox = $('lightboxUpdateMeasuresLive');
+      if(liveCheckbox) liveCheckbox.checked = false;
     }
+    stopLightboxMeasureLiveFn = stopLightboxMeasureLive;
 
     function startLightboxMeasureLive() {
       if(lightboxMeasureLiveTimer) return;
       lightboxMeasureLiveTimer = setInterval(() => {
+        const panel = $('tab-lightbox');
+        if(!panel || panel.classList.contains('hidden')) {
+          stopLightboxMeasureLive();
+          return;
+        }
         const liveCkb = $('lightboxUpdateMeasuresLive');
         if(!liveCkb || !liveCkb.checked) {
           stopLightboxMeasureLive();
@@ -4887,7 +4910,7 @@
         '", setGrad1090=" + ((typeof signarama_helper_debugSetSelectedGradientStops1090==="function" || (typeof $!=="undefined" && $.global && typeof $.global.signarama_helper_debugSetSelectedGradientStops1090==="function")) ? "function" : "undefined");' +
         '}' +
         '}catch(e){ "ERR: " + e; }';
-      cs.evalScript(cmd, function(res) {
+      enqueueEvalScript(cmd, function(res) {
         var txt = String(res || '');
         log('JSX load result: ' + txt);
         if(done) done(txt);
@@ -4897,8 +4920,41 @@
     }
   }
 
+  const jsxRequestQueue = [];
+  let jsxRequestInFlight = false;
+
+  function drainJSXQueue() {
+    if(jsxRequestInFlight || !jsxRequestQueue.length) return;
+    jsxRequestInFlight = true;
+    const request = jsxRequestQueue.shift();
+    function finish(res) {
+      try {
+        if(request.callback) request.callback(res);
+      } catch(e) {
+        log('Panel JSX callback error: ' + (e && e.message ? e.message : e));
+      } finally {
+        jsxRequestInFlight = false;
+        drainJSXQueue();
+      }
+    }
+    try {
+      cs.evalScript(request.script, finish);
+    } catch(e) {
+      finish('Error: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  function enqueueEvalScript(script, callback) {
+    jsxRequestQueue.push({script: script, callback: callback});
+    drainJSXQueue();
+  }
+
   function callJSX(fnCall, cb) {
-    var wrapped = '(function(){try{return ' + fnCall + ' }catch(e){return "Error: " + e}})()';
-    cs.evalScript(wrapped, function(res) {if(cb) cb(res);});
+    try {
+      var wrapped = '(function(){try{return ' + fnCall + ' }catch(e){return "Error: " + e}})()';
+      enqueueEvalScript(wrapped, cb);
+    } catch(e) {
+      if(cb) cb('Error: ' + (e && e.message ? e.message : e));
+    }
   }
 })();
