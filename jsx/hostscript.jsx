@@ -5501,8 +5501,13 @@ function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
       layer.name = _srhCorebridgeFlashArrowLayerName;
       layer.visible = true;
       layer.printable = false;
-      layer.locked = true;
+      layer.locked = false;
     } catch(_eArrowLayerCreate) {layer = null;}
+  }
+  // Keep this helper layer editable. A locked destination causes Illustrator to
+  // interrupt proof creation with a "paste into locked layers" confirmation.
+  if(layer) {
+    try {layer.locked = false;} catch(_eArrowLayerUnlock) { }
   }
   return layer;
 }
@@ -5517,7 +5522,7 @@ function _srh_corebridge_finalizeArrowLayer(doc) {
     try {layer.remove();} catch(_eArrowDel) { }
     return;
   }
-  try {layer.locked = true;} catch(_eArrowLockKeep) { }
+  try {layer.locked = false;} catch(_eArrowUnlockKeep) { }
 }
 function _srh_corebridge_removeArrow(entry) {
   if(!entry || !entry.arrowGroup) return;
@@ -5526,15 +5531,10 @@ function _srh_corebridge_removeArrow(entry) {
   if(!arrowLayer && _srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
     try {arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);} catch(_eArrowLayerFallback) {arrowLayer = null;}
   }
-  var wasLocked = false;
   if(arrowLayer) {
-    try {wasLocked = !!arrowLayer.locked;} catch(_eArrowWasLocked) {wasLocked = false;}
     try {arrowLayer.locked = false;} catch(_eArrowUnlockRm) { }
   }
   try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
-  if(arrowLayer && wasLocked) {
-    try {arrowLayer.locked = true;} catch(_eArrowRelockRm) { }
-  }
   entry.arrowGroup = null;
 }
 function _srh_corebridge_createArrowForTextFrame(doc, textFrame, baseValue) {
@@ -5589,11 +5589,11 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame, baseValue) {
     headB.strokeWidth = strokeW;
     headB.strokeColor = red;
 
-    try {layer.locked = true;} catch(_eArrowRelock) { }
+    try {layer.locked = false;} catch(_eArrowRemainUnlocked) { }
     return group;
   } catch(_eArrowCreate) {
     try {if(group) group.remove();} catch(_eArrowCleanup) { }
-    try {if(layer) layer.locked = true;} catch(_eArrowRelock2) { }
+    try {if(layer) layer.locked = false;} catch(_eArrowRemainUnlocked2) { }
     return null;
   }
 }
@@ -5601,8 +5601,6 @@ function _srh_corebridge_clearFlashArrowLayer(doc) {
   var layer = _srh_corebridge_getArrowLayer(doc, false);
   if(!layer) return 0;
   var removed = 0;
-  var wasLocked = false;
-  try {wasLocked = !!layer.locked;} catch(_eClearLock0) {wasLocked = false;}
   try {layer.locked = false;} catch(_eClearUnlock) { }
   try {
     while(layer.pageItems && layer.pageItems.length) {
@@ -5611,9 +5609,9 @@ function _srh_corebridge_clearFlashArrowLayer(doc) {
   } catch(_eClearLoop) { }
   try {
     if(layer.pageItems && layer.pageItems.length === 0) layer.remove();
-    else if(wasLocked) layer.locked = true;
+    else layer.locked = false;
   } catch(_eClearFinish) {
-    try {if(wasLocked) layer.locked = true;} catch(_eClearRelock) { }
+    try {layer.locked = false;} catch(_eClearRemainUnlocked) { }
   }
   return removed;
 }
