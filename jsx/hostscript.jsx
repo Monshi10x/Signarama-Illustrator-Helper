@@ -1,5 +1,4 @@
 //#target illustrator;
-app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
 
 /* ---------------- Script runner ---------------- */
 function _srh_scriptResult(value) {
@@ -5502,8 +5501,13 @@ function _srh_corebridge_getArrowLayer(doc, createIfMissing) {
       layer.name = _srhCorebridgeFlashArrowLayerName;
       layer.visible = true;
       layer.printable = false;
-      layer.locked = true;
+      layer.locked = false;
     } catch(_eArrowLayerCreate) {layer = null;}
+  }
+  // Keep this helper layer editable. A locked destination causes Illustrator to
+  // interrupt proof creation with a "paste into locked layers" confirmation.
+  if(layer) {
+    try {layer.locked = false;} catch(_eArrowLayerUnlock) { }
   }
   return layer;
 }
@@ -5518,7 +5522,7 @@ function _srh_corebridge_finalizeArrowLayer(doc) {
     try {layer.remove();} catch(_eArrowDel) { }
     return;
   }
-  try {layer.locked = true;} catch(_eArrowLockKeep) { }
+  try {layer.locked = false;} catch(_eArrowUnlockKeep) { }
 }
 function _srh_corebridge_removeArrow(entry) {
   if(!entry || !entry.arrowGroup) return;
@@ -5527,15 +5531,10 @@ function _srh_corebridge_removeArrow(entry) {
   if(!arrowLayer && _srhCorebridgeFlashState && _srhCorebridgeFlashState.doc) {
     try {arrowLayer = _srh_corebridge_getArrowLayer(_srhCorebridgeFlashState.doc, false);} catch(_eArrowLayerFallback) {arrowLayer = null;}
   }
-  var wasLocked = false;
   if(arrowLayer) {
-    try {wasLocked = !!arrowLayer.locked;} catch(_eArrowWasLocked) {wasLocked = false;}
     try {arrowLayer.locked = false;} catch(_eArrowUnlockRm) { }
   }
   try {entry.arrowGroup.remove();} catch(_eArrowRm) { }
-  if(arrowLayer && wasLocked) {
-    try {arrowLayer.locked = true;} catch(_eArrowRelockRm) { }
-  }
   entry.arrowGroup = null;
 }
 function _srh_corebridge_createArrowForTextFrame(doc, textFrame, baseValue) {
@@ -5590,11 +5589,11 @@ function _srh_corebridge_createArrowForTextFrame(doc, textFrame, baseValue) {
     headB.strokeWidth = strokeW;
     headB.strokeColor = red;
 
-    try {layer.locked = true;} catch(_eArrowRelock) { }
+    try {layer.locked = false;} catch(_eArrowRemainUnlocked) { }
     return group;
   } catch(_eArrowCreate) {
     try {if(group) group.remove();} catch(_eArrowCleanup) { }
-    try {if(layer) layer.locked = true;} catch(_eArrowRelock2) { }
+    try {if(layer) layer.locked = false;} catch(_eArrowRemainUnlocked2) { }
     return null;
   }
 }
@@ -5602,8 +5601,6 @@ function _srh_corebridge_clearFlashArrowLayer(doc) {
   var layer = _srh_corebridge_getArrowLayer(doc, false);
   if(!layer) return 0;
   var removed = 0;
-  var wasLocked = false;
-  try {wasLocked = !!layer.locked;} catch(_eClearLock0) {wasLocked = false;}
   try {layer.locked = false;} catch(_eClearUnlock) { }
   try {
     while(layer.pageItems && layer.pageItems.length) {
@@ -5612,9 +5609,9 @@ function _srh_corebridge_clearFlashArrowLayer(doc) {
   } catch(_eClearLoop) { }
   try {
     if(layer.pageItems && layer.pageItems.length === 0) layer.remove();
-    else if(wasLocked) layer.locked = true;
+    else layer.locked = false;
   } catch(_eClearFinish) {
-    try {if(wasLocked) layer.locked = true;} catch(_eClearRelock) { }
+    try {layer.locked = false;} catch(_eClearRemainUnlocked) { }
   }
   return removed;
 }
@@ -9087,13 +9084,9 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
   return true;
 }
 
-function signarama_helper_cutfile_tickFilePathLabels() {
+function signarama_helper_cutfile_refreshFilePathLabels() {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
-  // If a Save/Save As left the document clean, persist the label-only update as
-  // part of the same tick. Never auto-save when the operator has other edits.
-  var wasCleanBeforeTick = false;
-  try {wasCleanBeforeTick = !!doc.saved;} catch(_eCfTickSavedState0) {wasCleanBeforeTick = false;}
   var layer = null;
   try {layer = doc.layers.getByName(_SRH_CUTFILE_LABEL_LAYER_NAME);} catch(_eCfTickLayer0) {layer = null;}
   if(!layer) return 'No cutfile file path labels found.';
@@ -9110,14 +9103,6 @@ function signarama_helper_cutfile_tickFilePathLabels() {
       }
     }
   } catch(_eCfTickLoop0) { }
-  if(updated && wasCleanBeforeTick) {
-    try {
-      doc.save();
-      return 'Updated and saved ' + updated + ' cutfile file path label(s).';
-    } catch(_eCfTickSave0) {
-      return 'Updated ' + updated + ' cutfile file path label(s), but could not save the label update: ' + _eCfTickSave0;
-    }
-  }
   return updated ? ('Updated ' + updated + ' cutfile file path label(s).') : 'No cutfile file path labels updated.';
 }
 
@@ -10958,8 +10943,14 @@ function signarama_helper_updateLightboxMeasures(jsonStr) {
   if(!measureOptions) return 'No measure options.';
 
   var doc = app.activeDocument;
+  var documentKey = '';
+  try {documentKey = doc.fullName ? String(doc.fullName.fsName) : String(doc.name || '');} catch(_eLbDocKey0) {documentKey = String(doc.name || '');}
+  function lightboxResult(message) {
+    return opts.includeDocumentIdentity ? (documentKey + '|||' + message) : message;
+  }
+  if(opts.expectedDocumentKey && String(opts.expectedDocumentKey) !== documentKey) return lightboxResult('Document changed.');
   var lightboxes = _srh_findAllLightboxData(doc);
-  if(!lightboxes || !lightboxes.length) return 'No live lightbox found.';
+  if(!lightboxes || !lightboxes.length) return lightboxResult('No live lightbox found.');
 
   var changed = 0;
   var supportsTotal = 0;
@@ -10976,8 +10967,8 @@ function signarama_helper_updateLightboxMeasures(jsonStr) {
     changed++;
     supportsTotal += (lb.supportCenters ? lb.supportCenters.length : 0);
   }
-  if(changed < 1) return 'No live measure changes.';
-  return 'Updated lightbox measures live (' + changed + ' lightboxes, ' + supportsTotal + ' supports).';
+  if(changed < 1) return lightboxResult('No live measure changes.');
+  return lightboxResult('Updated lightbox measures live (' + changed + ' lightboxes, ' + supportsTotal + ' supports).');
 }
 
 function signarama_helper_drawLedLayout(jsonStr) {

@@ -5,6 +5,13 @@ const test = require('node:test');
 
 const hostscript = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
 
+function functionSource(name, nextName) {
+  const start = hostscript.indexOf('function ' + name + '(');
+  const end = hostscript.indexOf('function ' + nextName + '(', start);
+  assert.notEqual(start, -1, name + ' must exist');
+  return hostscript.slice(start, end);
+}
+
 test('cutfile documents are created with millimetre document units', () => {
   assert.match(hostscript, /docPreset\.units\s*=\s*RulerUnits\.Millimeters/);
   assert.match(hostscript, /addDocument\(startupPreset, docPreset, false\)/);
@@ -16,32 +23,27 @@ test('cutfile artboards are centered on the initial maximum-size canvas', () => 
   assert.match(hostscript, /artboardRect\s*=\s*\[artLeft, artTop, artRight, artBottom\]/);
 });
 
-test('the active cutfile tick only writes a file path when it changed', () => {
-  const tickStart = hostscript.indexOf('function signarama_helper_cutfile_tickFilePathLabels()');
-  const resizeStart = hostscript.indexOf('function _srh_cutfileResizeFilePathTextToArtboard');
-  const resizeFunction = hostscript.slice(resizeStart, tickStart);
-
-  assert.match(resizeFunction, /if\(currentContents === filePath\) return false/);
-  assert.ok(resizeFunction.indexOf('currentContents === filePath') < resizeFunction.indexOf('tf.contents = filePath'));
+test('cutfile refresh returns before changing an already-current label', () => {
+  const resize = functionSource('_srh_cutfileResizeFilePathTextToArtboard', 'signarama_helper_cutfile_refreshFilePathLabels');
+  assert.match(resize, /if\(currentContents === filePath\) return false/);
+  assert.ok(resize.indexOf('currentContents === filePath') < resize.indexOf('tf.contents = filePath'));
 });
 
-test('a label-only path update is saved only when the document was already clean', () => {
-  const tickStart = hostscript.indexOf('function signarama_helper_cutfile_tickFilePathLabels()');
-  const tickEnd = hostscript.indexOf('function signarama_helper_makeRouterCutfile()', tickStart);
-  const tickFunction = hostscript.slice(tickStart, tickEnd);
-
-  assert.match(tickFunction, /wasCleanBeforeTick\s*=\s*!!doc\.saved/);
-  assert.match(tickFunction, /if\(updated && wasCleanBeforeTick\)/);
-  assert.match(tickFunction, /doc\.save\(\)/);
-  assert.ok(tickFunction.indexOf('wasCleanBeforeTick = !!doc.saved') < tickFunction.indexOf('_srh_cutfileResizeFilePathTextToArtboard'));
-  assert.ok(tickFunction.indexOf('if(updated && wasCleanBeforeTick)') < tickFunction.indexOf('doc.save()'));
+test('cutfile refresh is narrowly scoped and never saves or changes Illustrator context', () => {
+  const refresh = functionSource('signarama_helper_cutfile_refreshFilePathLabels', 'signarama_helper_makeRouterCutfile');
+  assert.match(refresh, /doc\.layers\.getByName\(_SRH_CUTFILE_LABEL_LAYER_NAME\)/);
+  assert.match(refresh, /nm === _SRH_CUTFILE_FILE_PATH_TEXT_NAME \|\| note === _SRH_CUTFILE_FILE_PATH_TEXT_NAME/);
+  assert.doesNotMatch(refresh, /doc\.save\s*\(/);
+  assert.doesNotMatch(refresh, /doc\.selection\s*=/);
+  assert.doesNotMatch(refresh, /doc\.activeLayer\s*=/);
+  assert.doesNotMatch(refresh, /setActiveArtboardIndex|getActiveArtboardIndex/);
+  assert.doesNotMatch(refresh, /app\.redraw\s*\(|app\.executeMenuCommand\s*\(/);
+  assert.match(refresh, /'Updated ' \+ updated \+ ' cutfile file path label\(s\)\.'/);
+  assert.match(refresh, /'No cutfile file path labels updated\.'/);
 });
 
 test('cutfile creation fits the view to the fitted artboard', () => {
-  const createStart = hostscript.indexOf('function _srh_cutfileCreateFromSelection');
-  const resizeStart = hostscript.indexOf('function _srh_cutfileResizeFilePathTextToArtboard');
-  const createFunction = hostscript.slice(createStart, resizeStart);
-
-  assert.match(createFunction, /targetDoc\.artboards\.setActiveArtboardIndex\(0\)/);
-  assert.match(createFunction, /app\.executeMenuCommand\('fitin'\)/);
+  const create = functionSource('_srh_cutfileCreateFromSelection', '_srh_cutfileResizeFilePathTextToArtboard');
+  assert.match(create, /targetDoc\.artboards\.setActiveArtboardIndex\(0\)/);
+  assert.match(create, /app\.executeMenuCommand\('fitin'\)/);
 });
