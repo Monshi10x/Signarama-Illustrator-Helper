@@ -1,5 +1,4 @@
 //#target illustrator;
-app.userInteractionLevel = UserInteractionLevel.DONTDISPLAYALERTS;
 
 /* ---------------- Script runner ---------------- */
 function _srh_scriptResult(value) {
@@ -9087,13 +9086,9 @@ function _srh_cutfileResizeFilePathTextToArtboard(doc, tf) {
   return true;
 }
 
-function signarama_helper_cutfile_tickFilePathLabels() {
+function signarama_helper_cutfile_refreshFilePathLabels() {
   if(!app.documents.length) return 'No open document.';
   var doc = app.activeDocument;
-  // If a Save/Save As left the document clean, persist the label-only update as
-  // part of the same tick. Never auto-save when the operator has other edits.
-  var wasCleanBeforeTick = false;
-  try {wasCleanBeforeTick = !!doc.saved;} catch(_eCfTickSavedState0) {wasCleanBeforeTick = false;}
   var layer = null;
   try {layer = doc.layers.getByName(_SRH_CUTFILE_LABEL_LAYER_NAME);} catch(_eCfTickLayer0) {layer = null;}
   if(!layer) return 'No cutfile file path labels found.';
@@ -9110,14 +9105,6 @@ function signarama_helper_cutfile_tickFilePathLabels() {
       }
     }
   } catch(_eCfTickLoop0) { }
-  if(updated && wasCleanBeforeTick) {
-    try {
-      doc.save();
-      return 'Updated and saved ' + updated + ' cutfile file path label(s).';
-    } catch(_eCfTickSave0) {
-      return 'Updated ' + updated + ' cutfile file path label(s), but could not save the label update: ' + _eCfTickSave0;
-    }
-  }
   return updated ? ('Updated ' + updated + ' cutfile file path label(s).') : 'No cutfile file path labels updated.';
 }
 
@@ -10958,8 +10945,14 @@ function signarama_helper_updateLightboxMeasures(jsonStr) {
   if(!measureOptions) return 'No measure options.';
 
   var doc = app.activeDocument;
+  var documentKey = '';
+  try {documentKey = doc.fullName ? String(doc.fullName.fsName) : String(doc.name || '');} catch(_eLbDocKey0) {documentKey = String(doc.name || '');}
+  function lightboxResult(message) {
+    return opts.includeDocumentIdentity ? (documentKey + '|||' + message) : message;
+  }
+  if(opts.expectedDocumentKey && String(opts.expectedDocumentKey) !== documentKey) return lightboxResult('Document changed.');
   var lightboxes = _srh_findAllLightboxData(doc);
-  if(!lightboxes || !lightboxes.length) return 'No live lightbox found.';
+  if(!lightboxes || !lightboxes.length) return lightboxResult('No live lightbox found.');
 
   var changed = 0;
   var supportsTotal = 0;
@@ -10976,8 +10969,8 @@ function signarama_helper_updateLightboxMeasures(jsonStr) {
     changed++;
     supportsTotal += (lb.supportCenters ? lb.supportCenters.length : 0);
   }
-  if(changed < 1) return 'No live measure changes.';
-  return 'Updated lightbox measures live (' + changed + ' lightboxes, ' + supportsTotal + ' supports).';
+  if(changed < 1) return lightboxResult('No live measure changes.');
+  return lightboxResult('Updated lightbox measures live (' + changed + ' lightboxes, ' + supportsTotal + ' supports).');
 }
 
 function signarama_helper_drawLedLayout(jsonStr) {
