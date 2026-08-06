@@ -198,3 +198,12 @@ test('update UI loads modules from the decoded CEP extension path and shows upda
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(elements.updateNotification.classList.hidden, false);
 });
+
+test('Proof creation reuses already-fetched rows after selecting a different item', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
+  assert.match(main, /function useCachedCorebridgeDataForCriteria\(criteria\)/);
+  assert.match(main, /corebridgeLastAllData\.filter\(\(row\) =>/);
+  assert.match(main, /useCachedCorebridgeDataForCriteria\(getCorebridgeCriteriaFromFields\(\)\)/);
+  assert.match(main, /\(corebridgeCriteriaChanged\(criteriaNow\) \|\| !corebridgeHasFetchedData\) && !useCachedCorebridgeDataForCriteria\(criteriaNow\)/);
+  assert.match(main, /if\(!corebridgeLastSecondaryFetchResults\)[\s\S]{0,300}executeCorebridgeSecondaryFetches/);
+});

@@ -883,9 +883,9 @@
           if(corebridgeItemNumber) corebridgeItemNumber.value = vals.itemNumber;
           $all('.corebridge-lookup-row.selected').forEach((el) => el.classList.remove('selected'));
           btn.classList.add('selected');
-          invalidateCorebridgeFetchCache();
           if(corebridgeJobNumber) corebridgeJobNumber.dispatchEvent(new Event('input', {bubbles: true}));
           if(corebridgeItemNumber) corebridgeItemNumber.dispatchEvent(new Event('input', {bubbles: true}));
+          useCachedCorebridgeDataForCriteria(getCorebridgeCriteriaFromFields());
         });
         corebridgeLookup.appendChild(btn);
       });
@@ -895,8 +895,6 @@
     }
     function invalidateCorebridgeFetchCache() {
       corebridgeHasFetchedData = false;
-      corebridgeLastFilteredData = [];
-      corebridgeLastSecondaryFetchResults = null;
     }
     if(corebridgeJobNumber) {
       corebridgeJobNumber.addEventListener('input', invalidateCorebridgeFetchCache);
@@ -1051,6 +1049,22 @@
     function corebridgeCriteriaChanged(criteria) {
       const next = criteria || getCorebridgeCriteriaFromFields();
       return next.jobNumber !== corebridgeLastFetchCriteria.jobNumber || next.itemNumber !== corebridgeLastFetchCriteria.itemNumber;
+    }
+    function useCachedCorebridgeDataForCriteria(criteria) {
+      const next = criteria || getCorebridgeCriteriaFromFields();
+      if(!Array.isArray(corebridgeLastAllData) || !corebridgeLastAllData.length) return false;
+      const cachedMatches = corebridgeLastAllData.filter((row) => {
+        const invoice = normalizeCorebridgeInvoiceNumber(row && row.OrderInvoiceNumber);
+        const item = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
+        return (!next.jobNumber || invoice === next.jobNumber) && (!next.itemNumber || item === next.itemNumber);
+      });
+      if(!cachedMatches.length) return false;
+      const criteriaChanged = corebridgeCriteriaChanged(next);
+      corebridgeLastFilteredData = cachedMatches;
+      corebridgeHasFetchedData = true;
+      corebridgeLastFetchCriteria = {jobNumber: next.jobNumber, itemNumber: next.itemNumber};
+      if(criteriaChanged) corebridgeLastSecondaryFetchResults = null;
+      return true;
     }
     function buildCorebridgeSecondaryFetchPlan(filteredData) {
       const rows = Array.isArray(filteredData) ? filteredData : [];
@@ -2054,7 +2068,7 @@
     if(corebridgeCreateProofFromData) {
       async function runCorebridgeProofCreation(mode) {
         const criteriaNow = getCorebridgeCriteriaFromFields();
-        if(corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData) {
+        if((corebridgeCriteriaChanged(criteriaNow) || !corebridgeHasFetchedData) && !useCachedCorebridgeDataForCriteria(criteriaNow)) {
           showToast('Click Pull Data to load the current job and item first.', {type: 'warn', title: 'Corebridge'});
           return;
         }
@@ -2071,6 +2085,12 @@
         if(!mappingText) {
           showToast('Add at least one mapping (source -> text frame name).', {type: 'warn', title: 'Corebridge'});
           return;
+        }
+
+        if(!corebridgeLastSecondaryFetchResults) {
+          const secondaryPlan = buildCorebridgeSecondaryFetchPlan(corebridgeLastFilteredData);
+          corebridgeLastSecondaryFetchResults = await executeCorebridgeSecondaryFetches({plan: secondaryPlan});
+          appendCorebridgeDataDump(buildCorebridgeSecondaryFetchResultsLog(corebridgeLastSecondaryFetchResults));
         }
 
         const safeProofPath = jsxEscapeDoubleQuoted(proofPath);
