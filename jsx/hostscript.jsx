@@ -9127,6 +9127,36 @@ function _dim_ptDoc(pt, scaleFactor) {
   return (pt || 0) / sf;
 }
 function _dim_pt2mm(pt) {return pt * 25.4 / 72.0;}
+function _dim_isFiniteNumber(value) {
+  return typeof value === 'number' && isFinite(value);
+}
+function _dim_requireFinite(value, name) {
+  var n = Number(value);
+  if(!isFinite(n)) throw new Error('Invalid numeric parameter: ' + String(name || 'value') + '=' + String(value));
+  return n;
+}
+function _dim_normalizeRotationDegrees(value) {
+  var angle = Number(value);
+  if(!isFinite(angle)) angle = 0;
+  while(angle > 180) angle -= 360;
+  while(angle <= -180) angle += 360;
+  return angle;
+}
+function _dim_errorDetails(error, stage, context) {
+  var parts = ['stage=' + String(stage || 'unknown')];
+  try {parts.push('message=' + String(error && error.message || error));} catch(_) { }
+  try {parts.push('number=' + String(error && error.number));} catch(_eN) { }
+  try {parts.push('line=' + String(error && error.line));} catch(_eL) { }
+  try {parts.push('file=' + String(error && error.fileName));} catch(_eF) { }
+  if(context) for(var key in context) {
+    if(!context.hasOwnProperty(key)) continue;
+    try {parts.push(key + '=' + String(context[key]));} catch(_eC) { }
+  }
+  return parts.join(' | ');
+}
+function _dim_stage(stage, context, fn) {
+  try {return fn();} catch(e) {throw new Error(_dim_errorDetails(e, stage, context));}
+}
 function _dim_fmtMm(pt, decimals) {
   var mm = _dim_pt2mm(Math.abs(pt));
   var f = Math.pow(10, decimals | 0);
@@ -9176,11 +9206,14 @@ function _dim_colorMagenta() {
   return c;
 }
 function _dim_makeLine(group, x1, y1, x2, y2, strokePt, opts) {
+  x1 = _dim_requireFinite(x1, 'x1'); y1 = _dim_requireFinite(y1, 'y1');
+  x2 = _dim_requireFinite(x2, 'x2'); y2 = _dim_requireFinite(y2, 'y2');
+  strokePt = _dim_requireFinite(strokePt, 'strokeWidth');
+  if(strokePt <= 0) throw new Error('Invalid numeric parameter: strokeWidth=' + strokePt);
   var p = group.pathItems.add();
   p.setEntirePath([[x1, y1], [x2, y2]]);
   p.stroked = true;
-  var strokeWidth = (typeof strokePt === 'number' && isFinite(strokePt)) ? strokePt : 1;
-  p.strokeWidth = Math.max(strokeWidth, 0.1);
+  p.strokeWidth = strokePt;
   var lc = null;
   try {
     if(opts && opts.lineColor) {
@@ -9237,16 +9270,32 @@ function _dim_createAnchoredText(text, anchor, x, y, opts, layer) {
   var lyr = layer || doc.activeLayer;
   opts = opts || {};
 
-  var txt = lyr.textFrames.add();
-  txt.contents = text;
+  var context = opts.context || {};
+  context.text = String(text);
+  context.anchor = anchor;
+  context.x = x;
+  context.y = y;
+  x = _dim_requireFinite(x, 'text x');
+  y = _dim_requireFinite(y, 'text y');
+  var textSize = _dim_requireFinite(opts.size == null ? 12 : opts.size, 'text size');
+  if(textSize <= 0) throw new Error('Invalid numeric parameter: text size=' + textSize);
+  var angle = _dim_normalizeRotationDegrees(opts.rotation);
+  context.textSize = textSize;
+  context.rotation = angle;
+  var txt = null;
+  var measureCopy = null;
+  var outlineGroup = null;
+  try {
+    txt = _dim_stage('createTextFrame', context, function() {return lyr.textFrames.add();});
+    _dim_stage('setContents', context, function() {txt.contents = String(text);});
 
   if(opts.font) {
     try {
-      txt.textRange.characterAttributes.textFont = app.textFonts.getByName(opts.font);
-    } catch(e) { }
+      _dim_stage('resolveFont', context, function() {txt.textRange.characterAttributes.textFont = app.textFonts.getByName(opts.font);});
+    } catch(e) {throw e;}
   }
 
-  txt.textRange.characterAttributes.size = opts.size || 12;
+    _dim_stage('setTextSize', context, function() {txt.textRange.characterAttributes.size = textSize;});
 
   if(opts.textColor) {
     try {
@@ -9259,20 +9308,52 @@ function _dim_createAnchoredText(text, anchor, x, y, opts, layer) {
         try {ca.strokeColor = new NoColor();} catch(_eSC) { }
         try {ca.stroked = false;} catch(_eSt) { }
       }
-    } catch(_e1) { }
+    } catch(_e1) {throw new Error(_dim_errorDetails(_e1, 'setTextAttributes', context));}
   }
-  var angle = opts.rotation || 0;
+  var lineNormalExtent = null;
+  if(anchor === "LINE_GAP") {
+    try {
+      var unrotatedBounds = txt.visibleBounds;
+      if(unrotatedBounds && unrotatedBounds.length === 4) {
+        lineNormalExtent = Math.abs(Number(unrotatedBounds[1]) - Number(unrotatedBounds[3])) * 0.5;
+        if(!isFinite(lineNormalExtent)) lineNormalExtent = null;
+      }
+    } catch(_eUnrotatedBounds) {lineNormalExtent = null;}
+  }
   if(angle) {
-    txt.rotate(angle, true, true, true, true);
+      _dim_stage('rotateText', context, function() {txt.rotate(angle);});
   }
 
-  var measureCopy = txt.duplicate();
-  var outlineGroup = measureCopy.createOutline();
-  var b = outlineGroup.visibleBounds; // [x1, y1, x2, y2]
+    var b = null;
+    try {b = _dim_stage('readLiveVisibleBounds', context, function() {return txt.visibleBounds;});} catch(_eVB) {b = null;}
+    if(!b || b.length !== 4 || !_dim_isFiniteNumber(Number(b[0])) || !_dim_isFiniteNumber(Number(b[1])) || !_dim_isFiniteNumber(Number(b[2])) || !_dim_isFiniteNumber(Number(b[3]))) {
+      measureCopy = _dim_stage('duplicateTextFallback', context, function() {return txt.duplicate();});
+      outlineGroup = _dim_stage('createOutlineFallback', context, function() {return measureCopy.createOutline();});
+      measureCopy = null; // createOutline consumes its source text frame.
+      b = _dim_stage('readOutlineBoundsFallback', context, function() {return outlineGroup.visibleBounds;});
+    }
+    if(!b || b.length !== 4) throw new Error(_dim_errorDetails('Malformed text bounds', 'validateTextBounds', context));
   var midX = (b[0] + b[2]) / 2;
   var midY = (b[1] + b[3]) / 2;
 
   var ax, ay;
+  if(anchor === "LINE_GAP") {
+    var normalX = _dim_requireFinite(opts.normalX, 'label normal x');
+    var normalY = _dim_requireFinite(opts.normalY, 'label normal y');
+    var normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
+    if(!(normalLength > 0)) throw new Error('Invalid label normal.');
+    normalX /= normalLength;
+    normalY /= normalLength;
+    var labelGap = _dim_requireFinite(opts.labelGap == null ? 0 : opts.labelGap, 'label gap');
+    var halfWidth = Math.abs(Number(b[2]) - Number(b[0])) * 0.5;
+    var halfHeight = Math.abs(Number(b[1]) - Number(b[3])) * 0.5;
+    // The unrotated label height is its support distance along the normal after
+    // rotating it to the line. Fall back to projecting the rotated bounds when
+    // the host cannot provide the pre-rotation bounds.
+    var normalExtent = lineNormalExtent == null ? (Math.abs(normalX) * halfWidth + Math.abs(normalY) * halfHeight) : lineNormalExtent;
+    ax = midX - normalX * (normalExtent + labelGap);
+    ay = midY - normalY * (normalExtent + labelGap);
+  } else {
   switch(anchor) {
     case "TL": ax = b[0]; ay = b[1]; break;
     case "TM": ax = midX; ay = b[1]; break;
@@ -9285,14 +9366,20 @@ function _dim_createAnchoredText(text, anchor, x, y, opts, layer) {
     case "BR": ax = b[2]; ay = b[3]; break;
     default: ax = midX; ay = midY; break;
   }
+  }
 
-  var dx = x - ax;
-  var dy = y - ay;
-  txt.translate(dx, dy);
-
-  outlineGroup.remove();
-
-  return txt;
+    var dx = _dim_requireFinite(x - ax, 'translation dx');
+    var dy = _dim_requireFinite(y - ay, 'translation dy');
+    context.dx = dx; context.dy = dy;
+    _dim_stage('translateText', context, function() {txt.translate(dx, dy);});
+    return txt;
+  } catch(e) {
+    try {if(txt) txt.remove();} catch(_eTxtCleanup) { }
+    throw e;
+  } finally {
+    try {if(outlineGroup) outlineGroup.remove();} catch(_eOutlineCleanup) { }
+    try {if(measureCopy) measureCopy.remove();} catch(_eCopyCleanup) { }
+  }
 }
 
 function _dim_ensureLayer(name) {
@@ -9460,6 +9547,7 @@ function _dim_getMetricsFor(item, measureClippedContent, includeStroke) {
 }
 function _dim_drawHorizontalDim(lyr, left, right, yLine, ticLenPt, textPt, strokePt, decimals, side, textOffsetPt, scaleFactor, textColor, lineColor, includeArrowhead, arrowheadSizePt) {
   var g = lyr.groupItems.add();
+  try {
   _dim_makeLine(g, left, yLine, right, yLine, strokePt, {lineColor: lineColor});
 
   var half = ticLenPt * 0.5;
@@ -9474,16 +9562,22 @@ function _dim_drawHorizontalDim(lyr, left, right, yLine, ticLenPt, textPt, strok
   var tx = (left + right) * 0.5;
 
   var txt = null;
-  if(side === 'TOP') txt = _dim_createAnchoredText(_dim_fmtMmScaled(right - left, decimals, scaleFactor), "BM", tx, yLine + textOffsetPt, {size: textPt, textColor: textColor}, lyr);
-  else if(side === "BOTTOM") txt = _dim_createAnchoredText(_dim_fmtMmScaled(right - left, decimals, scaleFactor), "TM", tx, yLine - textOffsetPt, {size: textPt, textColor: textColor}, lyr);
+  var textContext = {side: side, scaleFactor: scaleFactor, strokeWidth: strokePt, labelGap: textOffsetPt, selectionCount: _dim_captureSelection().length};
+  if(side === 'TOP') txt = _dim_createAnchoredText(_dim_fmtMmScaled(right - left, decimals, scaleFactor), "BM", tx, yLine + textOffsetPt, {size: textPt, textColor: textColor, context: textContext}, g);
+  else if(side === "BOTTOM") txt = _dim_createAnchoredText(_dim_fmtMmScaled(right - left, decimals, scaleFactor), "TM", tx, yLine - textOffsetPt, {size: textPt, textColor: textColor, context: textContext}, g);
   if(txt) {
-    try {txt.move(g, ElementPlacement.PLACEATEND);} catch(_eMvTxt) { }
+    // Text is created directly in the measurement group.
   }
 
   return g;
+  } catch(e) {
+    try {g.remove();} catch(_eGroupCleanup) { }
+    throw e;
+  }
 }
 function _dim_drawVerticalDim(lyr, top, bottom, xLine, ticLenPt, textPt, strokePt, decimals, rotation, textOffsetPt, side, scaleFactor, textColor, lineColor, includeArrowhead, arrowheadSizePt) {
   var g = lyr.groupItems.add();
+  try {
   _dim_makeLine(g, xLine, bottom, xLine, top, strokePt, {lineColor: lineColor});
 
   var half = ticLenPt * 0.5;
@@ -9497,25 +9591,32 @@ function _dim_drawVerticalDim(lyr, top, bottom, xLine, ticLenPt, textPt, strokeP
 
   var ty = (top + bottom) * 0.5;
   var txt = null;
-  if(side === 'LEFT') txt = _dim_createAnchoredText(_dim_fmtMmScaled(top - bottom, decimals, scaleFactor), "R", xLine - textOffsetPt, ty, {size: textPt, rotation: 90, textColor: textColor}, lyr);
-  else if(side === "RIGHT") txt = _dim_createAnchoredText(_dim_fmtMmScaled(top - bottom, decimals, scaleFactor), "L", xLine + textOffsetPt, ty, {size: textPt, rotation: 270, textColor: textColor}, lyr);
+  var textContext = {side: side, scaleFactor: scaleFactor, strokeWidth: strokePt, labelGap: textOffsetPt, selectionCount: _dim_captureSelection().length};
+  if(side === 'LEFT') txt = _dim_createAnchoredText(_dim_fmtMmScaled(top - bottom, decimals, scaleFactor), "R", xLine - textOffsetPt, ty, {size: textPt, rotation: 90, textColor: textColor, context: textContext}, g);
+  else if(side === "RIGHT") txt = _dim_createAnchoredText(_dim_fmtMmScaled(top - bottom, decimals, scaleFactor), "L", xLine + textOffsetPt, ty, {size: textPt, rotation: -90, textColor: textColor, context: textContext}, g);
   if(txt) {
-    try {txt.move(g, ElementPlacement.PLACEATEND);} catch(_eMvTxt) { }
+    // Text is created directly in the measurement group.
   }
 
   return g;
+  } catch(e) {
+    try {g.remove();} catch(_eGroupCleanup) { }
+    throw e;
+  }
 }
 function _dim_addCenterText(lyr, b, decimals, textPt, scaleFactor, unitText, textColor) {
+  var g = lyr.groupItems.add();
   try {
     var w = b.right - b.left;
     var h = b.top - b.bottom;
     var txt = String(Math.round(_dim_pt2mm(w * (scaleFactor || 1)))) + unitText + ' x ' + String(Math.round(_dim_pt2mm(h * (scaleFactor || 1)))) + unitText;
     var cx = b.left + w / 2;
     var cy = b.bottom + h / 2;
-    _dim_createAnchoredText(txt, "C", cx, cy, {size: textPt, textColor: textColor}, lyr);
+    _dim_createAnchoredText(txt, "C", cx, cy, {size: textPt, textColor: textColor, context: {side: 'CENTER_TEXT', scaleFactor: scaleFactor}}, g);
     return 1;
   } catch(e) {
-    return 0;
+    try {g.remove();} catch(_eGroupCleanup) { }
+    throw e;
   }
 }
 function _dim_drawForBounds(b, lyr, opts) {
@@ -9567,19 +9668,27 @@ function _dim_drawForBounds(b, lyr, opts) {
   return added;
 }
 function _dim_run(opts) {
+  opts = opts || {};
   var doc = app.activeDocument;
   if(!doc) return "No document open.";
 
   var originalSel = _dim_captureSelection();
   var hasSelection = !!(originalSel && originalSel.length);
 
-  var scaleFactor = _srh_getScaleFactor();
-  var offsetPt = _dim_mm2ptDoc(opts.offsetMm || 10, scaleFactor);
-  var ticLenPt = _dim_mm2ptDoc(opts.ticLenMm || 2, scaleFactor);
-  var textPt = _dim_ptDoc(opts.textPt || 10, scaleFactor);
-  var strokePt = _dim_ptDoc(opts.strokePt || 1, scaleFactor);
+  var scaleFactor = _dim_requireFinite(_srh_getScaleFactor(), 'document scaleFactor');
+  if(scaleFactor <= 0) scaleFactor = 1;
+  var offsetMm = opts.offsetMm == null ? 10 : _dim_requireFinite(opts.offsetMm, 'offsetMm');
+  var ticLenMm = opts.ticLenMm == null ? 2 : _dim_requireFinite(opts.ticLenMm, 'ticLenMm');
+  var rawTextPt = opts.textPt == null ? 10 : _dim_requireFinite(opts.textPt, 'textPt');
+  var rawStrokePt = opts.strokePt == null ? 1 : _dim_requireFinite(opts.strokePt, 'strokePt');
+  var labelGapMm = opts.labelGapMm == null ? 0 : _dim_requireFinite(opts.labelGapMm, 'labelGapMm');
+  if(rawTextPt <= 0 || rawStrokePt <= 0 || ticLenMm < 0) throw new Error('Dimension sizes must be finite and positive.');
+  var offsetPt = _dim_mm2ptDoc(offsetMm, scaleFactor);
+  var ticLenPt = _dim_mm2ptDoc(ticLenMm, scaleFactor);
+  var textPt = _dim_ptDoc(rawTextPt, scaleFactor);
+  var strokePt = _dim_ptDoc(rawStrokePt, scaleFactor);
   var decimals = (opts.decimals | 0);
-  var textOffsetPt = _dim_mm2ptDoc(opts.labelGapMm || 0, scaleFactor);
+  var textOffsetPt = _dim_mm2ptDoc(labelGapMm, scaleFactor);
   var measureClippedContent = !!opts.measureClippedContent;
   var measureIncludeStroke = !!opts.measureIncludeStroke;
 
@@ -9595,8 +9704,9 @@ function _dim_run(opts) {
   } catch(_eLc2) {lineColor = null;}
   if(!lineColor) lineColor = _dim_hexToRGB('#000000');
   var includeArrowhead = !!opts.includeArrowhead;
-  var arrowheadSizePt = _dim_ptDoc(opts.arrowheadSizePt || 0, scaleFactor);
-  var scaleAppearance = opts.scaleAppearance || 1;
+  var arrowheadSizePt = _dim_ptDoc(opts.arrowheadSizePt == null ? 0 : _dim_requireFinite(opts.arrowheadSizePt, 'arrowheadSizePt'), scaleFactor);
+  var scaleAppearance = opts.scaleAppearance == null ? 1 : _dim_requireFinite(opts.scaleAppearance, 'scaleAppearance');
+  if(scaleAppearance <= 0 || arrowheadSizePt < 0) throw new Error('Scale appearance must be positive and arrowhead size cannot be negative.');
 
   var dOpts = {
     side: opts.side,
@@ -9622,12 +9732,15 @@ function _dim_run(opts) {
         var item = originalSel[i];
         try {if(item.locked || item.hidden) continue;} catch(_) { }
         var b; try {b = _dim_getMetricsFor(item, measureClippedContent, measureIncludeStroke);} catch(e) {continue;}
+        _dim_requireFinite(b.left, 'bounds left'); _dim_requireFinite(b.top, 'bounds top');
+        _dim_requireFinite(b.right, 'bounds right'); _dim_requireFinite(b.bottom, 'bounds bottom');
         measuresAdded += _dim_drawForBounds(b, lyr, dOpts);
         objectsProcessed++;
       }
     } catch(e) {
+      return 'Error: ' + _dim_errorDetails(e, 'drawMeasurement', {side: opts.side, document: doc.name, scaleFactor: scaleFactor, selectedItemIndex: i});
+    } finally {
       _dim_restoreSelection(originalSel);
-      return 'Error: ' + e.message;
     }
   } else {
     try {
@@ -9643,8 +9756,6 @@ function _dim_run(opts) {
       return 'Error: ' + e2.message;
     }
   }
-
-  if(hasSelection) _dim_restoreSelection(originalSel);
 
   if(objectsProcessed === 0) {
     if(hasSelection) return 'No measurable objects in selection.';
@@ -10251,6 +10362,7 @@ function _dim_runLine(opts) {
       var arrowScaled = arrowheadSizePt * scaleAppearance;
 
       var g = lyr.groupItems.add();
+      try {
       _dim_makeLine(g, sx, sy, ex, ey, strokeScaled, {lineColor: lineColor});
       var halfTick = tickScaled * 0.5;
       _dim_makeLine(g, sx - nx * halfTick, sy - ny * halfTick, sx + nx * halfTick, sy + ny * halfTick, strokeScaled, {lineColor: lineColor});
@@ -10260,29 +10372,45 @@ function _dim_runLine(opts) {
         _dim_addArrowheadAlongLine(g, ex, ey, dx, dy, arrowScaled, strokeScaled, lineColor);
       }
 
-      var midX = (sx + ex) * 0.5 + nx * textOff;
-      var midY = (sy + ey) * 0.5 + ny * textOff;
+      var midX = (sx + ex) * 0.5;
+      var midY = (sy + ey) * 0.5;
       var angle = Math.atan2(dy, dx) * 180 / Math.PI;
       var label = _dim_fmtMmScaled(len, opts.decimals | 0, scaleFactor);
 
-      var txt = _dim_createAnchoredText(label, "C", midX, midY, {size: textPt * scaleAppearance, rotation: angle, textColor: textColor}, lyr);
-      if(txt) {
-        try {txt.move(g, ElementPlacement.PLACEATEND);} catch(_eMv) { }
-      }
+      // LINE_GAP anchors the nearest edge, not the text centre, at the requested
+      // perpendicular gap. This applies equally to normal and replace modes.
+      _dim_createAnchoredText(label, "LINE_GAP", midX, midY, {
+        size: textPt * scaleAppearance,
+        rotation: angle,
+        textColor: textColor,
+        normalX: nx,
+        normalY: ny,
+        labelGap: textOff,
+        context: {side: 'LINE', labelGap: textOff, scaleFactor: scaleFactor, selectedItemIndex: s}
+      }, g);
 
       return 1;
+      } catch(e) {
+        try {g.remove();} catch(_eLineGroupCleanup) { }
+        throw e;
+      }
     }
 
+    var segmentError = null;
     for(var i = 1; i < pts.length; i++) {
       try {
         added += _addSegmentMeasure(pts[i - 1].anchor, pts[i].anchor);
-      } catch(_eSeg) { }
+      } catch(_eSeg) {segmentError = _eSeg; break;}
     }
     try {
-      if(path.closed && pts.length > 2) {
+      if(!segmentError && path.closed && pts.length > 2) {
         added += _addSegmentMeasure(pts[pts.length - 1].anchor, pts[0].anchor);
       }
-    } catch(_eClosed) { }
+    } catch(_eClosed) {segmentError = _eClosed;}
+    if(segmentError) {
+      _dim_restoreSelection(originalSel);
+      return 'Error: ' + _dim_errorDetails(segmentError, 'drawLineMeasurement', {selectedItemIndex: s, document: doc.name, scaleFactor: scaleFactor, labelGap: textOffsetPt * scaleAppearance});
+    }
 
     if(replaceOriginal) {
       try {
@@ -10297,6 +10425,7 @@ function _dim_runLine(opts) {
     }
   }
 
+  _dim_restoreSelection(replaceOriginal ? [] : originalSel);
   if(!added) return 'No measurable paths in selection.';
   if(replaceOriginal) {
     return 'Added ' + added + ' line measure' + (added === 1 ? '' : 's') +
@@ -10441,6 +10570,12 @@ this.atlas_dimensions_runMulti = function(json) {
       for(var k in opts) {if(opts.hasOwnProperty(k) && k !== 'sides') runOpts[k] = opts[k];}
       runOpts.side = side;
       lastMsg = _dim_run(runOpts);
+      if(/^Error:/i.test(String(lastMsg || ''))) {
+        try {app.endUndoGroup();} catch(_eEndFailed) { }
+        return 'Error: combined dimensions stopped at side=' + side +
+          ' after ' + totalMeasures + ' completed measure' + (totalMeasures === 1 ? '' : 's') + '. ' +
+          String(lastMsg).replace(/^Error:\s*/i, '');
+      }
       // Best-effort parse of counts
       var m = /Added\s+(\d+)\s+measure(?:s)?\s+on\s+(\d+)/i.exec(lastMsg);
       if(m) {
