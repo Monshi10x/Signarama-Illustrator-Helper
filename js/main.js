@@ -330,7 +330,7 @@
     });
   }
   function buildDimensionPayload() {
-    return {
+    const raw = {
       offsetMm: num(($('offsetMm') && $('offsetMm').value) || 0),
       ticLenMm: num(($('ticLenMm') && $('ticLenMm').value) || 0),
       textPt: num(($('textPt') && $('textPt').value) || 0),
@@ -347,6 +347,7 @@
       lineColor: ($('lineColor') && $('lineColor').value) || '#000000',
       scaleAppearance: num(($('scaleAppearance') && $('scaleAppearance').value) || 100) / 100
     };
+    return (typeof DimensionLogic !== 'undefined') ? DimensionLogic.normalizePayload(raw) : raw;
   }
 
   if(typeof CSInterface === 'undefined') {
