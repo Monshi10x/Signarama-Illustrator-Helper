@@ -42,3 +42,14 @@ test('host text measurement is guarded and failed measurement groups are cleaned
   assert.match(host, /rotation: -90/);
   assert.doesNotMatch(host, /txt\.rotate\(angle, true, true, true, true\)/);
 });
+
+test('line labels apply label gap from the nearest edge for normal and replace modes', () => {
+  const horizontal = logic.lineLabelCenter(50, 20, 0, 1, 40, 10, 6);
+  assert.deepEqual(horizontal, {x: 50, y: 31, edgeGap: 6});
+  const diagonal = logic.lineLabelCenter(0, 0, -1, 1, 20, 8, 4);
+  assert.ok(Math.abs(diagonal.edgeGap - 4) < 1e-10);
+  assert.ok(diagonal.x < 0 && diagonal.y > 0);
+  assert.match(host, /_dim_createAnchoredText\(label, "LINE_GAP"/);
+  assert.match(host, /labelGap: textOff/);
+  assert.doesNotMatch(host, /midX = \(sx \+ ex\) \* 0\.5 \+ nx \* textOff/);
+});

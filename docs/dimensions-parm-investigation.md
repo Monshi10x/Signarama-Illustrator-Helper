@@ -49,6 +49,7 @@ Horizontal and vertical routines created the group and all line/tick/arrow paths
 * Restore captured selection in `finally` for selected-object dimension runs.
 * Reject invalid host-side sizes and normalize invalid persisted panel payload values.
 * Stop multi-side execution at the first error and report the failing side and completed count.
+* Corrected line/path labels so `labelGapMm` measures from the nearest rotated label edge, for both normal and replace operations.
 * Added Node regression tests and a non-destructive Illustrator diagnostic harness.
 
 ## Test matrix and results

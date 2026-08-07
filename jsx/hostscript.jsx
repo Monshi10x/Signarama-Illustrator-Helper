@@ -9310,6 +9310,16 @@ function _dim_createAnchoredText(text, anchor, x, y, opts, layer) {
       }
     } catch(_e1) {throw new Error(_dim_errorDetails(_e1, 'setTextAttributes', context));}
   }
+  var lineNormalExtent = null;
+  if(anchor === "LINE_GAP") {
+    try {
+      var unrotatedBounds = txt.visibleBounds;
+      if(unrotatedBounds && unrotatedBounds.length === 4) {
+        lineNormalExtent = Math.abs(Number(unrotatedBounds[1]) - Number(unrotatedBounds[3])) * 0.5;
+        if(!isFinite(lineNormalExtent)) lineNormalExtent = null;
+      }
+    } catch(_eUnrotatedBounds) {lineNormalExtent = null;}
+  }
   if(angle) {
       _dim_stage('rotateText', context, function() {txt.rotate(angle);});
   }
@@ -9327,6 +9337,23 @@ function _dim_createAnchoredText(text, anchor, x, y, opts, layer) {
   var midY = (b[1] + b[3]) / 2;
 
   var ax, ay;
+  if(anchor === "LINE_GAP") {
+    var normalX = _dim_requireFinite(opts.normalX, 'label normal x');
+    var normalY = _dim_requireFinite(opts.normalY, 'label normal y');
+    var normalLength = Math.sqrt(normalX * normalX + normalY * normalY);
+    if(!(normalLength > 0)) throw new Error('Invalid label normal.');
+    normalX /= normalLength;
+    normalY /= normalLength;
+    var labelGap = _dim_requireFinite(opts.labelGap == null ? 0 : opts.labelGap, 'label gap');
+    var halfWidth = Math.abs(Number(b[2]) - Number(b[0])) * 0.5;
+    var halfHeight = Math.abs(Number(b[1]) - Number(b[3])) * 0.5;
+    // The unrotated label height is its support distance along the normal after
+    // rotating it to the line. Fall back to projecting the rotated bounds when
+    // the host cannot provide the pre-rotation bounds.
+    var normalExtent = lineNormalExtent == null ? (Math.abs(normalX) * halfWidth + Math.abs(normalY) * halfHeight) : lineNormalExtent;
+    ax = midX - normalX * (normalExtent + labelGap);
+    ay = midY - normalY * (normalExtent + labelGap);
+  } else {
   switch(anchor) {
     case "TL": ax = b[0]; ay = b[1]; break;
     case "TM": ax = midX; ay = b[1]; break;
@@ -9338,6 +9365,7 @@ function _dim_createAnchoredText(text, anchor, x, y, opts, layer) {
     case "BM": ax = midX; ay = b[3]; break;
     case "BR": ax = b[2]; ay = b[3]; break;
     default: ax = midX; ay = midY; break;
+  }
   }
 
     var dx = _dim_requireFinite(x - ax, 'translation dx');
@@ -10334,6 +10362,7 @@ function _dim_runLine(opts) {
       var arrowScaled = arrowheadSizePt * scaleAppearance;
 
       var g = lyr.groupItems.add();
+      try {
       _dim_makeLine(g, sx, sy, ex, ey, strokeScaled, {lineColor: lineColor});
       var halfTick = tickScaled * 0.5;
       _dim_makeLine(g, sx - nx * halfTick, sy - ny * halfTick, sx + nx * halfTick, sy + ny * halfTick, strokeScaled, {lineColor: lineColor});
@@ -10343,29 +10372,45 @@ function _dim_runLine(opts) {
         _dim_addArrowheadAlongLine(g, ex, ey, dx, dy, arrowScaled, strokeScaled, lineColor);
       }
 
-      var midX = (sx + ex) * 0.5 + nx * textOff;
-      var midY = (sy + ey) * 0.5 + ny * textOff;
+      var midX = (sx + ex) * 0.5;
+      var midY = (sy + ey) * 0.5;
       var angle = Math.atan2(dy, dx) * 180 / Math.PI;
       var label = _dim_fmtMmScaled(len, opts.decimals | 0, scaleFactor);
 
-      var txt = _dim_createAnchoredText(label, "C", midX, midY, {size: textPt * scaleAppearance, rotation: angle, textColor: textColor}, lyr);
-      if(txt) {
-        try {txt.move(g, ElementPlacement.PLACEATEND);} catch(_eMv) { }
-      }
+      // LINE_GAP anchors the nearest edge, not the text centre, at the requested
+      // perpendicular gap. This applies equally to normal and replace modes.
+      _dim_createAnchoredText(label, "LINE_GAP", midX, midY, {
+        size: textPt * scaleAppearance,
+        rotation: angle,
+        textColor: textColor,
+        normalX: nx,
+        normalY: ny,
+        labelGap: textOff,
+        context: {side: 'LINE', labelGap: textOff, scaleFactor: scaleFactor, selectedItemIndex: s}
+      }, g);
 
       return 1;
+      } catch(e) {
+        try {g.remove();} catch(_eLineGroupCleanup) { }
+        throw e;
+      }
     }
 
+    var segmentError = null;
     for(var i = 1; i < pts.length; i++) {
       try {
         added += _addSegmentMeasure(pts[i - 1].anchor, pts[i].anchor);
-      } catch(_eSeg) { }
+      } catch(_eSeg) {segmentError = _eSeg; break;}
     }
     try {
-      if(path.closed && pts.length > 2) {
+      if(!segmentError && path.closed && pts.length > 2) {
         added += _addSegmentMeasure(pts[pts.length - 1].anchor, pts[0].anchor);
       }
-    } catch(_eClosed) { }
+    } catch(_eClosed) {segmentError = _eClosed;}
+    if(segmentError) {
+      _dim_restoreSelection(originalSel);
+      return 'Error: ' + _dim_errorDetails(segmentError, 'drawLineMeasurement', {selectedItemIndex: s, document: doc.name, scaleFactor: scaleFactor, labelGap: textOffsetPt * scaleAppearance});
+    }
 
     if(replaceOriginal) {
       try {
@@ -10380,6 +10425,7 @@ function _dim_runLine(opts) {
     }
   }
 
+  _dim_restoreSelection(replaceOriginal ? [] : originalSel);
   if(!added) return 'No measurable paths in selection.';
   if(replaceOriginal) {
     return 'Added ' + added + ' line measure' + (added === 1 ? '' : 's') +

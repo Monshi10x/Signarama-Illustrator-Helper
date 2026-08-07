@@ -47,5 +47,15 @@
     } : {ok: true};
   }
 
-  return {finite: finite, normalizeRotationDegrees: normalizeRotationDegrees, normalizePayload: normalizePayload, inspectMultiResult: inspectMultiResult};
+  function lineLabelCenter(midX, midY, normalX, normalY, boundsWidth, boundsHeight, labelGap) {
+    var length = Math.sqrt(normalX * normalX + normalY * normalY);
+    if(!(length > 0)) throw new Error('Invalid line normal');
+    var nx = normalX / length;
+    var ny = normalY / length;
+    var extent = Math.abs(nx) * Math.abs(boundsWidth) * 0.5 + Math.abs(ny) * Math.abs(boundsHeight) * 0.5;
+    var distance = extent + finite(labelGap, 0);
+    return {x: midX + nx * distance, y: midY + ny * distance, edgeGap: distance - extent};
+  }
+
+  return {finite: finite, normalizeRotationDegrees: normalizeRotationDegrees, normalizePayload: normalizePayload, inspectMultiResult: inspectMultiResult, lineLabelCenter: lineLabelCenter};
 });
