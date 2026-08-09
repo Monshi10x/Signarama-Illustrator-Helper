@@ -1,6 +1,14 @@
 //#target illustrator;
 
 /* ---------------- Script runner ---------------- */
+// $.fileName is scoped to the file currently being evaluated.  Save the host
+// script's directory now; later calls arrive through CEP evalScript, at which
+// point $.fileName no longer identifies this file.
+var _srh_hostScriptFolderPath = (function() {
+  try {return new File($.fileName).parent.fsName;}
+  catch(_eHostScriptFolder) {return '';}
+})();
+
 function _srh_scriptResult(value) {
   if(typeof value === 'undefined') return 'Completed (no return value).';
   if(value === null) return 'Completed (null).';
@@ -8,8 +16,7 @@ function _srh_scriptResult(value) {
 }
 
 function _srh_predefinedScriptsFolder() {
-  var hostFile = new File($.fileName);
-  return new Folder(hostFile.parent.fsName + '/scripts');
+  return new Folder(_srh_hostScriptFolderPath + '/scripts');
 }
 
 function signarama_helper_listPredefinedScripts() {
