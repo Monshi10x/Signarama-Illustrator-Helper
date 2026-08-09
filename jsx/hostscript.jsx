@@ -49,8 +49,17 @@ function signarama_helper_listPredefinedScripts(folderPath) {
     var files = [];
     for(var e = 0; e < entries.length; e++) {
       var entryName = decodeURI(String(entries[e].name || ''));
-      entryNames.push(entryName + ' [' + String(entries[e].typename || 'unknown') + ']');
-      if(String(entries[e].typename) === 'File' && /\.(jsx|js)$/i.test(entryName)) files.push(entries[e]);
+      // File/Folder objects returned by Folder.getFiles do not consistently
+      // expose `typename` in Illustrator's ExtendScript runtime. Do not use it
+      // as a filter: the filename extension is the supported contract here.
+      var entryType = String(entries[e].typename || '');
+      if(!entryType) {
+        if(typeof entries[e].open === 'function') entryType = 'File';
+        else if(typeof entries[e].getFiles === 'function') entryType = 'Folder';
+        else entryType = 'unknown';
+      }
+      entryNames.push(entryName + ' [' + entryType + ']');
+      if(/\.(jsx|js)$/i.test(entryName)) files.push(entries[e]);
     }
     files.sort(function(a, b) {
       var aa = String(a.name).toLowerCase();

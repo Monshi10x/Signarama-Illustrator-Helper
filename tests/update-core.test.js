@@ -117,6 +117,8 @@ test('Scripts tab supports bundled files, selected files, and pasted code', () =
   assert.match(host, /var _srh_hostScriptFolderPath = \(function\(\)/);
   assert.match(host, /requestedPath \|\| \(_srh_hostScriptFolderPath \+ '\/scripts'\)/);
   assert.match(host, /function _srh_scriptListResponse\(/);
+  assert.match(host, /if\(\/\\\.\(jsx\|js\)\$\/i\.test\(entryName\)\) files\.push\(entries\[e\]\)/);
+  assert.doesNotMatch(host, /String\(entries\[e\]\.typename\) === 'File'/);
   assert.doesNotMatch(host, /function _srh_predefinedScriptsFolder\(\) \{[\s\S]{0,200}new File\(\$\.fileName\)/);
   assert.match(host, /function signarama_helper_chooseAndRunScriptFile\(\)/);
   assert.match(host, /function signarama_helper_runScriptCode\(source\)/);
