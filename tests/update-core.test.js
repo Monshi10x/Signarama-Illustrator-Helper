@@ -111,7 +111,15 @@ test('Scripts tab supports bundled files, selected files, and pasted code', () =
   const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
   assert.match(html, /data-tab="tab-scripts"/);
   for(const id of ['predefinedScriptsList', 'btnRunScriptFile', 'scriptCode', 'btnRunScriptCode']) assert.match(html, new RegExp('id="' + id + '"'));
-  assert.match(main, /signarama_helper_listPredefinedScripts\(\)/);
+  assert.match(main, /signarama_helper_listPredefinedScripts\(\"/);
+  assert.match(main, /Resolved scripts folder:/);
+  assert.match(main, /Folder entries:/);
+  assert.match(host, /var _srh_hostScriptFolderPath = \(function\(\)/);
+  assert.match(host, /requestedPath \|\| \(_srh_hostScriptFolderPath \+ '\/scripts'\)/);
+  assert.match(host, /function _srh_scriptListResponse\(/);
+  assert.match(host, /if\(\/\\\.\(jsx\|js\)\$\/i\.test\(entryName\)\) files\.push\(entries\[e\]\)/);
+  assert.doesNotMatch(host, /String\(entries\[e\]\.typename\) === 'File'/);
+  assert.doesNotMatch(host, /function _srh_predefinedScriptsFolder\(\) \{[\s\S]{0,200}new File\(\$\.fileName\)/);
   assert.match(host, /function signarama_helper_chooseAndRunScriptFile\(\)/);
   assert.match(host, /function signarama_helper_runScriptCode\(source\)/);
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'jsx', 'scripts', 'Select All Artwork.jsx')), true);

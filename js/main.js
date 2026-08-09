@@ -2269,9 +2269,25 @@
     function refreshList() {
       if(!list) return;
       list.innerHTML = '<div class="small">Loading scripts...</div>';
-      callJSX('signarama_helper_listPredefinedScripts()', function(result) {
+      const extensionPath = cs.getSystemPath(SystemPath.EXTENSION).replace(/\\/g, '/');
+      const scriptsPath = extensionPath + '/jsx/scripts';
+      scriptLog('Scanning predefined scripts: ' + scriptsPath);
+      callJSX('signarama_helper_listPredefinedScripts("' + jsxEscapeDoubleQuoted(scriptsPath) + '")', function(result) {
         let scripts = [];
-        try {scripts = JSON.parse(String(result || '[]'));} catch(_eScriptList) {scripts = [];}
+        let diagnostics = null;
+        try {
+          const parsed = JSON.parse(String(result || '{}'));
+          scripts = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.scripts) ? parsed.scripts : []);
+          diagnostics = parsed && parsed.diagnostics ? parsed.diagnostics : null;
+        } catch(e) {
+          scriptLog('Script scan returned invalid JSON: ' + String(result || '(empty)'));
+          scriptLog('Script scan parse error: ' + (e && e.message ? e.message : e));
+        }
+        if(diagnostics) {
+          scriptLog('Resolved scripts folder: ' + diagnostics.folder + ' (exists: ' + diagnostics.exists + ')');
+          scriptLog('Folder entries: ' + (diagnostics.entries && diagnostics.entries.length ? diagnostics.entries.join(', ') : '(none)'));
+          if(diagnostics.error) scriptLog('Script scan error: ' + diagnostics.error);
+        }
         list.innerHTML = '';
         if(!scripts.length) {
           list.innerHTML = '<div class="small">No .jsx or .js scripts found in jsx/scripts.</div>';

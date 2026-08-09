@@ -1,34 +1,75 @@
 //#target illustrator;
 
 /* ---------------- Script runner ---------------- */
+// $.fileName is scoped to the file currently being evaluated.  Save the host
+// script's directory now; later calls arrive through CEP evalScript, at which
+// point $.fileName no longer identifies this file.
+var _srh_hostScriptFolderPath = (function() {
+  try {return new File($.fileName).parent.fsName;}
+  catch(_eHostScriptFolder) {return '';}
+})();
+
 function _srh_scriptResult(value) {
   if(typeof value === 'undefined') return 'Completed (no return value).';
   if(value === null) return 'Completed (null).';
   try {return String(value);} catch(_eScriptResult) {return 'Completed.';}
 }
 
-function _srh_predefinedScriptsFolder() {
-  var hostFile = new File($.fileName);
-  return new Folder(hostFile.parent.fsName + '/scripts');
+function _srh_predefinedScriptsFolder(folderPath) {
+  var requestedPath = String(folderPath || '');
+  return new Folder(requestedPath || (_srh_hostScriptFolderPath + '/scripts'));
 }
 
-function signarama_helper_listPredefinedScripts() {
+function _srh_scriptListJsonString(value) {
+  return '"' + String(value == null ? '' : value)
+    .replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t') + '"';
+}
+
+function _srh_scriptListResponse(folder, scripts, entries, error) {
+  var scriptJson = [];
+  var entryJson = [];
+  for(var i = 0; i < scripts.length; i++) {
+    scriptJson.push('{"name":' + _srh_scriptListJsonString(scripts[i].name) + ',"path":' + _srh_scriptListJsonString(scripts[i].path) + '}');
+  }
+  for(var j = 0; j < entries.length; j++) entryJson.push(_srh_scriptListJsonString(entries[j]));
+  return '{"scripts":[' + scriptJson.join(',') + '],"diagnostics":{"folder":' +
+    _srh_scriptListJsonString(folder ? folder.fsName : '') + ',"exists":' + (folder && folder.exists ? 'true' : 'false') +
+    ',"entries":[' + entryJson.join(',') + '],"error":' + _srh_scriptListJsonString(error || '') + '}}';
+}
+
+function signarama_helper_listPredefinedScripts(folderPath) {
+  var folder = null;
+  var result = [];
+  var entryNames = [];
   try {
-    var folder = _srh_predefinedScriptsFolder();
-    if(!folder.exists) return '[]';
-    var files = folder.getFiles(function(entry) {
-      return entry instanceof File && /\.(jsx|js)$/i.test(entry.name);
-    });
+    folder = _srh_predefinedScriptsFolder(folderPath);
+    if(!folder.exists) return _srh_scriptListResponse(folder, result, entryNames, 'Folder does not exist.');
+    var entries = folder.getFiles();
+    var files = [];
+    for(var e = 0; e < entries.length; e++) {
+      var entryName = decodeURI(String(entries[e].name || ''));
+      // File/Folder objects returned by Folder.getFiles do not consistently
+      // expose `typename` in Illustrator's ExtendScript runtime. Do not use it
+      // as a filter: the filename extension is the supported contract here.
+      var entryType = String(entries[e].typename || '');
+      if(!entryType) {
+        if(typeof entries[e].open === 'function') entryType = 'File';
+        else if(typeof entries[e].getFiles === 'function') entryType = 'Folder';
+        else entryType = 'unknown';
+      }
+      entryNames.push(entryName + ' [' + entryType + ']');
+      if(/\.(jsx|js)$/i.test(entryName)) files.push(entries[e]);
+    }
     files.sort(function(a, b) {
       var aa = String(a.name).toLowerCase();
       var bb = String(b.name).toLowerCase();
       return aa < bb ? -1 : (aa > bb ? 1 : 0);
     });
-    var result = [];
     for(var i = 0; i < files.length; i++) result.push({name: decodeURI(files[i].name), path: files[i].fsName});
-    return JSON.stringify(result);
+    return _srh_scriptListResponse(folder, result, entryNames, '');
   } catch(e) {
-    return JSON.stringify([]);
+    return _srh_scriptListResponse(folder, result, entryNames, String(e));
   }
 }
 
