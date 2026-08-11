@@ -5048,7 +5048,7 @@ function _srh_transform_makeSize_impl(json) {
   }
   if(!hasWidthSpec && !hasHeightSpec) return 'No size provided.';
 
-  if(mode === 'artboard' || mode === 'artboards') {
+  if(mode === 'artboard' || mode === 'artboards' || mode === 'artboardsAll') {
     function _rectsEqual(a, b) {
       if(!a || !b || a.length !== 4 || b.length !== 4) return false;
       var eps = 1.0;
@@ -5125,6 +5125,8 @@ function _srh_transform_makeSize_impl(json) {
     var targetIndices = [];
     if(mode === 'artboard') {
       _pushUniqueIndex(targetIndices, doc.artboards.getActiveArtboardIndex());
+    } else if(mode === 'artboardsAll') {
+      for(var allAi = 0; allAi < doc.artboards.length; allAi++) _pushUniqueIndex(targetIndices, allAi);
     } else {
       if(requestedArtboardIndices.length) {
         targetIndices = requestedArtboardIndices.slice(0);
@@ -5237,6 +5239,192 @@ function _srh_transform_makeSize_impl(json) {
   }
   if(!changed) return 'No eligible selection items to transform.';
   return 'Transformed ' + changed + ' selection item' + (changed === 1 ? '' : 's') + '.';
+}
+
+function _srh_transform_move_impl(json) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var opts = {};
+  try {opts = (typeof json === 'string') ? JSON.parse(json) : (json || {});} catch(e) {return 'Error: Invalid move options.';}
+  var mode = String(opts.mode || 'selection');
+  var absolute = String(opts.moveMode || 'amount') === 'position';
+  var hasX = !(opts.xMm == null || String(opts.xMm).replace(/^\s+|\s+$/g, '') === '');
+  var hasY = !(opts.yMm == null || String(opts.yMm).replace(/^\s+|\s+$/g, '') === '');
+  var xPt = hasX ? _srh_mm2ptDoc(Number(opts.xMm)) : 0;
+  var yPt = hasY ? _srh_mm2ptDoc(Number(opts.yMm)) : 0;
+  if((hasX && isNaN(xPt)) || (hasY && isNaN(yPt))) return 'Error: Invalid move value.';
+  var indices = [];
+  if(mode === 'artboard') indices.push(doc.artboards.getActiveArtboardIndex());
+  else if(mode === 'artboardsAll') {for(var ai = 0; ai < doc.artboards.length; ai++) indices.push(ai);}
+  else if(mode === 'artboards') {
+    var requested = opts.artboardIndices || [];
+    for(var ri = 0; ri < requested.length; ri++) {
+      var idx = Math.round(Number(requested[ri]));
+      if(idx >= 0 && idx < doc.artboards.length) indices.push(idx);
+    }
+  }
+  if(indices.length) {
+    for(var a = 0; a < indices.length; a++) {
+      var ab = doc.artboards[indices[a]], r = ab.artboardRect;
+      var dx = hasX ? (absolute ? xPt - r[0] : xPt) : 0;
+      // Illustrator's Transform panel presents positive Y as downward, while
+      // page-item translation uses positive Y upward.
+      var dy = hasY ? (absolute ? -yPt - r[1] : -yPt) : 0;
+      ab.artboardRect = [r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy];
+    }
+    return 'Moved ' + indices.length + ' artboard' + (indices.length === 1 ? '' : 's') + '.';
+  }
+  if(mode !== 'selection') return 'No artboards available to move.';
+  var sel = doc.selection;
+  if(!sel || !sel.length) return 'No selection. Select one or more items.';
+  var moved = 0;
+  for(var i = 0; i < sel.length; i++) {
+    var item = sel[i];
+    try {
+      var b = _srh_transform_getTargetBounds(item, !opts.excludeStroke);
+      if(!b) continue;
+      var itemDx = hasX ? (absolute ? xPt - b[0] : xPt) : 0;
+      var itemDy = hasY ? (absolute ? -yPt - b[1] : -yPt) : 0;
+      item.translate(itemDx, itemDy);
+      moved++;
+    } catch(_eMoveItem) { }
+  }
+  if(!moved) return 'No eligible selection items to move.';
+  return 'Moved ' + moved + ' selection item' + (moved === 1 ? '' : 's') + '.';
+}
+
+function _srh_fixings_create_impl(json) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var opts = {};
+  try {opts = (typeof json === 'string') ? JSON.parse(json) : (json || {});} catch(_eFxParse) {return 'Error: Invalid fixing options.';}
+  var selection = [];
+  try {for(var si = 0; si < doc.selection.length; si++) selection.push(doc.selection[si]);} catch(_eFxSel) { }
+  if(!selection.length) return 'No selection. Select one or more objects.';
+  var sf = _srh_getScaleFactor() || 1;
+  var diameter = _srh_mm2ptDoc(Number(opts.diameterMm));
+  var inset = _srh_mm2ptDoc(Math.max(0, Number(opts.insetMm) || 0));
+  var spacing = _srh_mm2ptDoc(Number(opts.spacingMm));
+  var mode = String(opts.spacingMode || 'maximum');
+  var quantity = Math.max(0, Math.floor(Number(opts.quantity) || 0));
+  if(!(diameter > 0)) return 'Error: Hole diameter must be greater than zero.';
+  if(mode !== 'quantity' && mode !== 'corners' && !(spacing > 0)) return 'Error: Spacing must be greater than zero.';
+  if(mode === 'corners') opts.includeCorners = true;
+  var layer = null;
+  try {layer = doc.layers.getByName('Fixings');} catch(_eFxLayer0) {layer = doc.layers.add(); layer.name = 'Fixings';}
+  try {layer.locked = false; layer.visible = true;} catch(_eFxLayer1) { }
+  var black = new RGBColor(); black.red = 0; black.green = 0; black.blue = 0;
+  var holes = 0, objects = 0;
+  function countInterior(length) {
+    if(!(length > 0)) return 0;
+    if(mode === 'quantity') return quantity;
+    var segments = mode === 'minimum' ? Math.floor(length / spacing) : Math.ceil(length / spacing);
+    return Math.max(0, segments - 1);
+  }
+  function addHole(group, x, y) {
+    var circle = group.pathItems.ellipse(y + diameter / 2, x - diameter / 2, diameter, diameter);
+    circle.name = 'FIXING_HOLE';
+    circle.filled = false;
+    circle.stroked = true;
+    circle.strokeColor = black;
+    circle.strokeWidth = _dim_ptDoc(1, sf);
+    holes++;
+  }
+  function addEdge(group, x1, y1, x2, y2) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var n = countInterior(Math.sqrt(dx * dx + dy * dy));
+    for(var ei = 1; ei <= n; ei++) {
+      var t = ei / (n + 1);
+      addHole(group, x1 + dx * t, y1 + dy * t);
+    }
+  }
+  for(var i = 0; i < selection.length; i++) {
+    var b = _srh_transform_getTargetBounds(selection[i], false);
+    if(!b) continue;
+    var left = b[0] + inset, top = b[1] - inset, right = b[2] - inset, bottom = b[3] + inset;
+    if(right < left || top < bottom) continue;
+    var group = layer.groupItems.add();
+    group.name = 'Fixing Holes';
+    if(opts.includeCorners) {
+      addHole(group, left, top); addHole(group, right, top);
+      addHole(group, right, bottom); addHole(group, left, bottom);
+    }
+    if(mode !== 'corners') {
+      addEdge(group, left, top, right, top);
+      addEdge(group, right, top, right, bottom);
+      addEdge(group, right, bottom, left, bottom);
+      addEdge(group, left, bottom, left, top);
+    }
+    objects++;
+  }
+  try {doc.selection = selection;} catch(_eFxRestore) { }
+  if(!objects) return 'No eligible selection objects for fixing holes.';
+  return 'Created ' + holes + ' fixing hole' + (holes === 1 ? '' : 's') + ' for ' + objects + ' object' + (objects === 1 ? '' : 's') + '.';
+}
+
+function _srh_preflight_extractCutGeometry_impl(colourName) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var doc = app.activeDocument;
+  var wanted = String(colourName || 'CutContour').toLowerCase();
+  var paths = [];
+  for(var i = 0; i < doc.pathItems.length; i++) {
+    var path = doc.pathItems[i];
+    try {if(path.hidden || path.locked || path.clipping || !path.stroked) continue;} catch(_ePfSkip) {continue;}
+    var strokeName = '';
+    try {
+      var colour = path.strokeColor;
+      if(colour && colour.typename === 'SpotColor' && colour.spot) strokeName = String(colour.spot.name || '');
+    } catch(_ePfColour) {strokeName = '';}
+    if(strokeName.toLowerCase() !== wanted) continue;
+    var points = path.pathPoints, count = points.length;
+    if(count < 2) continue;
+    var limit = path.closed ? count : count - 1;
+    var segments = [];
+    for(var p = 0; p < limit; p++) {
+      var next = (p + 1) % count, p0 = points[p], p1 = points[next];
+      segments.push({
+        a: [Number(p0.anchor[0]), Number(p0.anchor[1])],
+        c1: [Number(p0.rightDirection[0]), Number(p0.rightDirection[1])],
+        c2: [Number(p1.leftDirection[0]), Number(p1.leftDirection[1])],
+        b: [Number(p1.anchor[0]), Number(p1.anchor[1])]
+      });
+    }
+    var layerName = '';
+    try {layerName = String(path.layer.name || '');} catch(_ePfLayer) { }
+    paths.push({pathIndex: i, objectName: String(path.name || ('Path ' + (i + 1))), layerName: layerName, closed: !!path.closed, segments: segments});
+  }
+  return JSON.stringify({colourName: colourName, pathCount: paths.length, paths: paths});
+}
+
+function _srh_preflight_selectIssues_impl(json) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var indices = [];
+  try {indices = (typeof json === 'string') ? JSON.parse(json) : (json || []);} catch(_ePfSelectParse) {return 'Error: Invalid issue selection.';}
+  var doc = app.activeDocument, selected = 0;
+  try {doc.selection = null;} catch(_ePfSelectClear) { }
+  for(var i = 0; i < indices.length; i++) {
+    var idx = Math.round(Number(indices[i]));
+    try {if(idx >= 0 && idx < doc.pathItems.length) {doc.pathItems[idx].selected = true; selected++;}} catch(_ePfSelect) { }
+  }
+  return selected ? ('Selected ' + selected + ' affected cut path' + (selected === 1 ? '' : 's') + '.') : 'No affected paths found.';
+}
+
+function _srh_preflight_highlightIssues_impl(json) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var regions = [];
+  try {regions = (typeof json === 'string') ? JSON.parse(json) : (json || []);} catch(_ePfHiParse) {return 'Error: Invalid highlight geometry.';}
+  var doc = app.activeDocument, layer = null;
+  try {layer = doc.layers.getByName('Preflight - Double Cuts'); layer.remove();} catch(_ePfOldLayer) { }
+  layer = doc.layers.add(); layer.name = 'Preflight - Double Cuts';
+  var magenta = new RGBColor(); magenta.red = 255; magenta.green = 0; magenta.blue = 180;
+  for(var i = 0; i < regions.length; i++) {
+    var r = regions[i]; if(!r || !r.a || !r.b) continue;
+    var line = layer.pathItems.add();
+    line.setEntirePath([[Number(r.a[0]), Number(r.a[1])], [Number(r.b[0]), Number(r.b[1])]]);
+    line.filled = false; line.stroked = true; line.strokeColor = magenta; line.strokeWidth = 4;
+    line.name = 'DOUBLE_CUT_OVERLAP';
+  }
+  return 'Highlighted ' + regions.length + ' double-cut region' + (regions.length === 1 ? '' : 's') + '.';
 }
 
 function signarama_helper_transform_listArtboards() {
@@ -7098,8 +7286,27 @@ this.signarama_helper_transform_makeSize = function(json) {
 this.atlas_transform_makeSize = function(json) {
   return _srh_transform_makeSize_impl(json);
 };
+this.atlas_transform_move = function(json) {
+  return _srh_transform_move_impl(json);
+};
+this.signarama_helper_createFixingHoles = function(json) {
+  return _srh_fixings_create_impl(json);
+};
+this.signarama_helper_preflight_extractCutGeometry = function(colourName) {return _srh_preflight_extractCutGeometry_impl(colourName);};
+this.signarama_helper_preflight_selectIssues = function(json) {return _srh_preflight_selectIssues_impl(json);};
+this.signarama_helper_preflight_highlightIssues = function(json) {return _srh_preflight_highlightIssues_impl(json);};
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg0) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_makeSize = this.atlas_transform_makeSize;} catch(_eTg2) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove0) { }
+try {atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_createFixingHoles = this.signarama_helper_createFixingHoles;} catch(_eFxGlobal0) { }
+try {signarama_helper_createFixingHoles = this.signarama_helper_createFixingHoles;} catch(_eFxGlobal1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_preflight_extractCutGeometry = this.signarama_helper_preflight_extractCutGeometry;} catch(_ePfGlobal0) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_preflight_selectIssues = this.signarama_helper_preflight_selectIssues;} catch(_ePfGlobal1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_preflight_highlightIssues = this.signarama_helper_preflight_highlightIssues;} catch(_ePfGlobal2) { }
+try {signarama_helper_preflight_extractCutGeometry = this.signarama_helper_preflight_extractCutGeometry;} catch(_ePfGlobal3) { }
+try {signarama_helper_preflight_selectIssues = this.signarama_helper_preflight_selectIssues;} catch(_ePfGlobal4) { }
+try {signarama_helper_preflight_highlightIssues = this.signarama_helper_preflight_highlightIssues;} catch(_ePfGlobal5) { }
 try {signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg1) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg3) { }
 try {signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg4) { }
@@ -9808,6 +10015,58 @@ function _dim_run(opts) {
   return msg;
 }
 
+function _dim_runBetween(opts) {
+  opts = opts || {};
+  if(!app.documents.length) return 'No document open.';
+  var originalSel = _dim_captureSelection();
+  if(!originalSel || originalSel.length < 2) return 'No measurement created. Select at least two objects.';
+  var scaleFactor = _srh_getScaleFactor() || 1;
+  var scaleAppearance = opts.scaleAppearance == null ? 1 : Number(opts.scaleAppearance);
+  var ticLenPt = _dim_mm2ptDoc(Number(opts.ticLenMm == null ? 2 : opts.ticLenMm), scaleFactor) * scaleAppearance;
+  var textPt = _dim_ptDoc(Number(opts.textPt == null ? 10 : opts.textPt), scaleFactor) * scaleAppearance;
+  var strokePt = _dim_ptDoc(Number(opts.strokePt == null ? 1 : opts.strokePt), scaleFactor) * scaleAppearance;
+  var textOffsetPt = _dim_mm2ptDoc(Number(opts.labelGapMm || 0), scaleFactor) * scaleAppearance;
+  var arrowheadSizePt = _dim_ptDoc(Number(opts.arrowheadSizePt || 0), scaleFactor) * scaleAppearance;
+  var includeStroke = !!opts.measureIncludeStroke;
+  var clipped = !!opts.measureClippedContent;
+  var horizontal = String(opts.axis || 'horizontal') !== 'vertical';
+  var centers = !!opts.centers;
+  var entries = [];
+  for(var i = 0; i < originalSel.length; i++) {
+    try {
+      var b = _dim_getMetricsFor(originalSel[i], clipped, includeStroke);
+      entries.push({b: b, cx: (b.left + b.right) / 2, cy: (b.top + b.bottom) / 2});
+    } catch(_eBetweenBounds) { }
+  }
+  if(entries.length < 2) return 'No measurement created. Select at least two measurable objects.';
+  entries.sort(function(a, b) {return horizontal ? a.cx - b.cx : b.cy - a.cy;});
+  var lyr = _dim_ensureLayer('Dimensions');
+  var lineColor = _dim_hexToRGB(opts.lineColor || '#000000');
+  var added = 0;
+  try {
+    for(var p = 0; p < entries.length - 1; p++) {
+      var a = entries[p], b2 = entries[p + 1];
+      if(horizontal) {
+        var x1 = centers ? a.cx : a.b.right;
+        var x2 = centers ? b2.cx : b2.b.left;
+        var y = (a.cy + b2.cy) / 2;
+        _dim_drawHorizontalDim(lyr, Math.min(x1, x2), Math.max(x1, x2), y, ticLenPt, textPt, strokePt, opts.decimals | 0, 'TOP', textOffsetPt, scaleFactor, opts.textColor, lineColor, !!opts.includeArrowhead, arrowheadSizePt);
+      } else {
+        var y1 = centers ? a.cy : a.b.bottom;
+        var y2 = centers ? b2.cy : b2.b.top;
+        var x = (a.cx + b2.cx) / 2;
+        _dim_drawVerticalDim(lyr, Math.max(y1, y2), Math.min(y1, y2), x, ticLenPt, textPt, strokePt, opts.decimals | 0, -90, textOffsetPt, 'RIGHT', scaleFactor, opts.textColor, lineColor, !!opts.includeArrowhead, arrowheadSizePt);
+      }
+      added++;
+    }
+  } catch(e) {
+    return 'Error: ' + _dim_errorDetails(e, 'drawBetweenMeasurement', {axis: opts.axis, centers: centers});
+  } finally {
+    _dim_restoreSelection(originalSel);
+  }
+  return 'Added ' + added + ' between-object measure' + (added === 1 ? '' : 's') + '.';
+}
+
 function _dim_normalizeAngleRad(angleRad) {
   var a = angleRad;
   var twoPi = Math.PI * 2;
@@ -10488,6 +10747,13 @@ this.atlas_dimensions_run = function(json) {
   } catch(e) {
     return 'Error: ' + e.message;
   }
+};
+
+this.atlas_dimensions_runBetween = function(json) {
+  try {
+    var opts = (typeof json === 'string') ? JSON.parse(json) : (json || {});
+    return _dim_runBetween(opts);
+  } catch(e) {return 'Error: ' + e.message;}
 };
 
 this.atlas_dimensions_hasSelection = function() {
