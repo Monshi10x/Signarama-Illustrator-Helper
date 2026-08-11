@@ -737,6 +737,7 @@
     <button class="tab" data-tab="tab-cutfiles" type="button">Router/Laser</button>
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
+    <button class="tab" data-tab="tab-fixings" type="button">Fixings</button>
     <button class="tab" data-tab="tab-concept" type="button">Concept</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
@@ -1148,6 +1149,36 @@
               <text x="30" y="36" fill="#ff3b3b" font-size="18" text-anchor="middle" font-family="Arial">m²</text>
             </svg>
           </button>
+          <button id="btnBetweenWidth" class="dim-btn" type="button" title="Measure Between Objects (Width)">
+            <svg viewBox="0 0 60 60" aria-hidden="true">
+              <rect x="4" y="14" width="16" height="32" fill="none" stroke="white" stroke-width="3"/>
+              <rect x="40" y="14" width="16" height="32" fill="none" stroke="white" stroke-width="3"/>
+              <path d="M21 30h18M21 30l6-5v10zM39 30l-6-5v10z" fill="white" stroke="white" stroke-width="2"/>
+            </svg>
+          </button>
+          <button id="btnBetweenHeight" class="dim-btn" type="button" title="Measure Between Objects (Height)">
+            <svg viewBox="0 0 60 60" aria-hidden="true">
+              <rect x="14" y="4" width="32" height="16" fill="none" stroke="white" stroke-width="3"/>
+              <rect x="14" y="40" width="32" height="16" fill="none" stroke="white" stroke-width="3"/>
+              <path d="M30 21v18M30 21l-5 6h10zM30 39l-5-6h10z" fill="white" stroke="white" stroke-width="2"/>
+            </svg>
+          </button>
+          <button id="btnCentersWidth" class="dim-btn" type="button" title="Measure Between Object Centers (Width)">
+            <svg viewBox="0 0 60 60" aria-hidden="true">
+              <rect x="4" y="14" width="16" height="32" fill="none" stroke="white" stroke-width="3"/>
+              <rect x="40" y="14" width="16" height="32" fill="none" stroke="white" stroke-width="3"/>
+              <circle cx="12" cy="30" r="3" fill="#ff3b3b"/><circle cx="48" cy="30" r="3" fill="#ff3b3b"/>
+              <path d="M16 30h28M16 30l6-4v8zM44 30l-6-4v8z" fill="white" stroke="white" stroke-width="2"/>
+            </svg>
+          </button>
+          <button id="btnCentersHeight" class="dim-btn" type="button" title="Measure Between Object Centers (Height)">
+            <svg viewBox="0 0 60 60" aria-hidden="true">
+              <rect x="14" y="4" width="32" height="16" fill="none" stroke="white" stroke-width="3"/>
+              <rect x="14" y="40" width="32" height="16" fill="none" stroke="white" stroke-width="3"/>
+              <circle cx="30" cy="12" r="3" fill="#ff3b3b"/><circle cx="30" cy="48" r="3" fill="#ff3b3b"/>
+              <path d="M30 16v28M30 16l-4 6h8zM30 44l-4-6h8z" fill="white" stroke="white" stroke-width="2"/>
+            </svg>
+          </button>
         </div>
         <div id="dimSelectionHint" class="small dim-selection-hint hidden">Nothing Selected. Measure Artboards</div>
       </div>
@@ -1269,6 +1300,7 @@
             <option value="selection">Selection</option>
             <option value="artboard">Artboard (active)</option>
             <option value="artboards">Artboards (selected)</option>
+            <option value="artboardsAll">Artboards (all)</option>
           </select>
         </label>
       </div>
@@ -1318,6 +1350,78 @@
         <div class="row" style="margin-top:12px;">
           <button id="btnTransformApply" class="btn2" type="button">Transform</button>
         </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead"><div class="cardTitle">Move</div></div>
+        <label class="fld">
+          <span>Operation</span>
+          <select id="transformMoveMode">
+            <option value="amount">Move by amount</option>
+            <option value="position">Move to position</option>
+          </select>
+        </label>
+        <div class="grid2" style="margin-top:8px;">
+          <label class="fld"><span>X (mm)</span><input id="transformMoveX" type="number" step="0.1" placeholder="0"></label>
+          <label class="fld"><span>Y (mm)</span><input id="transformMoveY" type="number" step="0.1" placeholder="0"></label>
+        </div>
+        <div class="small" style="margin-top:8px;">Position uses the top-left of each object or artboard. Positive Y moves downward, matching Illustrator.</div>
+        <div class="row" style="margin-top:12px;"><button id="btnTransformMove" class="btn2" type="button">Move</button></div>
+      </div>
+    </section>
+
+    <!-- TAB: FIXINGS -->
+    <section id="tab-fixings" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">Fixing Holes</div>
+          <span class="info" data-tip="Creates circular fixing-hole paths inside the bounds of each selected object.">i</span>
+        </div>
+        <div class="grid2">
+          <label class="fld">
+            <span>Hole diameter (mm)</span>
+            <input id="fixingDiameterMm" type="number" min="0.1" step="0.1" value="5">
+          </label>
+          <label class="fld">
+            <span>Inset from edge (mm)</span>
+            <input id="fixingInsetMm" type="number" min="0" step="0.1" value="10">
+          </label>
+        </div>
+        <label class="chk" style="margin-top:10px;">
+          <input id="fixingIncludeCorners" type="checkbox" checked>
+          <span>Place holes in corners</span>
+        </label>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead"><div class="cardTitle">Spacing</div></div>
+        <label class="fld">
+          <span>Distribution</span>
+          <select id="fixingSpacingMode">
+            <option value="maximum">Maximum spacing</option>
+            <option value="minimum">Minimum spacing</option>
+            <option value="quantity">Quantity per edge</option>
+          </select>
+        </label>
+        <div id="fixingSpacingValueWrap" class="grid2" style="margin-top:8px;">
+          <label class="fld">
+            <span>Spacing (mm)</span>
+            <input id="fixingSpacingMm" type="number" min="0.1" step="1" value="300">
+          </label>
+          <label class="fld">
+            <span>Quantity per edge</span>
+            <input id="fixingQuantity" type="number" min="0" step="1" value="1">
+          </label>
+        </div>
+        <div class="small" style="margin-top:8px;">Spacing and quantity add evenly distributed holes between the corners on each edge.</div>
+        <div class="row" style="margin-top:12px;">
+          <button id="btnCreateFixingHoles" class="btn2" type="button">Create Fixing Holes</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead"><div class="cardTitle">Log</div></div>
+        <div id="fixingsLog" class="log"></div>
       </div>
     </section>
 
