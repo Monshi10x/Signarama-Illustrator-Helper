@@ -2218,6 +2218,7 @@
 
     wireDimensions();
     wireTransform();
+    wireFixings();
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
@@ -4976,6 +4977,50 @@
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       loadJSX(function() {
         runButtonJsxOperation('atlas_transform_move("' + json + '")', {logFn: log, toastTitle: 'Transform'});
+      });
+    };
+  }
+
+  function wireFixings() {
+    const createBtn = $('btnCreateFixingHoles');
+    const modeField = $('fixingSpacingMode');
+    const spacingField = $('fixingSpacingMm');
+    const quantityField = $('fixingQuantity');
+    const logField = $('fixingsLog');
+    function updateModeUi() {
+      const quantityMode = modeField && modeField.value === 'quantity';
+      if(spacingField) spacingField.disabled = quantityMode;
+      if(quantityField) quantityField.disabled = !quantityMode;
+    }
+    if(modeField) modeField.addEventListener('change', updateModeUi);
+    updateModeUi();
+    if(!createBtn) return;
+    createBtn.onclick = () => {
+      const payload = {
+        diameterMm: num(($('fixingDiameterMm') && $('fixingDiameterMm').value) || 0),
+        insetMm: num(($('fixingInsetMm') && $('fixingInsetMm').value) || 0),
+        includeCorners: !!($('fixingIncludeCorners') && $('fixingIncludeCorners').checked),
+        spacingMode: (modeField && modeField.value) || 'maximum',
+        spacingMm: num((spacingField && spacingField.value) || 0),
+        quantity: parseInt((quantityField && quantityField.value) || 0, 10)
+      };
+      if(!(payload.diameterMm > 0)) {
+        showToast('Enter a hole diameter greater than zero.', {type: 'warn', title: 'Fixings'});
+        return;
+      }
+      if(payload.spacingMode !== 'quantity' && !(payload.spacingMm > 0)) {
+        showToast('Enter a spacing greater than zero.', {type: 'warn', title: 'Fixings'});
+        return;
+      }
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      loadJSX(function() {
+        runButtonJsxOperation('signarama_helper_createFixingHoles("' + json + '")', {
+          logFn: function(message) {
+            if(logField) logField.textContent = String(message || '');
+            log(message);
+          },
+          toastTitle: 'Fixings'
+        });
       });
     };
   }

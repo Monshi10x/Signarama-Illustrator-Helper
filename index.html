@@ -737,6 +737,7 @@
     <button class="tab" data-tab="tab-cutfiles" type="button">Router/Laser</button>
     <button class="tab" data-tab="tab-dimensions" type="button">Dimensions</button>
     <button class="tab" data-tab="tab-transform" type="button">Transform</button>
+    <button class="tab" data-tab="tab-fixings" type="button">Fixings</button>
     <button class="tab" data-tab="tab-concept" type="button">Concept</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
@@ -1364,8 +1365,63 @@
           <label class="fld"><span>X (mm)</span><input id="transformMoveX" type="number" step="0.1" placeholder="0"></label>
           <label class="fld"><span>Y (mm)</span><input id="transformMoveY" type="number" step="0.1" placeholder="0"></label>
         </div>
-        <div class="small" style="margin-top:8px;">Position uses the top-left of each object or artboard. Positive Y moves upward.</div>
+        <div class="small" style="margin-top:8px;">Position uses the top-left of each object or artboard. Positive Y moves downward, matching Illustrator.</div>
         <div class="row" style="margin-top:12px;"><button id="btnTransformMove" class="btn2" type="button">Move</button></div>
+      </div>
+    </section>
+
+    <!-- TAB: FIXINGS -->
+    <section id="tab-fixings" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead">
+          <div class="cardTitle">Fixing Holes</div>
+          <span class="info" data-tip="Creates circular fixing-hole paths inside the bounds of each selected object.">i</span>
+        </div>
+        <div class="grid2">
+          <label class="fld">
+            <span>Hole diameter (mm)</span>
+            <input id="fixingDiameterMm" type="number" min="0.1" step="0.1" value="5">
+          </label>
+          <label class="fld">
+            <span>Inset from edge (mm)</span>
+            <input id="fixingInsetMm" type="number" min="0" step="0.1" value="10">
+          </label>
+        </div>
+        <label class="chk" style="margin-top:10px;">
+          <input id="fixingIncludeCorners" type="checkbox" checked>
+          <span>Place holes in corners</span>
+        </label>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead"><div class="cardTitle">Spacing</div></div>
+        <label class="fld">
+          <span>Distribution</span>
+          <select id="fixingSpacingMode">
+            <option value="maximum">Maximum spacing</option>
+            <option value="minimum">Minimum spacing</option>
+            <option value="quantity">Quantity per edge</option>
+          </select>
+        </label>
+        <div id="fixingSpacingValueWrap" class="grid2" style="margin-top:8px;">
+          <label class="fld">
+            <span>Spacing (mm)</span>
+            <input id="fixingSpacingMm" type="number" min="0.1" step="1" value="300">
+          </label>
+          <label class="fld">
+            <span>Quantity per edge</span>
+            <input id="fixingQuantity" type="number" min="0" step="1" value="1">
+          </label>
+        </div>
+        <div class="small" style="margin-top:8px;">Spacing and quantity add evenly distributed holes between the corners on each edge.</div>
+        <div class="row" style="margin-top:12px;">
+          <button id="btnCreateFixingHoles" class="btn2" type="button">Create Fixing Holes</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="cardHead"><div class="cardTitle">Log</div></div>
+        <div id="fixingsLog" class="log"></div>
       </div>
     </section>
 

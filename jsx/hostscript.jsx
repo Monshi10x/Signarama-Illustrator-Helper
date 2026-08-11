@@ -5267,7 +5267,9 @@ function _srh_transform_move_impl(json) {
     for(var a = 0; a < indices.length; a++) {
       var ab = doc.artboards[indices[a]], r = ab.artboardRect;
       var dx = hasX ? (absolute ? xPt - r[0] : xPt) : 0;
-      var dy = hasY ? (absolute ? yPt - r[1] : yPt) : 0;
+      // Illustrator's Transform panel presents positive Y as downward, while
+      // page-item translation uses positive Y upward.
+      var dy = hasY ? (absolute ? -yPt - r[1] : -yPt) : 0;
       ab.artboardRect = [r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy];
     }
     return 'Moved ' + indices.length + ' artboard' + (indices.length === 1 ? '' : 's') + '.';
@@ -5282,13 +5284,79 @@ function _srh_transform_move_impl(json) {
       var b = _srh_transform_getTargetBounds(item, !opts.excludeStroke);
       if(!b) continue;
       var itemDx = hasX ? (absolute ? xPt - b[0] : xPt) : 0;
-      var itemDy = hasY ? (absolute ? yPt - b[1] : yPt) : 0;
+      var itemDy = hasY ? (absolute ? -yPt - b[1] : -yPt) : 0;
       item.translate(itemDx, itemDy);
       moved++;
     } catch(_eMoveItem) { }
   }
   if(!moved) return 'No eligible selection items to move.';
   return 'Moved ' + moved + ' selection item' + (moved === 1 ? '' : 's') + '.';
+}
+
+function _srh_fixings_create_impl(json) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var opts = {};
+  try {opts = (typeof json === 'string') ? JSON.parse(json) : (json || {});} catch(_eFxParse) {return 'Error: Invalid fixing options.';}
+  var selection = [];
+  try {for(var si = 0; si < doc.selection.length; si++) selection.push(doc.selection[si]);} catch(_eFxSel) { }
+  if(!selection.length) return 'No selection. Select one or more objects.';
+  var sf = _srh_getScaleFactor() || 1;
+  var diameter = _srh_mm2ptDoc(Number(opts.diameterMm));
+  var inset = _srh_mm2ptDoc(Math.max(0, Number(opts.insetMm) || 0));
+  var spacing = _srh_mm2ptDoc(Number(opts.spacingMm));
+  var mode = String(opts.spacingMode || 'maximum');
+  var quantity = Math.max(0, Math.floor(Number(opts.quantity) || 0));
+  if(!(diameter > 0)) return 'Error: Hole diameter must be greater than zero.';
+  if(mode !== 'quantity' && !(spacing > 0)) return 'Error: Spacing must be greater than zero.';
+  var layer = null;
+  try {layer = doc.layers.getByName('Fixings');} catch(_eFxLayer0) {layer = doc.layers.add(); layer.name = 'Fixings';}
+  try {layer.locked = false; layer.visible = true;} catch(_eFxLayer1) { }
+  var black = new RGBColor(); black.red = 0; black.green = 0; black.blue = 0;
+  var holes = 0, objects = 0;
+  function countInterior(length) {
+    if(!(length > 0)) return 0;
+    if(mode === 'quantity') return quantity;
+    var segments = mode === 'minimum' ? Math.floor(length / spacing) : Math.ceil(length / spacing);
+    return Math.max(0, segments - 1);
+  }
+  function addHole(group, x, y) {
+    var circle = group.pathItems.ellipse(y + diameter / 2, x - diameter / 2, diameter, diameter);
+    circle.name = 'FIXING_HOLE';
+    circle.filled = false;
+    circle.stroked = true;
+    circle.strokeColor = black;
+    circle.strokeWidth = _dim_ptDoc(1, sf);
+    holes++;
+  }
+  function addEdge(group, x1, y1, x2, y2) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var n = countInterior(Math.sqrt(dx * dx + dy * dy));
+    for(var ei = 1; ei <= n; ei++) {
+      var t = ei / (n + 1);
+      addHole(group, x1 + dx * t, y1 + dy * t);
+    }
+  }
+  for(var i = 0; i < selection.length; i++) {
+    var b = _srh_transform_getTargetBounds(selection[i], false);
+    if(!b) continue;
+    var left = b[0] + inset, top = b[1] - inset, right = b[2] - inset, bottom = b[3] + inset;
+    if(right < left || top < bottom) continue;
+    var group = layer.groupItems.add();
+    group.name = 'Fixing Holes';
+    if(opts.includeCorners) {
+      addHole(group, left, top); addHole(group, right, top);
+      addHole(group, right, bottom); addHole(group, left, bottom);
+    }
+    addEdge(group, left, top, right, top);
+    addEdge(group, right, top, right, bottom);
+    addEdge(group, right, bottom, left, bottom);
+    addEdge(group, left, bottom, left, top);
+    objects++;
+  }
+  try {doc.selection = selection;} catch(_eFxRestore) { }
+  if(!objects) return 'No eligible selection objects for fixing holes.';
+  return 'Created ' + holes + ' fixing hole' + (holes === 1 ? '' : 's') + ' for ' + objects + ' object' + (objects === 1 ? '' : 's') + '.';
 }
 
 function signarama_helper_transform_listArtboards() {
@@ -7153,10 +7221,15 @@ this.atlas_transform_makeSize = function(json) {
 this.atlas_transform_move = function(json) {
   return _srh_transform_move_impl(json);
 };
+this.signarama_helper_createFixingHoles = function(json) {
+  return _srh_fixings_create_impl(json);
+};
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg0) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_makeSize = this.atlas_transform_makeSize;} catch(_eTg2) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove0) { }
 try {atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_createFixingHoles = this.signarama_helper_createFixingHoles;} catch(_eFxGlobal0) { }
+try {signarama_helper_createFixingHoles = this.signarama_helper_createFixingHoles;} catch(_eFxGlobal1) { }
 try {signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg1) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg3) { }
 try {signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg4) { }

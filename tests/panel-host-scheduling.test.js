@@ -5,6 +5,7 @@ const test = require('node:test');
 
 const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
 
 test('cutfile labels have no recurring host polling or obsolete switch', () => {
   assert.doesNotMatch(main, /cutfileDisableActiveTick|cutfileTickBusy|cutfile_tickFilePathLabels/);
@@ -42,4 +43,20 @@ test('transform offers all-artboard sizing and move controls', () => {
   assert.match(html, /id="transformMoveMode"/);
   assert.match(html, /id="btnTransformMove"/);
   assert.match(main, /atlas_transform_move/);
+});
+
+test('transform Y follows Illustrator native downward-positive coordinates', () => {
+  assert.match(host, /absolute \? -yPt - r\[1\] : -yPt/);
+  assert.match(host, /absolute \? -yPt - b\[1\] : -yPt/);
+});
+
+test('Fixings tab supports corners, spacing limits, and quantities', () => {
+  assert.match(html, /data-tab="tab-fixings"/);
+  assert.match(html, /id="fixingIncludeCorners"/);
+  assert.match(html, /option value="maximum">Maximum spacing/);
+  assert.match(html, /option value="minimum">Minimum spacing/);
+  assert.match(html, /option value="quantity">Quantity per edge/);
+  assert.match(main, /signarama_helper_createFixingHoles/);
+  assert.match(host, /function _srh_fixings_create_impl\(json\)/);
+  assert.match(host, /circle\.name = 'FIXING_HOLE'/);
 });
