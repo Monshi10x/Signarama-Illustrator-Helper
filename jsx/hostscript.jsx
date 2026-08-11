@@ -5048,7 +5048,7 @@ function _srh_transform_makeSize_impl(json) {
   }
   if(!hasWidthSpec && !hasHeightSpec) return 'No size provided.';
 
-  if(mode === 'artboard' || mode === 'artboards') {
+  if(mode === 'artboard' || mode === 'artboards' || mode === 'artboardsAll') {
     function _rectsEqual(a, b) {
       if(!a || !b || a.length !== 4 || b.length !== 4) return false;
       var eps = 1.0;
@@ -5125,6 +5125,8 @@ function _srh_transform_makeSize_impl(json) {
     var targetIndices = [];
     if(mode === 'artboard') {
       _pushUniqueIndex(targetIndices, doc.artboards.getActiveArtboardIndex());
+    } else if(mode === 'artboardsAll') {
+      for(var allAi = 0; allAi < doc.artboards.length; allAi++) _pushUniqueIndex(targetIndices, allAi);
     } else {
       if(requestedArtboardIndices.length) {
         targetIndices = requestedArtboardIndices.slice(0);
@@ -5237,6 +5239,56 @@ function _srh_transform_makeSize_impl(json) {
   }
   if(!changed) return 'No eligible selection items to transform.';
   return 'Transformed ' + changed + ' selection item' + (changed === 1 ? '' : 's') + '.';
+}
+
+function _srh_transform_move_impl(json) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  var opts = {};
+  try {opts = (typeof json === 'string') ? JSON.parse(json) : (json || {});} catch(e) {return 'Error: Invalid move options.';}
+  var mode = String(opts.mode || 'selection');
+  var absolute = String(opts.moveMode || 'amount') === 'position';
+  var hasX = !(opts.xMm == null || String(opts.xMm).replace(/^\s+|\s+$/g, '') === '');
+  var hasY = !(opts.yMm == null || String(opts.yMm).replace(/^\s+|\s+$/g, '') === '');
+  var xPt = hasX ? _srh_mm2ptDoc(Number(opts.xMm)) : 0;
+  var yPt = hasY ? _srh_mm2ptDoc(Number(opts.yMm)) : 0;
+  if((hasX && isNaN(xPt)) || (hasY && isNaN(yPt))) return 'Error: Invalid move value.';
+  var indices = [];
+  if(mode === 'artboard') indices.push(doc.artboards.getActiveArtboardIndex());
+  else if(mode === 'artboardsAll') {for(var ai = 0; ai < doc.artboards.length; ai++) indices.push(ai);}
+  else if(mode === 'artboards') {
+    var requested = opts.artboardIndices || [];
+    for(var ri = 0; ri < requested.length; ri++) {
+      var idx = Math.round(Number(requested[ri]));
+      if(idx >= 0 && idx < doc.artboards.length) indices.push(idx);
+    }
+  }
+  if(indices.length) {
+    for(var a = 0; a < indices.length; a++) {
+      var ab = doc.artboards[indices[a]], r = ab.artboardRect;
+      var dx = hasX ? (absolute ? xPt - r[0] : xPt) : 0;
+      var dy = hasY ? (absolute ? yPt - r[1] : yPt) : 0;
+      ab.artboardRect = [r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy];
+    }
+    return 'Moved ' + indices.length + ' artboard' + (indices.length === 1 ? '' : 's') + '.';
+  }
+  if(mode !== 'selection') return 'No artboards available to move.';
+  var sel = doc.selection;
+  if(!sel || !sel.length) return 'No selection. Select one or more items.';
+  var moved = 0;
+  for(var i = 0; i < sel.length; i++) {
+    var item = sel[i];
+    try {
+      var b = _srh_transform_getTargetBounds(item, !opts.excludeStroke);
+      if(!b) continue;
+      var itemDx = hasX ? (absolute ? xPt - b[0] : xPt) : 0;
+      var itemDy = hasY ? (absolute ? yPt - b[1] : yPt) : 0;
+      item.translate(itemDx, itemDy);
+      moved++;
+    } catch(_eMoveItem) { }
+  }
+  if(!moved) return 'No eligible selection items to move.';
+  return 'Moved ' + moved + ' selection item' + (moved === 1 ? '' : 's') + '.';
 }
 
 function signarama_helper_transform_listArtboards() {
@@ -7098,8 +7150,13 @@ this.signarama_helper_transform_makeSize = function(json) {
 this.atlas_transform_makeSize = function(json) {
   return _srh_transform_makeSize_impl(json);
 };
+this.atlas_transform_move = function(json) {
+  return _srh_transform_move_impl(json);
+};
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg0) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_makeSize = this.atlas_transform_makeSize;} catch(_eTg2) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove0) { }
+try {atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove1) { }
 try {signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg1) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg3) { }
 try {signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg4) { }
@@ -9808,6 +9865,58 @@ function _dim_run(opts) {
   return msg;
 }
 
+function _dim_runBetween(opts) {
+  opts = opts || {};
+  if(!app.documents.length) return 'No document open.';
+  var originalSel = _dim_captureSelection();
+  if(!originalSel || originalSel.length < 2) return 'No measurement created. Select at least two objects.';
+  var scaleFactor = _srh_getScaleFactor() || 1;
+  var scaleAppearance = opts.scaleAppearance == null ? 1 : Number(opts.scaleAppearance);
+  var ticLenPt = _dim_mm2ptDoc(Number(opts.ticLenMm == null ? 2 : opts.ticLenMm), scaleFactor) * scaleAppearance;
+  var textPt = _dim_ptDoc(Number(opts.textPt == null ? 10 : opts.textPt), scaleFactor) * scaleAppearance;
+  var strokePt = _dim_ptDoc(Number(opts.strokePt == null ? 1 : opts.strokePt), scaleFactor) * scaleAppearance;
+  var textOffsetPt = _dim_mm2ptDoc(Number(opts.labelGapMm || 0), scaleFactor) * scaleAppearance;
+  var arrowheadSizePt = _dim_ptDoc(Number(opts.arrowheadSizePt || 0), scaleFactor) * scaleAppearance;
+  var includeStroke = !!opts.measureIncludeStroke;
+  var clipped = !!opts.measureClippedContent;
+  var horizontal = String(opts.axis || 'horizontal') !== 'vertical';
+  var centers = !!opts.centers;
+  var entries = [];
+  for(var i = 0; i < originalSel.length; i++) {
+    try {
+      var b = _dim_getMetricsFor(originalSel[i], clipped, includeStroke);
+      entries.push({b: b, cx: (b.left + b.right) / 2, cy: (b.top + b.bottom) / 2});
+    } catch(_eBetweenBounds) { }
+  }
+  if(entries.length < 2) return 'No measurement created. Select at least two measurable objects.';
+  entries.sort(function(a, b) {return horizontal ? a.cx - b.cx : b.cy - a.cy;});
+  var lyr = _dim_ensureLayer('Dimensions');
+  var lineColor = _dim_hexToRGB(opts.lineColor || '#000000');
+  var added = 0;
+  try {
+    for(var p = 0; p < entries.length - 1; p++) {
+      var a = entries[p], b2 = entries[p + 1];
+      if(horizontal) {
+        var x1 = centers ? a.cx : a.b.right;
+        var x2 = centers ? b2.cx : b2.b.left;
+        var y = (a.cy + b2.cy) / 2;
+        _dim_drawHorizontalDim(lyr, Math.min(x1, x2), Math.max(x1, x2), y, ticLenPt, textPt, strokePt, opts.decimals | 0, 'TOP', textOffsetPt, scaleFactor, opts.textColor, lineColor, !!opts.includeArrowhead, arrowheadSizePt);
+      } else {
+        var y1 = centers ? a.cy : a.b.bottom;
+        var y2 = centers ? b2.cy : b2.b.top;
+        var x = (a.cx + b2.cx) / 2;
+        _dim_drawVerticalDim(lyr, Math.max(y1, y2), Math.min(y1, y2), x, ticLenPt, textPt, strokePt, opts.decimals | 0, -90, textOffsetPt, 'RIGHT', scaleFactor, opts.textColor, lineColor, !!opts.includeArrowhead, arrowheadSizePt);
+      }
+      added++;
+    }
+  } catch(e) {
+    return 'Error: ' + _dim_errorDetails(e, 'drawBetweenMeasurement', {axis: opts.axis, centers: centers});
+  } finally {
+    _dim_restoreSelection(originalSel);
+  }
+  return 'Added ' + added + ' between-object measure' + (added === 1 ? '' : 's') + '.';
+}
+
 function _dim_normalizeAngleRad(angleRad) {
   var a = angleRad;
   var twoPi = Math.PI * 2;
@@ -10488,6 +10597,13 @@ this.atlas_dimensions_run = function(json) {
   } catch(e) {
     return 'Error: ' + e.message;
   }
+};
+
+this.atlas_dimensions_runBetween = function(json) {
+  try {
+    var opts = (typeof json === 'string') ? JSON.parse(json) : (json || {});
+    return _dim_runBetween(opts);
+  } catch(e) {return 'Error: ' + e.message;}
 };
 
 this.atlas_dimensions_hasSelection = function() {

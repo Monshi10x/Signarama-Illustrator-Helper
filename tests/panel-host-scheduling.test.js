@@ -32,3 +32,14 @@ test('no always-on timer invokes the cutfile refresh', () => {
   const timerBodies = main.match(/setInterval\([\s\S]{0,800}?\},\s*\d+\s*\)/g) || [];
   timerBodies.forEach(body => assert.doesNotMatch(body, /cutfile|activeDocument/));
 });
+
+test('toast UI suppresses routine informational and success messages', () => {
+  assert.match(main, /if\(type !== 'error' && type !== 'warn'\) return null/);
+});
+
+test('transform offers all-artboard sizing and move controls', () => {
+  assert.match(html, /option value="artboardsAll"/);
+  assert.match(html, /id="transformMoveMode"/);
+  assert.match(html, /id="btnTransformMove"/);
+  assert.match(main, /atlas_transform_move/);
+});
