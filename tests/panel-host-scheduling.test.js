@@ -76,9 +76,14 @@ test('Preflight presents ten sequential checks and runs double-cut geometry asyn
   assert.equal((html.match(/data-preflight-step="\d+"/g) || []).length, 10);
   assert.match(html, /Double Cutlines/);
   assert.doesNotMatch(html, /id="preflightResults"|Double Cutline Results/);
+  assert.match(html, /id="preflightDoubleCutActions" class="preflight-step-actions hidden"/);
+  assert.match(html, /id="btnPreflightRetryDoubleCuts"/);
+  assert.match(html, /id="preflightDoubleCutActions"[\s\S]*id="btnPreflightSelectIssues"[\s\S]*id="btnPreflightHighlightIssues"/);
   assert.match(main, /PreflightLogic\.findOverlapsAsync/);
   assert.match(main, /setStep\(lastIssues\.length \? 'failed' : 'complete'\)/);
   assert.match(main, /state === 'failed' \? '×'/);
+  assert.match(main, /issueActions\.classList\.toggle\('hidden', !lastIssues\.length\)/);
+  assert.match(main, /retryBtn\.onclick/);
   assert.match(main, /collectGeometryPage/);
   assert.match(main, /batchSize: 25/);
   assert.match(main, /Function\('return ' \+ rawText\)\(\)/);

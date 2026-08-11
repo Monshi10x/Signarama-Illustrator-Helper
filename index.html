@@ -718,6 +718,9 @@
     .preflight-step.complete .preflight-step-icon { background:#2cad5d; }
     .preflight-step.failed { border-color:#b52f38; background:#5a1d22; color:#fff; }
     .preflight-step.failed .preflight-step-icon { background:#d63b45; }
+    .preflight-step-actions { display:flex; gap:5px; margin-left:auto; align-items:center; }
+    .preflight-step-action { padding:4px 7px; min-height:26px; font-size:11px; border-radius:6px; }
+    .preflight-step-retry { width:28px; padding:3px; font-size:17px; line-height:1; }
   </style>
 </head>
 <body>
@@ -1451,7 +1454,14 @@
       </div>
       <div class="card" style="margin-top:12px;">
         <div class="preflight-steps" id="preflightSteps">
-          <button class="preflight-step" data-preflight-step="1" type="button"><span class="preflight-step-icon">1</span><span>Double Cutlines</span></button>
+          <div class="preflight-step" data-preflight-step="1" role="button" tabindex="0">
+            <span class="preflight-step-icon">1</span><span>Double Cutlines</span>
+            <span id="preflightDoubleCutActions" class="preflight-step-actions hidden">
+              <button id="btnPreflightSelectIssues" class="btn2 preflight-step-action" type="button">Select Issues</button>
+              <button id="btnPreflightHighlightIssues" class="btn2 preflight-step-action" type="button">Highlight Issues</button>
+              <button id="btnPreflightRetryDoubleCuts" class="btn2 preflight-step-action preflight-step-retry" type="button" title="Retry Double Cutlines" aria-label="Retry Double Cutlines">↻</button>
+            </span>
+          </div>
           <button class="preflight-step" data-preflight-step="2" type="button" disabled><span class="preflight-step-icon">2</span><span>Check 2 — Coming later</span></button>
           <button class="preflight-step" data-preflight-step="3" type="button" disabled><span class="preflight-step-icon">3</span><span>Check 3 — Coming later</span></button>
           <button class="preflight-step" data-preflight-step="4" type="button" disabled><span class="preflight-step-icon">4</span><span>Check 4 — Coming later</span></button>
@@ -1461,12 +1471,6 @@
           <button class="preflight-step" data-preflight-step="8" type="button" disabled><span class="preflight-step-icon">8</span><span>Check 8 — Coming later</span></button>
           <button class="preflight-step" data-preflight-step="9" type="button" disabled><span class="preflight-step-icon">9</span><span>Check 9 — Coming later</span></button>
           <button class="preflight-step" data-preflight-step="10" type="button" disabled><span class="preflight-step-icon">10</span><span>Check 10 — Coming later</span></button>
-        </div>
-      </div>
-      <div class="card" style="margin-top:12px;">
-        <div class="row">
-          <button id="btnPreflightSelectIssues" class="btn2" type="button" disabled>Select Issues</button>
-          <button id="btnPreflightHighlightIssues" class="btn2" type="button" disabled>Highlight Issues</button>
         </div>
       </div>
     </section>

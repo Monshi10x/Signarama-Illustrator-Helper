@@ -5018,6 +5018,8 @@
     const firstStep = document.querySelector('[data-preflight-step="1"]');
     const selectBtn = $('btnPreflightSelectIssues');
     const highlightBtn = $('btnPreflightHighlightIssues');
+    const retryBtn = $('btnPreflightRetryDoubleCuts');
+    const issueActions = $('preflightDoubleCutActions');
     let lastIssues = [];
     function setStep(state) {
       if(!firstStep) return;
@@ -5047,6 +5049,7 @@
         return;
       }
       runBtn.disabled = true; setStep('running'); lastIssues = [];
+      if(issueActions) issueActions.classList.add('hidden');
       if(selectBtn) selectBtn.disabled = true;
       if(highlightBtn) highlightBtn.disabled = true;
       loadJSX(function() {
@@ -5089,6 +5092,7 @@
             lastIssues = result.issues || [];
             if(selectBtn) selectBtn.disabled = !lastIssues.length;
             if(highlightBtn) highlightBtn.disabled = !lastIssues.length;
+            if(issueActions) issueActions.classList.toggle('hidden', !lastIssues.length);
             setStep(lastIssues.length ? 'failed' : 'complete'); runBtn.disabled = false;
           }).catch(err => {
             setStep('idle'); runBtn.disabled = false;
@@ -5100,11 +5104,17 @@
     }
     if(runBtn) runBtn.onclick = runDoubleCutCheck;
     if(firstStep) firstStep.onclick = runDoubleCutCheck;
-    if(selectBtn) selectBtn.onclick = () => {
+    if(firstStep) firstStep.onkeydown = (event) => {
+      if(event.key === 'Enter' || event.key === ' ') {event.preventDefault(); runDoubleCutCheck();}
+    };
+    if(retryBtn) retryBtn.onclick = (event) => {event.stopPropagation(); runDoubleCutCheck();};
+    if(selectBtn) selectBtn.onclick = (event) => {
+      event.stopPropagation();
       const json = jsxEscapeDoubleQuoted(JSON.stringify(issuePathIndices()));
       runButtonJsxOperation('signarama_helper_preflight_selectIssues("' + json + '")', {logFn: log, toastTitle: 'Preflight'});
     };
-    if(highlightBtn) highlightBtn.onclick = () => {
+    if(highlightBtn) highlightBtn.onclick = (event) => {
+      event.stopPropagation();
       const regions = lastIssues.map(issue => ({a: issue.a, b: issue.b}));
       const json = jsxEscapeDoubleQuoted(JSON.stringify(regions));
       runButtonJsxOperation('signarama_helper_preflight_highlightIssues("' + json + '")', {logFn: log, toastTitle: 'Preflight'});
