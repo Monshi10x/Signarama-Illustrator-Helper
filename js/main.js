@@ -5060,9 +5060,14 @@
           const command = '((typeof signarama_helper_preflight_extractCutGeometry === "function") ? signarama_helper_preflight_extractCutGeometry : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_preflight_extractCutGeometry === "function") ? $.global.signarama_helper_preflight_extractCutGeometry : function(){return "{\\"error\\":\\"Preflight geometry function not loaded.\\"}";}))("' + request + '")';
           callJSX(command, function(raw) {
             let page;
-            try {page = JSON.parse(String(raw || ''));} catch(_ePfJson) {
-              failGeometry('Could not read cut path geometry. Illustrator returned: ' + String(raw || '(empty response)').slice(0, 240));
-              return;
+            const rawText = String(raw || '');
+            try {page = JSON.parse(rawText);} catch(_ePfJson) {
+              // Some Illustrator/CEP combinations serialize ExtendScript objects
+              // as parenthesized JavaScript object literals rather than strict JSON.
+              try {page = Function('return ' + rawText)();} catch(_ePfObjectLiteral) {
+                failGeometry('Could not read cut path geometry. Illustrator returned: ' + String(raw || '(empty response)').slice(0, 240));
+                return;
+              }
             }
             if(page.error) {failGeometry('Could not read cut path geometry: ' + page.error); return;}
             geometry.paths = geometry.paths.concat(page.paths || []);

@@ -78,6 +78,7 @@ test('Preflight presents ten sequential checks and runs double-cut geometry asyn
   assert.match(main, /PreflightLogic\.findOverlapsAsync/);
   assert.match(main, /collectGeometryPage/);
   assert.match(main, /batchSize: 25/);
+  assert.match(main, /Function\('return ' \+ rawText\)\(\)/);
   assert.match(main, /signarama_helper_preflight_extractCutGeometry/);
   assert.match(host, /path\.pathPoints/);
   assert.match(host, /colour\.typename === 'SpotColor'/);
