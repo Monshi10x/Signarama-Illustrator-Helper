@@ -5362,6 +5362,71 @@ function _srh_fixings_create_impl(json) {
   return 'Created ' + holes + ' fixing hole' + (holes === 1 ? '' : 's') + ' for ' + objects + ' object' + (objects === 1 ? '' : 's') + '.';
 }
 
+function _srh_preflight_extractCutGeometry_impl(colourName) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var doc = app.activeDocument;
+  var wanted = String(colourName || 'CutContour').toLowerCase();
+  var paths = [];
+  for(var i = 0; i < doc.pathItems.length; i++) {
+    var path = doc.pathItems[i];
+    try {if(path.hidden || path.locked || path.clipping || !path.stroked) continue;} catch(_ePfSkip) {continue;}
+    var strokeName = '';
+    try {
+      var colour = path.strokeColor;
+      if(colour && colour.typename === 'SpotColor' && colour.spot) strokeName = String(colour.spot.name || '');
+    } catch(_ePfColour) {strokeName = '';}
+    if(strokeName.toLowerCase() !== wanted) continue;
+    var points = path.pathPoints, count = points.length;
+    if(count < 2) continue;
+    var limit = path.closed ? count : count - 1;
+    var segments = [];
+    for(var p = 0; p < limit; p++) {
+      var next = (p + 1) % count, p0 = points[p], p1 = points[next];
+      segments.push({
+        a: [Number(p0.anchor[0]), Number(p0.anchor[1])],
+        c1: [Number(p0.rightDirection[0]), Number(p0.rightDirection[1])],
+        c2: [Number(p1.leftDirection[0]), Number(p1.leftDirection[1])],
+        b: [Number(p1.anchor[0]), Number(p1.anchor[1])]
+      });
+    }
+    var layerName = '';
+    try {layerName = String(path.layer.name || '');} catch(_ePfLayer) { }
+    paths.push({pathIndex: i, objectName: String(path.name || ('Path ' + (i + 1))), layerName: layerName, closed: !!path.closed, segments: segments});
+  }
+  return JSON.stringify({colourName: colourName, pathCount: paths.length, paths: paths});
+}
+
+function _srh_preflight_selectIssues_impl(json) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var indices = [];
+  try {indices = (typeof json === 'string') ? JSON.parse(json) : (json || []);} catch(_ePfSelectParse) {return 'Error: Invalid issue selection.';}
+  var doc = app.activeDocument, selected = 0;
+  try {doc.selection = null;} catch(_ePfSelectClear) { }
+  for(var i = 0; i < indices.length; i++) {
+    var idx = Math.round(Number(indices[i]));
+    try {if(idx >= 0 && idx < doc.pathItems.length) {doc.pathItems[idx].selected = true; selected++;}} catch(_ePfSelect) { }
+  }
+  return selected ? ('Selected ' + selected + ' affected cut path' + (selected === 1 ? '' : 's') + '.') : 'No affected paths found.';
+}
+
+function _srh_preflight_highlightIssues_impl(json) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var regions = [];
+  try {regions = (typeof json === 'string') ? JSON.parse(json) : (json || []);} catch(_ePfHiParse) {return 'Error: Invalid highlight geometry.';}
+  var doc = app.activeDocument, layer = null;
+  try {layer = doc.layers.getByName('Preflight - Double Cuts'); layer.remove();} catch(_ePfOldLayer) { }
+  layer = doc.layers.add(); layer.name = 'Preflight - Double Cuts';
+  var magenta = new RGBColor(); magenta.red = 255; magenta.green = 0; magenta.blue = 180;
+  for(var i = 0; i < regions.length; i++) {
+    var r = regions[i]; if(!r || !r.a || !r.b) continue;
+    var line = layer.pathItems.add();
+    line.setEntirePath([[Number(r.a[0]), Number(r.a[1])], [Number(r.b[0]), Number(r.b[1])]]);
+    line.filled = false; line.stroked = true; line.strokeColor = magenta; line.strokeWidth = 4;
+    line.name = 'DOUBLE_CUT_OVERLAP';
+  }
+  return 'Highlighted ' + regions.length + ' double-cut region' + (regions.length === 1 ? '' : 's') + '.';
+}
+
 function signarama_helper_transform_listArtboards() {
   if(!app.documents.length) return '[]';
   var doc = app.activeDocument;
@@ -7227,12 +7292,21 @@ this.atlas_transform_move = function(json) {
 this.signarama_helper_createFixingHoles = function(json) {
   return _srh_fixings_create_impl(json);
 };
+this.signarama_helper_preflight_extractCutGeometry = function(colourName) {return _srh_preflight_extractCutGeometry_impl(colourName);};
+this.signarama_helper_preflight_selectIssues = function(json) {return _srh_preflight_selectIssues_impl(json);};
+this.signarama_helper_preflight_highlightIssues = function(json) {return _srh_preflight_highlightIssues_impl(json);};
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg0) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_makeSize = this.atlas_transform_makeSize;} catch(_eTg2) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove0) { }
 try {atlas_transform_move = this.atlas_transform_move;} catch(_eTgMove1) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_createFixingHoles = this.signarama_helper_createFixingHoles;} catch(_eFxGlobal0) { }
 try {signarama_helper_createFixingHoles = this.signarama_helper_createFixingHoles;} catch(_eFxGlobal1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_preflight_extractCutGeometry = this.signarama_helper_preflight_extractCutGeometry;} catch(_ePfGlobal0) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_preflight_selectIssues = this.signarama_helper_preflight_selectIssues;} catch(_ePfGlobal1) { }
+try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_preflight_highlightIssues = this.signarama_helper_preflight_highlightIssues;} catch(_ePfGlobal2) { }
+try {signarama_helper_preflight_extractCutGeometry = this.signarama_helper_preflight_extractCutGeometry;} catch(_ePfGlobal3) { }
+try {signarama_helper_preflight_selectIssues = this.signarama_helper_preflight_selectIssues;} catch(_ePfGlobal4) { }
+try {signarama_helper_preflight_highlightIssues = this.signarama_helper_preflight_highlightIssues;} catch(_ePfGlobal5) { }
 try {signarama_helper_transform_makeSize = this.signarama_helper_transform_makeSize;} catch(_eTg1) { }
 try {if(typeof $ !== 'undefined' && $.global) $.global.signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg3) { }
 try {signarama_helper_transform_listArtboards = this.signarama_helper_transform_listArtboards;} catch(_eTg4) { }

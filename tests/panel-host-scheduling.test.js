@@ -70,3 +70,14 @@ test('Testing console does not log fetched Corebridge result payloads', () => {
   assert.doesNotMatch(main, /corebridgeDebugLog\('filter comparison rows'/);
   assert.doesNotMatch(main, /corebridgeDebugLog\('filtered result'/);
 });
+
+test('Preflight presents ten sequential checks and runs double-cut geometry asynchronously', () => {
+  assert.match(html, /data-tab="tab-preflight"/);
+  assert.equal((html.match(/data-preflight-step="\d+"/g) || []).length, 10);
+  assert.match(html, /Double Cutlines/);
+  assert.match(main, /PreflightLogic\.findOverlapsAsync/);
+  assert.match(main, /signarama_helper_preflight_extractCutGeometry/);
+  assert.match(host, /path\.pathPoints/);
+  assert.match(host, /colour\.typename === 'SpotColor'/);
+  assert.match(host, /Preflight - Double Cuts/);
+});

@@ -2200,6 +2200,7 @@
     wireDimensions();
     wireTransform();
     wireFixings();
+    wirePreflight();
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
@@ -5009,6 +5010,94 @@
           toastTitle: 'Fixings'
         });
       });
+    };
+  }
+
+  function wirePreflight() {
+    const runBtn = $('btnRunPreflight');
+    const firstStep = document.querySelector('[data-preflight-step="1"]');
+    const resultsEl = $('preflightResults');
+    const selectBtn = $('btnPreflightSelectIssues');
+    const highlightBtn = $('btnPreflightHighlightIssues');
+    let lastIssues = [];
+    function setStep(state) {
+      if(!firstStep) return;
+      firstStep.classList.toggle('running', state === 'running');
+      firstStep.classList.toggle('complete', state === 'complete');
+      const icon = firstStep.querySelector('.preflight-step-icon');
+      if(icon) icon.textContent = state === 'complete' ? '✓' : (state === 'running' ? '…' : '1');
+    }
+    function issuePathIndices() {
+      const values = [];
+      lastIssues.forEach(issue => (issue.pathIndices || []).forEach(index => {if(values.indexOf(index) < 0) values.push(index);}));
+      return values;
+    }
+    function runDoubleCutCheck() {
+      if(!runBtn || runBtn.disabled) return;
+      if(typeof PreflightLogic === 'undefined') {
+        showToast('Preflight comparison engine did not load.', {type: 'error', title: 'Preflight'});
+        return;
+      }
+      const colourName = String(($('preflightCutColourName') && $('preflightCutColourName').value) || 'CutContour').trim();
+      const toleranceMm = num(($('preflightToleranceMm') && $('preflightToleranceMm').value) || 0.02);
+      const minimumMm = num(($('preflightMinimumOverlapMm') && $('preflightMinimumOverlapMm').value) || 0.1);
+      const gridMm = num(($('preflightGridCellMm') && $('preflightGridCellMm').value) || 5);
+      if(!colourName || !(toleranceMm > 0) || !(minimumMm > 0) || !(gridMm > 0)) {
+        showToast('Enter a colour name and positive preflight geometry settings.', {type: 'warn', title: 'Preflight'});
+        return;
+      }
+      runBtn.disabled = true; setStep('running'); lastIssues = [];
+      if(resultsEl) resultsEl.textContent = 'Collecting ' + colourName + ' path geometry from Illustrator…';
+      loadJSX(function() {
+        callJSX('signarama_helper_preflight_extractCutGeometry("' + jsxEscapeDoubleQuoted(colourName) + '")', function(raw) {
+          let geometry;
+          try {geometry = JSON.parse(String(raw || ''));} catch(_ePfJson) {
+            runBtn.disabled = false; setStep('idle');
+            showToast(/^Error:/i.test(String(raw || '')) ? raw : 'Could not read cut path geometry.', {type: 'error', title: 'Preflight'});
+            return;
+          }
+          if(resultsEl) resultsEl.textContent = 'Comparing ' + geometry.pathCount + ' cut path' + (geometry.pathCount === 1 ? '' : 's') + ' in asynchronous batches…';
+          const ptPerMm = 72 / 25.4;
+          PreflightLogic.findOverlapsAsync(geometry.paths, {
+            tolerancePt: toleranceMm * ptPerMm,
+            minimumPt: minimumMm * ptPerMm,
+            gridCellPt: gridMm * ptPerMm
+          }).then(result => {
+            lastIssues = result.issues || [];
+            const totalMm = lastIssues.reduce((sum, issue) => sum + Number(issue.lengthPt || 0), 0) / ptPerMm;
+            const affected = issuePathIndices();
+            if(resultsEl) {
+              if(lastIssues.length) {
+                const details = lastIssues.slice(0, 50).map((issue, index) => {
+                  const names = (issue.objects || []).join(' ↔ ');
+                  const layers = (issue.layers || []).filter((name, pos, arr) => name && arr.indexOf(name) === pos).join(', ');
+                  return (index + 1) + '. ' + (issue.kind || 'overlap') + ' — ' + (Number(issue.lengthPt || 0) / ptPerMm).toFixed(2) + ' mm — ' + names + (layers ? ' [' + layers + ']' : '');
+                });
+                resultsEl.textContent = lastIssues.length + ' coincident region' + (lastIssues.length === 1 ? '' : 's') + ' found; ' + totalMm.toFixed(2) + ' mm duplicated length across ' + affected.length + ' cut path' + (affected.length === 1 ? '' : 's') + '.\n\n' + details.join('\n') + (lastIssues.length > 50 ? '\n…additional results omitted from the list.' : '');
+              } else {
+                resultsEl.textContent = 'No double cutlines found in ' + geometry.pathCount + ' ' + colourName + ' path' + (geometry.pathCount === 1 ? '' : 's') + '.';
+              }
+            }
+            if(selectBtn) selectBtn.disabled = !lastIssues.length;
+            if(highlightBtn) highlightBtn.disabled = !lastIssues.length;
+            setStep('complete'); runBtn.disabled = false;
+          }).catch(err => {
+            setStep('idle'); runBtn.disabled = false;
+            showToast('Double-cut comparison failed: ' + (err && err.message ? err.message : err), {type: 'error', title: 'Preflight'});
+          });
+        });
+      });
+    }
+    if(runBtn) runBtn.onclick = runDoubleCutCheck;
+    if(firstStep) firstStep.onclick = runDoubleCutCheck;
+    if(selectBtn) selectBtn.onclick = () => {
+      const json = jsxEscapeDoubleQuoted(JSON.stringify(issuePathIndices()));
+      runButtonJsxOperation('signarama_helper_preflight_selectIssues("' + json + '")', {logFn: log, toastTitle: 'Preflight'});
+    };
+    if(highlightBtn) highlightBtn.onclick = () => {
+      const regions = lastIssues.map(issue => ({a: issue.a, b: issue.b}));
+      const json = jsxEscapeDoubleQuoted(JSON.stringify(regions));
+      runButtonJsxOperation('signarama_helper_preflight_highlightIssues("' + json + '")', {logFn: log, toastTitle: 'Preflight'});
     };
   }
 
