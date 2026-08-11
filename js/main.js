@@ -49,9 +49,12 @@
     document.body.appendChild(root);
   }
   function showToast(message, options) {
-    ensureToastUi();
     const opts = options || {};
     const type = opts.type || 'info';
+    // Keep the panel quiet during normal work. The log still records operation
+    // results; only messages which need the user's attention become toasts.
+    if(type !== 'error' && type !== 'warn') return null;
+    ensureToastUi();
     const isPersistent = !!opts.persistent;
     const duration = typeof opts.duration === 'number' ? Math.max(400, opts.duration) : 5000;
     const title = opts.title || (type === 'error' ? 'Operation failed' : 'Operation finished');
@@ -1939,13 +1942,10 @@
         if(!res) throw new Error('No response from primary data endpoint.');
         const text = await res.text();
         corebridgeDebugLog('fetch response status', res.status + ' ' + res.statusText);
-        corebridgeDebugLog('fetch raw response text', text);
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
         const parsed = corebridgeParsePrimaryResponseText(text);
-        corebridgeDebugLog('fetch parsed response', parsed);
         const list = corebridgeExtractPrimaryRows(parsed);
-        corebridgeDebugLog('extracted primary rows', {rowCount: list.length, rows: list});
         if(!list.length) {
           corebridgeDebugLog('empty row extraction warning', {
             parsedType: parsed === null ? 'null' : typeof parsed,
@@ -1953,30 +1953,14 @@
             message: 'No Corebridge rows were found in the primary endpoint response.'
           });
         }
-        const filterDebugRows = [];
-        const filteredData = list.filter((row, index) => {
+        const filteredData = list.filter((row) => {
           const rowInvoiceRaw = row && row.OrderInvoiceNumber;
           const rowInvoice = normalizeCorebridgeInvoiceNumber(rowInvoiceRaw);
           const rowLineItemOrder = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
           const invoiceMatches = !jobNumber || rowInvoice === jobNumber;
           const itemMatches = !itemNumber || rowLineItemOrder === itemNumber;
-          filterDebugRows.push({
-            index: index,
-            Id: row && row.Id,
-            OrderId: row && row.OrderId,
-            OrderInvoiceNumber: rowInvoiceRaw,
-            normalizedOrderInvoiceNumber: rowInvoice,
-            enteredJobNumber: jobNumber,
-            invoiceMatches: invoiceMatches,
-            LineItemOrder: rowLineItemOrder,
-            enteredItemNumber: itemNumber,
-            itemMatches: itemMatches,
-            included: invoiceMatches && itemMatches
-          });
           return invoiceMatches && itemMatches;
         });
-        corebridgeDebugLog('filter comparison rows', filterDebugRows);
-        corebridgeDebugLog('filtered result', {rowCount: filteredData.length, rows: filteredData});
 
         corebridgeLastAllData = list;
         renderCorebridgeLookup(list);
@@ -2215,6 +2199,8 @@
 
     wireDimensions();
     wireTransform();
+    wireFixings();
+    wirePreflight();
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
@@ -4640,6 +4626,20 @@
       });
     }
 
+    function runBetweenMeasure(axis, centers) {
+      const payload = buildDimensionPayload();
+      payload.axis = axis;
+      payload.centers = !!centers;
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runDimensionOperation('atlas_dimensions_runBetween("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
+
     function scheduleRefreshDimensionSelectionHint() {
       if(refreshDimensionSelectionHintTimer) clearTimeout(refreshDimensionSelectionHintTimer);
       refreshDimensionSelectionHintTimer = setTimeout(function() {
@@ -4663,7 +4663,11 @@
       btnLineMeasureReplace: () => runLineMeasureReplace(),
       btnAngleInner: () => runInnerAngles(),
       btnAngleOuter: () => runOuterAngles(),
-      btnAreaMeasure: () => runAreaMeasure()
+      btnAreaMeasure: () => runAreaMeasure(),
+      btnBetweenWidth: () => runBetweenMeasure('horizontal', false),
+      btnBetweenHeight: () => runBetweenMeasure('vertical', false),
+      btnCentersWidth: () => runBetweenMeasure('horizontal', true),
+      btnCentersHeight: () => runBetweenMeasure('vertical', true)
     };
 
     Object.keys(map).forEach(id => {
@@ -4763,6 +4767,10 @@
     const artboardsList = $('transformArtboardsList');
     const refreshArtboardsBtn = $('btnTransformRefreshArtboards');
     const artboardIndicesField = $('transformArtboardIndices');
+    const moveModeField = $('transformMoveMode');
+    const moveXField = $('transformMoveX');
+    const moveYField = $('transformMoveY');
+    const moveBtn = $('btnTransformMove');
 
     function parseArtboardIndicesField() {
       const raw = String((artboardIndicesField && artboardIndicesField.value) || '').trim();
@@ -4927,6 +4935,195 @@
       loadJSX(function() {
         runButtonJsxOperation('((typeof atlas_transform_makeSize === "function") ? atlas_transform_makeSize : ((typeof $ !== "undefined" && $.global && typeof $.global.atlas_transform_makeSize === "function") ? $.global.atlas_transform_makeSize : function(){return "Error: Transform function not loaded.";}))("' + json + '")', {logFn: log, toastTitle: 'Transform'});
       });
+    };
+
+    if(moveBtn) moveBtn.onclick = () => {
+      const xRaw = String((moveXField && moveXField.value) || '').trim();
+      const yRaw = String((moveYField && moveYField.value) || '').trim();
+      if(!xRaw && !yRaw) {
+        showToast('Enter an X and/or Y value in mm.', {type: 'warn', title: 'Transform'});
+        return;
+      }
+      const payload = {
+        mode: (modeField && modeField.value) || 'selection',
+        moveMode: (moveModeField && moveModeField.value) || 'amount',
+        xMm: xRaw || null,
+        yMm: yRaw || null,
+        excludeStroke: !!(excludeStrokeField && excludeStrokeField.checked),
+        artboardIndices: parseArtboardIndicesField()
+      };
+      if(payload.mode === 'artboards' && (!payload.artboardIndices || !payload.artboardIndices.length)) {
+        showToast('Select one or more target artboards in the list.', {type: 'warn', title: 'Transform'});
+        return;
+      }
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      loadJSX(function() {
+        runButtonJsxOperation('atlas_transform_move("' + json + '")', {logFn: log, toastTitle: 'Transform'});
+      });
+    };
+  }
+
+  function wireFixings() {
+    const createBtn = $('btnCreateFixingHoles');
+    const modeField = $('fixingSpacingMode');
+    const spacingField = $('fixingSpacingMm');
+    const quantityField = $('fixingQuantity');
+    const cornersField = $('fixingIncludeCorners');
+    const logField = $('fixingsLog');
+    function updateModeUi() {
+      const mode = (modeField && modeField.value) || 'corners';
+      if(spacingField) spacingField.disabled = mode === 'quantity' || mode === 'corners';
+      if(quantityField) quantityField.disabled = mode !== 'quantity';
+      if(cornersField) {
+        if(mode === 'corners') cornersField.checked = true;
+        cornersField.disabled = mode === 'corners';
+      }
+    }
+    if(modeField) modeField.addEventListener('change', updateModeUi);
+    updateModeUi();
+    if(!createBtn) return;
+    createBtn.onclick = () => {
+      const payload = {
+        diameterMm: num(($('fixingDiameterMm') && $('fixingDiameterMm').value) || 0),
+        insetMm: num(($('fixingInsetMm') && $('fixingInsetMm').value) || 0),
+        includeCorners: !!($('fixingIncludeCorners') && $('fixingIncludeCorners').checked),
+        spacingMode: (modeField && modeField.value) || 'maximum',
+        spacingMm: num((spacingField && spacingField.value) || 0),
+        quantity: parseInt((quantityField && quantityField.value) || 0, 10)
+      };
+      if(payload.spacingMode === 'corners') payload.includeCorners = true;
+      if(!(payload.diameterMm > 0)) {
+        showToast('Enter a hole diameter greater than zero.', {type: 'warn', title: 'Fixings'});
+        return;
+      }
+      if(payload.spacingMode !== 'quantity' && payload.spacingMode !== 'corners' && !(payload.spacingMm > 0)) {
+        showToast('Enter a spacing greater than zero.', {type: 'warn', title: 'Fixings'});
+        return;
+      }
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      loadJSX(function() {
+        runButtonJsxOperation('signarama_helper_createFixingHoles("' + json + '")', {
+          logFn: function(message) {
+            if(logField) logField.textContent = String(message || '');
+            log(message);
+          },
+          toastTitle: 'Fixings'
+        });
+      });
+    };
+  }
+
+  function wirePreflight() {
+    const runBtn = $('btnRunPreflight');
+    const firstStep = document.querySelector('[data-preflight-step="1"]');
+    const resultsEl = $('preflightResults');
+    const selectBtn = $('btnPreflightSelectIssues');
+    const highlightBtn = $('btnPreflightHighlightIssues');
+    let lastIssues = [];
+    function setStep(state) {
+      if(!firstStep) return;
+      firstStep.classList.toggle('running', state === 'running');
+      firstStep.classList.toggle('complete', state === 'complete');
+      const icon = firstStep.querySelector('.preflight-step-icon');
+      if(icon) icon.textContent = state === 'complete' ? '✓' : (state === 'running' ? '…' : '1');
+    }
+    function issuePathIndices() {
+      const values = [];
+      lastIssues.forEach(issue => (issue.pathIndices || []).forEach(index => {if(values.indexOf(index) < 0) values.push(index);}));
+      return values;
+    }
+    function runDoubleCutCheck() {
+      if(!runBtn || runBtn.disabled) return;
+      if(typeof PreflightLogic === 'undefined') {
+        showToast('Preflight comparison engine did not load.', {type: 'error', title: 'Preflight'});
+        return;
+      }
+      const colourName = String(($('preflightCutColourName') && $('preflightCutColourName').value) || 'CutContour').trim();
+      const toleranceMm = num(($('preflightToleranceMm') && $('preflightToleranceMm').value) || 0.02);
+      const minimumMm = num(($('preflightMinimumOverlapMm') && $('preflightMinimumOverlapMm').value) || 0.1);
+      const gridMm = num(($('preflightGridCellMm') && $('preflightGridCellMm').value) || 5);
+      if(!colourName || !(toleranceMm > 0) || !(minimumMm > 0) || !(gridMm > 0)) {
+        showToast('Enter a colour name and positive preflight geometry settings.', {type: 'warn', title: 'Preflight'});
+        return;
+      }
+      runBtn.disabled = true; setStep('running'); lastIssues = [];
+      if(resultsEl) resultsEl.textContent = 'Collecting ' + colourName + ' path geometry from Illustrator…';
+      loadJSX(function() {
+        const geometry = {colourName: colourName, pathCount: 0, paths: []};
+        function failGeometry(message) {
+          runBtn.disabled = false; setStep('idle');
+          if(resultsEl) resultsEl.textContent = String(message || 'Could not read cut path geometry.');
+          showToast(String(message || 'Could not read cut path geometry.'), {type: 'error', title: 'Preflight'});
+        }
+        function collectGeometryPage(startIndex) {
+          const request = jsxEscapeDoubleQuoted(JSON.stringify({colourName: colourName, startIndex: startIndex, batchSize: 25}));
+          const command = '((typeof signarama_helper_preflight_extractCutGeometry === "function") ? signarama_helper_preflight_extractCutGeometry : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_preflight_extractCutGeometry === "function") ? $.global.signarama_helper_preflight_extractCutGeometry : function(){return "{\\"error\\":\\"Preflight geometry function not loaded.\\"}";}))("' + request + '")';
+          callJSX(command, function(raw) {
+            let page;
+            const rawText = String(raw || '');
+            try {page = JSON.parse(rawText);} catch(_ePfJson) {
+              // Some Illustrator/CEP combinations serialize ExtendScript objects
+              // as parenthesized JavaScript object literals rather than strict JSON.
+              try {page = Function('return ' + rawText)();} catch(_ePfObjectLiteral) {
+                failGeometry('Could not read cut path geometry. Illustrator returned: ' + String(raw || '(empty response)').slice(0, 240));
+                return;
+              }
+            }
+            if(page.error) {failGeometry('Could not read cut path geometry: ' + page.error); return;}
+            geometry.paths = geometry.paths.concat(page.paths || []);
+            geometry.pathCount = geometry.paths.length;
+            if(resultsEl) resultsEl.textContent = 'Collected ' + geometry.pathCount + ' matching cut path' + (geometry.pathCount === 1 ? '' : 's') + '; scanning Illustrator path ' + page.nextIndex + ' of ' + page.totalDocumentPaths + '…';
+            if(!page.done && Number(page.nextIndex) > startIndex) {
+              setTimeout(function() {collectGeometryPage(Number(page.nextIndex));}, 0);
+              return;
+            }
+            compareCollectedGeometry();
+          });
+        }
+        function compareCollectedGeometry() {
+          if(resultsEl) resultsEl.textContent = 'Comparing ' + geometry.pathCount + ' cut path' + (geometry.pathCount === 1 ? '' : 's') + ' in asynchronous batches…';
+          const ptPerMm = 72 / 25.4;
+          PreflightLogic.findOverlapsAsync(geometry.paths, {
+            tolerancePt: toleranceMm * ptPerMm,
+            minimumPt: minimumMm * ptPerMm,
+            gridCellPt: gridMm * ptPerMm
+          }).then(result => {
+            lastIssues = result.issues || [];
+            const totalMm = lastIssues.reduce((sum, issue) => sum + Number(issue.lengthPt || 0), 0) / ptPerMm;
+            const affected = issuePathIndices();
+            if(resultsEl) {
+              if(lastIssues.length) {
+                const details = lastIssues.slice(0, 50).map((issue, index) => {
+                  const names = (issue.objects || []).join(' ↔ ');
+                  const layers = (issue.layers || []).filter((name, pos, arr) => name && arr.indexOf(name) === pos).join(', ');
+                  return (index + 1) + '. ' + (issue.kind || 'overlap') + ' — ' + (Number(issue.lengthPt || 0) / ptPerMm).toFixed(2) + ' mm — ' + names + (layers ? ' [' + layers + ']' : '');
+                });
+                resultsEl.textContent = lastIssues.length + ' coincident region' + (lastIssues.length === 1 ? '' : 's') + ' found; ' + totalMm.toFixed(2) + ' mm duplicated length across ' + affected.length + ' cut path' + (affected.length === 1 ? '' : 's') + '.\n\n' + details.join('\n') + (lastIssues.length > 50 ? '\n…additional results omitted from the list.' : '');
+              } else {
+                resultsEl.textContent = 'No double cutlines found in ' + geometry.pathCount + ' ' + colourName + ' path' + (geometry.pathCount === 1 ? '' : 's') + '.';
+              }
+            }
+            if(selectBtn) selectBtn.disabled = !lastIssues.length;
+            if(highlightBtn) highlightBtn.disabled = !lastIssues.length;
+            setStep('complete'); runBtn.disabled = false;
+          }).catch(err => {
+            setStep('idle'); runBtn.disabled = false;
+            showToast('Double-cut comparison failed: ' + (err && err.message ? err.message : err), {type: 'error', title: 'Preflight'});
+          });
+        }
+        collectGeometryPage(0);
+      });
+    }
+    if(runBtn) runBtn.onclick = runDoubleCutCheck;
+    if(firstStep) firstStep.onclick = runDoubleCutCheck;
+    if(selectBtn) selectBtn.onclick = () => {
+      const json = jsxEscapeDoubleQuoted(JSON.stringify(issuePathIndices()));
+      runButtonJsxOperation('signarama_helper_preflight_selectIssues("' + json + '")', {logFn: log, toastTitle: 'Preflight'});
+    };
+    if(highlightBtn) highlightBtn.onclick = () => {
+      const regions = lastIssues.map(issue => ({a: issue.a, b: issue.b}));
+      const json = jsxEscapeDoubleQuoted(JSON.stringify(regions));
+      runButtonJsxOperation('signarama_helper_preflight_highlightIssues("' + json + '")', {logFn: log, toastTitle: 'Preflight'});
     };
   }
 
