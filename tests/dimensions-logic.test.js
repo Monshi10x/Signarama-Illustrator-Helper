@@ -53,3 +53,11 @@ test('line labels apply label gap from the nearest edge for normal and replace m
   assert.match(host, /labelGap: textOff/);
   assert.doesNotMatch(host, /midX = \(sx \+ ex\) \* 0\.5 \+ nx \* textOff/);
 });
+
+test('between-object dimensions support edge gaps and center distances on both axes', () => {
+  assert.match(host, /function _dim_runBetween\(opts\)/);
+  assert.match(host, /horizontal \? a\.cx - b\.cx : b\.cy - a\.cy/);
+  assert.match(host, /centers \? a\.cx : a\.b\.right/);
+  assert.match(host, /centers \? a\.cy : a\.b\.bottom/);
+  assert.match(host, /this\.atlas_dimensions_runBetween/);
+});

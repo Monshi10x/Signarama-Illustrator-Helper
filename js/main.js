@@ -49,9 +49,12 @@
     document.body.appendChild(root);
   }
   function showToast(message, options) {
-    ensureToastUi();
     const opts = options || {};
     const type = opts.type || 'info';
+    // Keep the panel quiet during normal work. The log still records operation
+    // results; only messages which need the user's attention become toasts.
+    if(type !== 'error' && type !== 'warn') return null;
+    ensureToastUi();
     const isPersistent = !!opts.persistent;
     const duration = typeof opts.duration === 'number' ? Math.max(400, opts.duration) : 5000;
     const title = opts.title || (type === 'error' ? 'Operation failed' : 'Operation finished');
@@ -1939,13 +1942,10 @@
         if(!res) throw new Error('No response from primary data endpoint.');
         const text = await res.text();
         corebridgeDebugLog('fetch response status', res.status + ' ' + res.statusText);
-        corebridgeDebugLog('fetch raw response text', text);
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
         const parsed = corebridgeParsePrimaryResponseText(text);
-        corebridgeDebugLog('fetch parsed response', parsed);
         const list = corebridgeExtractPrimaryRows(parsed);
-        corebridgeDebugLog('extracted primary rows', {rowCount: list.length, rows: list});
         if(!list.length) {
           corebridgeDebugLog('empty row extraction warning', {
             parsedType: parsed === null ? 'null' : typeof parsed,
@@ -1953,30 +1953,14 @@
             message: 'No Corebridge rows were found in the primary endpoint response.'
           });
         }
-        const filterDebugRows = [];
-        const filteredData = list.filter((row, index) => {
+        const filteredData = list.filter((row) => {
           const rowInvoiceRaw = row && row.OrderInvoiceNumber;
           const rowInvoice = normalizeCorebridgeInvoiceNumber(rowInvoiceRaw);
           const rowLineItemOrder = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
           const invoiceMatches = !jobNumber || rowInvoice === jobNumber;
           const itemMatches = !itemNumber || rowLineItemOrder === itemNumber;
-          filterDebugRows.push({
-            index: index,
-            Id: row && row.Id,
-            OrderId: row && row.OrderId,
-            OrderInvoiceNumber: rowInvoiceRaw,
-            normalizedOrderInvoiceNumber: rowInvoice,
-            enteredJobNumber: jobNumber,
-            invoiceMatches: invoiceMatches,
-            LineItemOrder: rowLineItemOrder,
-            enteredItemNumber: itemNumber,
-            itemMatches: itemMatches,
-            included: invoiceMatches && itemMatches
-          });
           return invoiceMatches && itemMatches;
         });
-        corebridgeDebugLog('filter comparison rows', filterDebugRows);
-        corebridgeDebugLog('filtered result', {rowCount: filteredData.length, rows: filteredData});
 
         corebridgeLastAllData = list;
         renderCorebridgeLookup(list);
@@ -2215,6 +2199,7 @@
 
     wireDimensions();
     wireTransform();
+    wireFixings();
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
@@ -4640,6 +4625,20 @@
       });
     }
 
+    function runBetweenMeasure(axis, centers) {
+      const payload = buildDimensionPayload();
+      payload.axis = axis;
+      payload.centers = !!centers;
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      runDimensionOperation('atlas_dimensions_runBetween("' + json + '")', {
+        logFn: logDim,
+        toastTitle: 'Dimensions',
+        onResult: function() {
+          if(scheduleDimensionSelectionHintRefresh) scheduleDimensionSelectionHintRefresh();
+        }
+      });
+    }
+
     function scheduleRefreshDimensionSelectionHint() {
       if(refreshDimensionSelectionHintTimer) clearTimeout(refreshDimensionSelectionHintTimer);
       refreshDimensionSelectionHintTimer = setTimeout(function() {
@@ -4663,7 +4662,11 @@
       btnLineMeasureReplace: () => runLineMeasureReplace(),
       btnAngleInner: () => runInnerAngles(),
       btnAngleOuter: () => runOuterAngles(),
-      btnAreaMeasure: () => runAreaMeasure()
+      btnAreaMeasure: () => runAreaMeasure(),
+      btnBetweenWidth: () => runBetweenMeasure('horizontal', false),
+      btnBetweenHeight: () => runBetweenMeasure('vertical', false),
+      btnCentersWidth: () => runBetweenMeasure('horizontal', true),
+      btnCentersHeight: () => runBetweenMeasure('vertical', true)
     };
 
     Object.keys(map).forEach(id => {
@@ -4763,6 +4766,10 @@
     const artboardsList = $('transformArtboardsList');
     const refreshArtboardsBtn = $('btnTransformRefreshArtboards');
     const artboardIndicesField = $('transformArtboardIndices');
+    const moveModeField = $('transformMoveMode');
+    const moveXField = $('transformMoveX');
+    const moveYField = $('transformMoveY');
+    const moveBtn = $('btnTransformMove');
 
     function parseArtboardIndicesField() {
       const raw = String((artboardIndicesField && artboardIndicesField.value) || '').trim();
@@ -4926,6 +4933,81 @@
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       loadJSX(function() {
         runButtonJsxOperation('((typeof atlas_transform_makeSize === "function") ? atlas_transform_makeSize : ((typeof $ !== "undefined" && $.global && typeof $.global.atlas_transform_makeSize === "function") ? $.global.atlas_transform_makeSize : function(){return "Error: Transform function not loaded.";}))("' + json + '")', {logFn: log, toastTitle: 'Transform'});
+      });
+    };
+
+    if(moveBtn) moveBtn.onclick = () => {
+      const xRaw = String((moveXField && moveXField.value) || '').trim();
+      const yRaw = String((moveYField && moveYField.value) || '').trim();
+      if(!xRaw && !yRaw) {
+        showToast('Enter an X and/or Y value in mm.', {type: 'warn', title: 'Transform'});
+        return;
+      }
+      const payload = {
+        mode: (modeField && modeField.value) || 'selection',
+        moveMode: (moveModeField && moveModeField.value) || 'amount',
+        xMm: xRaw || null,
+        yMm: yRaw || null,
+        excludeStroke: !!(excludeStrokeField && excludeStrokeField.checked),
+        artboardIndices: parseArtboardIndicesField()
+      };
+      if(payload.mode === 'artboards' && (!payload.artboardIndices || !payload.artboardIndices.length)) {
+        showToast('Select one or more target artboards in the list.', {type: 'warn', title: 'Transform'});
+        return;
+      }
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      loadJSX(function() {
+        runButtonJsxOperation('atlas_transform_move("' + json + '")', {logFn: log, toastTitle: 'Transform'});
+      });
+    };
+  }
+
+  function wireFixings() {
+    const createBtn = $('btnCreateFixingHoles');
+    const modeField = $('fixingSpacingMode');
+    const spacingField = $('fixingSpacingMm');
+    const quantityField = $('fixingQuantity');
+    const cornersField = $('fixingIncludeCorners');
+    const logField = $('fixingsLog');
+    function updateModeUi() {
+      const mode = (modeField && modeField.value) || 'corners';
+      if(spacingField) spacingField.disabled = mode === 'quantity' || mode === 'corners';
+      if(quantityField) quantityField.disabled = mode !== 'quantity';
+      if(cornersField) {
+        if(mode === 'corners') cornersField.checked = true;
+        cornersField.disabled = mode === 'corners';
+      }
+    }
+    if(modeField) modeField.addEventListener('change', updateModeUi);
+    updateModeUi();
+    if(!createBtn) return;
+    createBtn.onclick = () => {
+      const payload = {
+        diameterMm: num(($('fixingDiameterMm') && $('fixingDiameterMm').value) || 0),
+        insetMm: num(($('fixingInsetMm') && $('fixingInsetMm').value) || 0),
+        includeCorners: !!($('fixingIncludeCorners') && $('fixingIncludeCorners').checked),
+        spacingMode: (modeField && modeField.value) || 'maximum',
+        spacingMm: num((spacingField && spacingField.value) || 0),
+        quantity: parseInt((quantityField && quantityField.value) || 0, 10)
+      };
+      if(payload.spacingMode === 'corners') payload.includeCorners = true;
+      if(!(payload.diameterMm > 0)) {
+        showToast('Enter a hole diameter greater than zero.', {type: 'warn', title: 'Fixings'});
+        return;
+      }
+      if(payload.spacingMode !== 'quantity' && payload.spacingMode !== 'corners' && !(payload.spacingMm > 0)) {
+        showToast('Enter a spacing greater than zero.', {type: 'warn', title: 'Fixings'});
+        return;
+      }
+      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      loadJSX(function() {
+        runButtonJsxOperation('signarama_helper_createFixingHoles("' + json + '")', {
+          logFn: function(message) {
+            if(logField) logField.textContent = String(message || '');
+            log(message);
+          },
+          toastTitle: 'Fixings'
+        });
       });
     };
   }
