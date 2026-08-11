@@ -5049,13 +5049,33 @@
       runBtn.disabled = true; setStep('running'); lastIssues = [];
       if(resultsEl) resultsEl.textContent = 'Collecting ' + colourName + ' path geometry from Illustrator…';
       loadJSX(function() {
-        callJSX('signarama_helper_preflight_extractCutGeometry("' + jsxEscapeDoubleQuoted(colourName) + '")', function(raw) {
-          let geometry;
-          try {geometry = JSON.parse(String(raw || ''));} catch(_ePfJson) {
-            runBtn.disabled = false; setStep('idle');
-            showToast(/^Error:/i.test(String(raw || '')) ? raw : 'Could not read cut path geometry.', {type: 'error', title: 'Preflight'});
-            return;
-          }
+        const geometry = {colourName: colourName, pathCount: 0, paths: []};
+        function failGeometry(message) {
+          runBtn.disabled = false; setStep('idle');
+          if(resultsEl) resultsEl.textContent = String(message || 'Could not read cut path geometry.');
+          showToast(String(message || 'Could not read cut path geometry.'), {type: 'error', title: 'Preflight'});
+        }
+        function collectGeometryPage(startIndex) {
+          const request = jsxEscapeDoubleQuoted(JSON.stringify({colourName: colourName, startIndex: startIndex, batchSize: 25}));
+          const command = '((typeof signarama_helper_preflight_extractCutGeometry === "function") ? signarama_helper_preflight_extractCutGeometry : ((typeof $ !== "undefined" && $.global && typeof $.global.signarama_helper_preflight_extractCutGeometry === "function") ? $.global.signarama_helper_preflight_extractCutGeometry : function(){return "{\\"error\\":\\"Preflight geometry function not loaded.\\"}";}))("' + request + '")';
+          callJSX(command, function(raw) {
+            let page;
+            try {page = JSON.parse(String(raw || ''));} catch(_ePfJson) {
+              failGeometry('Could not read cut path geometry. Illustrator returned: ' + String(raw || '(empty response)').slice(0, 240));
+              return;
+            }
+            if(page.error) {failGeometry('Could not read cut path geometry: ' + page.error); return;}
+            geometry.paths = geometry.paths.concat(page.paths || []);
+            geometry.pathCount = geometry.paths.length;
+            if(resultsEl) resultsEl.textContent = 'Collected ' + geometry.pathCount + ' matching cut path' + (geometry.pathCount === 1 ? '' : 's') + '; scanning Illustrator path ' + page.nextIndex + ' of ' + page.totalDocumentPaths + '…';
+            if(!page.done && Number(page.nextIndex) > startIndex) {
+              setTimeout(function() {collectGeometryPage(Number(page.nextIndex));}, 0);
+              return;
+            }
+            compareCollectedGeometry();
+          });
+        }
+        function compareCollectedGeometry() {
           if(resultsEl) resultsEl.textContent = 'Comparing ' + geometry.pathCount + ' cut path' + (geometry.pathCount === 1 ? '' : 's') + ' in asynchronous batches…';
           const ptPerMm = 72 / 25.4;
           PreflightLogic.findOverlapsAsync(geometry.paths, {
@@ -5085,7 +5105,8 @@
             setStep('idle'); runBtn.disabled = false;
             showToast('Double-cut comparison failed: ' + (err && err.message ? err.message : err), {type: 'error', title: 'Preflight'});
           });
-        });
+        }
+        collectGeometryPage(0);
       });
     }
     if(runBtn) runBtn.onclick = runDoubleCutCheck;

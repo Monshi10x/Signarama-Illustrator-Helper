@@ -5362,12 +5362,21 @@ function _srh_fixings_create_impl(json) {
   return 'Created ' + holes + ' fixing hole' + (holes === 1 ? '' : 's') + ' for ' + objects + ' object' + (objects === 1 ? '' : 's') + '.';
 }
 
-function _srh_preflight_extractCutGeometry_impl(colourName) {
-  if(!app.documents.length) return 'Error: No open document.';
-  var doc = app.activeDocument;
-  var wanted = String(colourName || 'CutContour').toLowerCase();
+function _srh_preflight_extractCutGeometry_impl(request) {
+  if(!app.documents.length) return JSON.stringify({error: 'No open document.'});
+  var doc = app.activeDocument, options = {};
+  try {
+    if(typeof request === 'string' && /^\s*\{/.test(request)) options = JSON.parse(request);
+    else options = {colourName: request};
+  } catch(_ePfRequest) {options = {colourName: request};}
+  var colourName = String(options.colourName || 'CutContour');
+  var wanted = colourName.toLowerCase();
+  var startIndex = Math.max(0, Math.floor(Number(options.startIndex) || 0));
+  var batchSize = Math.max(1, Math.min(100, Math.floor(Number(options.batchSize) || 25)));
   var paths = [];
-  for(var i = 0; i < doc.pathItems.length; i++) {
+  var i = startIndex;
+  try {
+  for(; i < doc.pathItems.length && paths.length < batchSize; i++) {
     var path = doc.pathItems[i];
     try {if(path.hidden || path.locked || path.clipping || !path.stroked) continue;} catch(_ePfSkip) {continue;}
     var strokeName = '';
@@ -5393,7 +5402,10 @@ function _srh_preflight_extractCutGeometry_impl(colourName) {
     try {layerName = String(path.layer.name || '');} catch(_ePfLayer) { }
     paths.push({pathIndex: i, objectName: String(path.name || ('Path ' + (i + 1))), layerName: layerName, closed: !!path.closed, segments: segments});
   }
-  return JSON.stringify({colourName: colourName, pathCount: paths.length, paths: paths});
+  } catch(e) {
+    return JSON.stringify({error: String(e && e.message ? e.message : e), startIndex: startIndex, failedIndex: i});
+  }
+  return JSON.stringify({colourName: colourName, pathCount: paths.length, paths: paths, nextIndex: i, done: i >= doc.pathItems.length, totalDocumentPaths: doc.pathItems.length});
 }
 
 function _srh_preflight_selectIssues_impl(json) {
