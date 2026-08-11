@@ -1942,13 +1942,10 @@
         if(!res) throw new Error('No response from primary data endpoint.');
         const text = await res.text();
         corebridgeDebugLog('fetch response status', res.status + ' ' + res.statusText);
-        corebridgeDebugLog('fetch raw response text', text);
         if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
 
         const parsed = corebridgeParsePrimaryResponseText(text);
-        corebridgeDebugLog('fetch parsed response', parsed);
         const list = corebridgeExtractPrimaryRows(parsed);
-        corebridgeDebugLog('extracted primary rows', {rowCount: list.length, rows: list});
         if(!list.length) {
           corebridgeDebugLog('empty row extraction warning', {
             parsedType: parsed === null ? 'null' : typeof parsed,
@@ -1956,30 +1953,14 @@
             message: 'No Corebridge rows were found in the primary endpoint response.'
           });
         }
-        const filterDebugRows = [];
-        const filteredData = list.filter((row, index) => {
+        const filteredData = list.filter((row) => {
           const rowInvoiceRaw = row && row.OrderInvoiceNumber;
           const rowInvoice = normalizeCorebridgeInvoiceNumber(rowInvoiceRaw);
           const rowLineItemOrder = normalizeCorebridgeItemNumber(row && (row.LineItemOrder != null ? row.LineItemOrder : row.lineItemOrder));
           const invoiceMatches = !jobNumber || rowInvoice === jobNumber;
           const itemMatches = !itemNumber || rowLineItemOrder === itemNumber;
-          filterDebugRows.push({
-            index: index,
-            Id: row && row.Id,
-            OrderId: row && row.OrderId,
-            OrderInvoiceNumber: rowInvoiceRaw,
-            normalizedOrderInvoiceNumber: rowInvoice,
-            enteredJobNumber: jobNumber,
-            invoiceMatches: invoiceMatches,
-            LineItemOrder: rowLineItemOrder,
-            enteredItemNumber: itemNumber,
-            itemMatches: itemMatches,
-            included: invoiceMatches && itemMatches
-          });
           return invoiceMatches && itemMatches;
         });
-        corebridgeDebugLog('filter comparison rows', filterDebugRows);
-        corebridgeDebugLog('filtered result', {rowCount: filteredData.length, rows: filteredData});
 
         corebridgeLastAllData = list;
         renderCorebridgeLookup(list);
@@ -4986,11 +4967,16 @@
     const modeField = $('fixingSpacingMode');
     const spacingField = $('fixingSpacingMm');
     const quantityField = $('fixingQuantity');
+    const cornersField = $('fixingIncludeCorners');
     const logField = $('fixingsLog');
     function updateModeUi() {
-      const quantityMode = modeField && modeField.value === 'quantity';
-      if(spacingField) spacingField.disabled = quantityMode;
-      if(quantityField) quantityField.disabled = !quantityMode;
+      const mode = (modeField && modeField.value) || 'corners';
+      if(spacingField) spacingField.disabled = mode === 'quantity' || mode === 'corners';
+      if(quantityField) quantityField.disabled = mode !== 'quantity';
+      if(cornersField) {
+        if(mode === 'corners') cornersField.checked = true;
+        cornersField.disabled = mode === 'corners';
+      }
     }
     if(modeField) modeField.addEventListener('change', updateModeUi);
     updateModeUi();
@@ -5004,11 +4990,12 @@
         spacingMm: num((spacingField && spacingField.value) || 0),
         quantity: parseInt((quantityField && quantityField.value) || 0, 10)
       };
+      if(payload.spacingMode === 'corners') payload.includeCorners = true;
       if(!(payload.diameterMm > 0)) {
         showToast('Enter a hole diameter greater than zero.', {type: 'warn', title: 'Fixings'});
         return;
       }
-      if(payload.spacingMode !== 'quantity' && !(payload.spacingMm > 0)) {
+      if(payload.spacingMode !== 'quantity' && payload.spacingMode !== 'corners' && !(payload.spacingMm > 0)) {
         showToast('Enter a spacing greater than zero.', {type: 'warn', title: 'Fixings'});
         return;
       }

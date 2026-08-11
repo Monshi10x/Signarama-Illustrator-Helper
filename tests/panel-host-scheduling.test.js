@@ -53,10 +53,20 @@ test('transform Y follows Illustrator native downward-positive coordinates', () 
 test('Fixings tab supports corners, spacing limits, and quantities', () => {
   assert.match(html, /data-tab="tab-fixings"/);
   assert.match(html, /id="fixingIncludeCorners"/);
+  assert.match(html, /option value="corners">Corners only/);
   assert.match(html, /option value="maximum">Maximum spacing/);
   assert.match(html, /option value="minimum">Minimum spacing/);
   assert.match(html, /option value="quantity">Quantity per edge/);
   assert.match(main, /signarama_helper_createFixingHoles/);
   assert.match(host, /function _srh_fixings_create_impl\(json\)/);
   assert.match(host, /circle\.name = 'FIXING_HOLE'/);
+  assert.match(host, /if\(mode !== 'corners'\)/);
+});
+
+test('Testing console does not log fetched Corebridge result payloads', () => {
+  assert.doesNotMatch(main, /corebridgeDebugLog\('fetch raw response text'/);
+  assert.doesNotMatch(main, /corebridgeDebugLog\('fetch parsed response'/);
+  assert.doesNotMatch(main, /corebridgeDebugLog\('extracted primary rows'/);
+  assert.doesNotMatch(main, /corebridgeDebugLog\('filter comparison rows'/);
+  assert.doesNotMatch(main, /corebridgeDebugLog\('filtered result'/);
 });

@@ -5308,7 +5308,8 @@ function _srh_fixings_create_impl(json) {
   var mode = String(opts.spacingMode || 'maximum');
   var quantity = Math.max(0, Math.floor(Number(opts.quantity) || 0));
   if(!(diameter > 0)) return 'Error: Hole diameter must be greater than zero.';
-  if(mode !== 'quantity' && !(spacing > 0)) return 'Error: Spacing must be greater than zero.';
+  if(mode !== 'quantity' && mode !== 'corners' && !(spacing > 0)) return 'Error: Spacing must be greater than zero.';
+  if(mode === 'corners') opts.includeCorners = true;
   var layer = null;
   try {layer = doc.layers.getByName('Fixings');} catch(_eFxLayer0) {layer = doc.layers.add(); layer.name = 'Fixings';}
   try {layer.locked = false; layer.visible = true;} catch(_eFxLayer1) { }
@@ -5348,10 +5349,12 @@ function _srh_fixings_create_impl(json) {
       addHole(group, left, top); addHole(group, right, top);
       addHole(group, right, bottom); addHole(group, left, bottom);
     }
-    addEdge(group, left, top, right, top);
-    addEdge(group, right, top, right, bottom);
-    addEdge(group, right, bottom, left, bottom);
-    addEdge(group, left, bottom, left, top);
+    if(mode !== 'corners') {
+      addEdge(group, left, top, right, top);
+      addEdge(group, right, top, right, bottom);
+      addEdge(group, right, bottom, left, bottom);
+      addEdge(group, left, bottom, left, top);
+    }
     objects++;
   }
   try {doc.selection = selection;} catch(_eFxRestore) { }
