@@ -75,7 +75,10 @@ test('Preflight presents ten sequential checks and runs double-cut geometry asyn
   assert.match(html, /data-tab="tab-preflight"/);
   assert.equal((html.match(/data-preflight-step="\d+"/g) || []).length, 10);
   assert.match(html, /Double Cutlines/);
+  assert.doesNotMatch(html, /id="preflightResults"|Double Cutline Results/);
   assert.match(main, /PreflightLogic\.findOverlapsAsync/);
+  assert.match(main, /setStep\(lastIssues\.length \? 'failed' : 'complete'\)/);
+  assert.match(main, /state === 'failed' \? '×'/);
   assert.match(main, /collectGeometryPage/);
   assert.match(main, /batchSize: 25/);
   assert.match(main, /Function\('return ' \+ rawText\)\(\)/);

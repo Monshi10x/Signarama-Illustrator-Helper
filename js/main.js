@@ -5016,7 +5016,6 @@
   function wirePreflight() {
     const runBtn = $('btnRunPreflight');
     const firstStep = document.querySelector('[data-preflight-step="1"]');
-    const resultsEl = $('preflightResults');
     const selectBtn = $('btnPreflightSelectIssues');
     const highlightBtn = $('btnPreflightHighlightIssues');
     let lastIssues = [];
@@ -5024,8 +5023,9 @@
       if(!firstStep) return;
       firstStep.classList.toggle('running', state === 'running');
       firstStep.classList.toggle('complete', state === 'complete');
+      firstStep.classList.toggle('failed', state === 'failed');
       const icon = firstStep.querySelector('.preflight-step-icon');
-      if(icon) icon.textContent = state === 'complete' ? '✓' : (state === 'running' ? '…' : '1');
+      if(icon) icon.textContent = state === 'complete' ? '✓' : (state === 'failed' ? '×' : (state === 'running' ? '…' : '1'));
     }
     function issuePathIndices() {
       const values = [];
@@ -5047,12 +5047,12 @@
         return;
       }
       runBtn.disabled = true; setStep('running'); lastIssues = [];
-      if(resultsEl) resultsEl.textContent = 'Collecting ' + colourName + ' path geometry from Illustrator…';
+      if(selectBtn) selectBtn.disabled = true;
+      if(highlightBtn) highlightBtn.disabled = true;
       loadJSX(function() {
         const geometry = {colourName: colourName, pathCount: 0, paths: []};
         function failGeometry(message) {
           runBtn.disabled = false; setStep('idle');
-          if(resultsEl) resultsEl.textContent = String(message || 'Could not read cut path geometry.');
           showToast(String(message || 'Could not read cut path geometry.'), {type: 'error', title: 'Preflight'});
         }
         function collectGeometryPage(startIndex) {
@@ -5072,7 +5072,6 @@
             if(page.error) {failGeometry('Could not read cut path geometry: ' + page.error); return;}
             geometry.paths = geometry.paths.concat(page.paths || []);
             geometry.pathCount = geometry.paths.length;
-            if(resultsEl) resultsEl.textContent = 'Collected ' + geometry.pathCount + ' matching cut path' + (geometry.pathCount === 1 ? '' : 's') + '; scanning Illustrator path ' + page.nextIndex + ' of ' + page.totalDocumentPaths + '…';
             if(!page.done && Number(page.nextIndex) > startIndex) {
               setTimeout(function() {collectGeometryPage(Number(page.nextIndex));}, 0);
               return;
@@ -5081,7 +5080,6 @@
           });
         }
         function compareCollectedGeometry() {
-          if(resultsEl) resultsEl.textContent = 'Comparing ' + geometry.pathCount + ' cut path' + (geometry.pathCount === 1 ? '' : 's') + ' in asynchronous batches…';
           const ptPerMm = 72 / 25.4;
           PreflightLogic.findOverlapsAsync(geometry.paths, {
             tolerancePt: toleranceMm * ptPerMm,
@@ -5089,23 +5087,9 @@
             gridCellPt: gridMm * ptPerMm
           }).then(result => {
             lastIssues = result.issues || [];
-            const totalMm = lastIssues.reduce((sum, issue) => sum + Number(issue.lengthPt || 0), 0) / ptPerMm;
-            const affected = issuePathIndices();
-            if(resultsEl) {
-              if(lastIssues.length) {
-                const details = lastIssues.slice(0, 50).map((issue, index) => {
-                  const names = (issue.objects || []).join(' ↔ ');
-                  const layers = (issue.layers || []).filter((name, pos, arr) => name && arr.indexOf(name) === pos).join(', ');
-                  return (index + 1) + '. ' + (issue.kind || 'overlap') + ' — ' + (Number(issue.lengthPt || 0) / ptPerMm).toFixed(2) + ' mm — ' + names + (layers ? ' [' + layers + ']' : '');
-                });
-                resultsEl.textContent = lastIssues.length + ' coincident region' + (lastIssues.length === 1 ? '' : 's') + ' found; ' + totalMm.toFixed(2) + ' mm duplicated length across ' + affected.length + ' cut path' + (affected.length === 1 ? '' : 's') + '.\n\n' + details.join('\n') + (lastIssues.length > 50 ? '\n…additional results omitted from the list.' : '');
-              } else {
-                resultsEl.textContent = 'No double cutlines found in ' + geometry.pathCount + ' ' + colourName + ' path' + (geometry.pathCount === 1 ? '' : 's') + '.';
-              }
-            }
             if(selectBtn) selectBtn.disabled = !lastIssues.length;
             if(highlightBtn) highlightBtn.disabled = !lastIssues.length;
-            setStep('complete'); runBtn.disabled = false;
+            setStep(lastIssues.length ? 'failed' : 'complete'); runBtn.disabled = false;
           }).catch(err => {
             setStep('idle'); runBtn.disabled = false;
             showToast('Double-cut comparison failed: ' + (err && err.message ? err.message : err), {type: 'error', title: 'Preflight'});

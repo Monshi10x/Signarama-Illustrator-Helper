@@ -716,7 +716,8 @@
     .preflight-step.running .preflight-step-icon { background:#b7791f; }
     .preflight-step.complete { border-color:#27864a; background:#174d2c; color:#fff; }
     .preflight-step.complete .preflight-step-icon { background:#2cad5d; }
-    #preflightResults { white-space:pre-wrap; line-height:1.45; }
+    .preflight-step.failed { border-color:#b52f38; background:#5a1d22; color:#fff; }
+    .preflight-step.failed .preflight-step-icon { background:#d63b45; }
   </style>
 </head>
 <body>
@@ -1463,9 +1464,7 @@
         </div>
       </div>
       <div class="card" style="margin-top:12px;">
-        <div class="cardHead"><div class="cardTitle">Double Cutline Results</div></div>
-        <div id="preflightResults" class="small">Run preflight to check CutContour geometry.</div>
-        <div class="row" style="margin-top:10px;">
+        <div class="row">
           <button id="btnPreflightSelectIssues" class="btn2" type="button" disabled>Select Issues</button>
           <button id="btnPreflightHighlightIssues" class="btn2" type="button" disabled>Highlight Issues</button>
         </div>
