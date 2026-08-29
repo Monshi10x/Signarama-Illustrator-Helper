@@ -125,12 +125,13 @@ test('Scripts tab supports bundled files, selected files, and pasted code', () =
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'jsx', 'scripts', 'Select All Artwork.jsx')), true);
 });
 
-test('LED and letter layouts use viewport center and lightbox measures exclude strokes', () => {
+test('LED layouts use viewport center, letter LEDs stay on their offset paths, and lightbox measures exclude strokes', () => {
   const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  const letterLayout = host.slice(host.indexOf('function signarama_helper_drawLetterLayout'), host.indexOf('function _srh_addLightboxMeasures'));
   assert.match(host, /function _srh_getViewportCenter/);
   assert.match(host, /var viewCenter2 = _getViewCenter\(doc\)/);
-  assert.match(host, /var targetCenter = _srh_getViewportCenter\(doc, activeRect\)/);
-  assert.match(host, /runGroups\[tg\]\.translate\(dx,dy\)/);
+  assert.doesNotMatch(letterLayout, /\.translate\(/);
+  assert.match(letterLayout, /Samples already use the offset paths' document coordinates/);
   assert.match(host, /Lightbox dimensions describe the path geometry, never the stroke extents/);
   assert.match(host, /try \{b = item\.geometricBounds;\}/);
   assert.match(host, /working\.applyEffect\(fx1\)/);

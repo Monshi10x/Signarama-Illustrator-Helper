@@ -12126,24 +12126,8 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   try {tempLayer.locked = false;} catch(_eLlt8a) { }
   try {tempLayer.visible = true;} catch(_eLlt8b) { }
   try {tempLayer.remove();} catch(_eLlt8) { }
-  if(totalPlaced > 0) {
-    var runBounds = null;
-    var runGroups = [ledRunGroup, lineRunGroup, labelRunGroup];
-    for(var rg=0; rg<runGroups.length; rg++) {
-      var rgb = null;
-      try {rgb = runGroups[rg].geometricBounds;} catch(_eRunBounds) {rgb = null;}
-      if(!rgb || rgb.length !== 4) continue;
-      if(!runBounds) runBounds = {left:rgb[0], top:rgb[1], right:rgb[2], bottom:rgb[3]};
-      else {if(rgb[0]<runBounds.left) runBounds.left=rgb[0]; if(rgb[1]>runBounds.top) runBounds.top=rgb[1]; if(rgb[2]>runBounds.right) runBounds.right=rgb[2]; if(rgb[3]<runBounds.bottom) runBounds.bottom=rgb[3];}
-    }
-    if(runBounds) {
-      var activeRect = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
-      var targetCenter = _srh_getViewportCenter(doc, activeRect);
-      var dx = targetCenter[0] - ((runBounds.left + runBounds.right) / 2);
-      var dy = targetCenter[1] - ((runBounds.top + runBounds.bottom) / 2);
-      for(var tg=0; tg<runGroups.length; tg++) {try {runGroups[tg].translate(dx,dy);} catch(_eRunMove) { }}
-    }
-  }
+  // Samples already use the offset paths' document coordinates. Moving the
+  // completed groups to the viewport would detach the LEDs from the letters.
   _srh_bringLayerToFront(lineLayer);
   _srh_bringLayerToFront(ledLayer);
   _srh_bringLayerToFront(groupLayer);
