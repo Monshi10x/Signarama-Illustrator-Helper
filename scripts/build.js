@@ -7,5 +7,5 @@ const pkg = require('../package.json');
 execFileSync(process.execPath, ['scripts/validate-release.js'], {stdio: 'inherit'});
 const target = path.join('dist', `signarama-helper-v${pkg.version}`);
 fs.rmSync('dist', {recursive: true, force: true}); fs.mkdirSync(target, {recursive: true});
-['CSXS', 'js', 'jsx', 'Proof Templates', 'index.html', 'package.json'].forEach((source) => fs.cpSync(source, path.join(target, source), {recursive: true}));
+['CSXS', 'data', 'js', 'jsx', 'Proof Templates', 'index.html', 'package.json'].forEach((source) => fs.cpSync(source, path.join(target, source), {recursive: true}));
 console.log(`Built ${target}`);

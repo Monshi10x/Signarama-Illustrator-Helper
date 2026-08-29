@@ -11782,7 +11782,23 @@ function _srh_letter_polylineLength(points) {
   return total;
 }
 
-function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, angleRad, strokePt, black, red) {
+function _srh_letter_svgFile(svgText) {
+  if(!svgText || String(svgText).indexOf('<svg') < 0) return null;
+  var file = null;
+  try {
+    file = new File(Folder.temp.fsName + '/srh-letter-led-' + new Date().getTime() + '-' + Math.floor(Math.random() * 100000) + '.svg');
+    file.encoding = 'UTF-8';
+    if(!file.open('w')) return null;
+    file.write(String(svgText));
+    file.close();
+    return file;
+  } catch(_eLsvg0) {
+    try {if(file && file.opened) file.close();} catch(_eLsvg1) { }
+    return null;
+  }
+}
+
+function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, angleRad, strokePt, black, red, svgFile) {
   var cosA = Math.cos(angleRad);
   var sinA = Math.sin(angleRad);
   var hx = widthPt * 0.5;
@@ -11804,14 +11820,29 @@ function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, 
   pathPts.push(pathPts[0]);
 
   var rect = null;
+  if(svgFile) {
+    try {
+      rect = ledLayer.groupItems.createFromFile(svgFile);
+      var sourceW = Number(rect.width || 0);
+      var sourceH = Number(rect.height || 0);
+      if(sourceW > 0 && sourceH > 0) rect.resize((widthPt / sourceW) * 100, (heightPt / sourceH) * 100, true, true, true, true, 100, Transformation.CENTER);
+      rect.position = [cx - (widthPt * 0.5), cy + (heightPt * 0.5)];
+      rect.rotate(angleRad * 180 / Math.PI, true, true, true, true, Transformation.CENTER);
+    } catch(_eLdmSvg) {
+      try {if(rect) rect.remove();} catch(_eLdmSvgRm) { }
+      rect = null;
+    }
+  }
   try {
-    rect = ledLayer.pathItems.add();
-    rect.setEntirePath(pathPts);
-    rect.closed = true;
-    rect.filled = false;
-    rect.stroked = true;
-    rect.strokeWidth = strokePt;
-    rect.strokeColor = black;
+    if(!rect) {
+      rect = ledLayer.pathItems.add();
+      rect.setEntirePath(pathPts);
+      rect.closed = true;
+      rect.filled = false;
+      rect.stroked = true;
+      rect.strokeWidth = strokePt;
+      rect.strokeColor = black;
+    }
   } catch(_eLdm0) { }
 
   try {
@@ -11992,6 +12023,9 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   try {opts = JSON.parse(String(jsonStr));} catch(_eLl0) {opts = {};}
 
   var ledWatt = Number(opts.ledWatt || 0);
+  var ledCode = String(opts.ledCode || '');
+  var ledVoltage = Number(opts.ledVoltage || 0);
+  var ledSvg = String(opts.ledSvg || '');
   var ledWidthMm = Number(opts.ledWidthMm || 0);
   var ledHeightMm = Number(opts.ledHeightMm || 0);
   var centerSpacingMm = Number(opts.centerSpacingMm || 0);
@@ -12018,6 +12052,7 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   black.red = 0; black.green = 0; black.blue = 0;
   var red = new RGBColor();
   red.red = 255; red.green = 0; red.blue = 0;
+  var ledSvgFile = _srh_letter_svgFile(ledSvg);
 
   var ledLayer = _srh_getOrCreateLayer(doc, 'Letter Layout LEDs');
   var lineLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Center Lines');
@@ -12091,7 +12126,7 @@ function signarama_helper_drawLetterLayout(jsonStr) {
           for(var dist = 0; dist <= pathLen + 0.0001; dist += centerSpacingPt) {
             var sample = _srh_letter_pointAndTangentAtDistance(poly, dist);
             if(!sample) continue;
-            _srh_letter_drawModule(ledRunGroup, lineRunGroup, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red);
+            _srh_letter_drawModule(ledRunGroup, lineRunGroup, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red, ledSvgFile);
             pathPlaced++;
             totalPlaced++;
             if(groupBounds === null) {
@@ -12126,6 +12161,7 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   try {tempLayer.locked = false;} catch(_eLlt8a) { }
   try {tempLayer.visible = true;} catch(_eLlt8b) { }
   try {tempLayer.remove();} catch(_eLlt8) { }
+  try {if(ledSvgFile && ledSvgFile.exists) ledSvgFile.remove();} catch(_eLltSvgRm) { }
   // Samples already use the offset paths' document coordinates. Moving the
   // completed groups to the viewport would detach the LEDs from the letters.
   _srh_bringLayerToFront(lineLayer);
@@ -12135,7 +12171,7 @@ function signarama_helper_drawLetterLayout(jsonStr) {
   var debugText = (_srh_letterDebugLines && _srh_letterDebugLines.length) ? ('\n' + _srh_letterDebugLines.join('\n')) : '';
   _srh_letterDebugLines = null;
   if(totalPlaced < 1) return 'Letter layout created no LED modules. Check offsets and selected path items.' + debugText;
-  return 'Letter layout drawn. Offset paths: ' + totalOffsetPaths + ', Path lines: ' + totalPaths + ', LEDs: ' + totalPlaced + ', Watt: ' + ledWatt + 'W, Max series: ' + maxLedsInSeries + '.' + debugText;
+  return 'Letter layout drawn. Offset paths: ' + totalOffsetPaths + ', Path lines: ' + totalPaths + ', LEDs: ' + totalPlaced + ', Module: ' + ledCode + ', ' + ledWatt + 'W ' + ledVoltage + 'V, Max series: ' + maxLedsInSeries + '.' + debugText;
 }
 
 function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts, lightboxId) {
