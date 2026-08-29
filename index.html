@@ -237,7 +237,19 @@
       outline:none; resize:vertical;
     }
     textarea:focus { border-color:#555; }
-    .script-list { display:grid; gap:8px; }
+    .script-list-container {
+      height:280px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:10px;
+      background:#101010;
+      border:1px solid #333;
+      border-radius:12px;
+      box-sizing:border-box;
+    }
+    .script-search { width:100%; box-sizing:border-box; flex:0 0 auto; }
+    .script-list { display:grid; gap:8px; overflow-y:auto; min-height:0; padding-right:4px; }
     .script-list-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px; align-items:center; }
     .script-list-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .btn2 {
@@ -1773,8 +1785,11 @@
           </div>
           <button id="btnRefreshScripts" class="btn2" type="button">Refresh</button>
         </div>
-        <div id="predefinedScriptsList" class="script-list">
-          <div class="small">Open this tab to load scripts.</div>
+        <div class="script-list-container">
+          <input id="predefinedScriptsSearch" class="script-search" type="search" placeholder="Search scripts..." aria-label="Search pre-defined scripts" autocomplete="off">
+          <div id="predefinedScriptsList" class="script-list">
+            <div class="small">Open this tab to load scripts.</div>
+          </div>
         </div>
       </div>
       <div class="card">

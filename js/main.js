@@ -2229,6 +2229,7 @@
 
   function wireScripts() {
     const list = $('predefinedScriptsList');
+    const search = $('predefinedScriptsSearch');
     const refresh = $('btnRefreshScripts');
     const runFile = $('btnRunScriptFile');
     const runCode = $('btnRunScriptCode');
@@ -2251,6 +2252,29 @@
       callJSX('signarama_helper_runScriptFile("' + jsxEscapeDoubleQuoted(path) + '")', function(result) {
         reportResult(result, title || 'Run script');
       });
+    }
+    function filterScripts() {
+      if(!list) return;
+      const query = String((search && search.value) || '').trim().toLowerCase();
+      const rows = list.querySelectorAll('.script-list-row');
+      let visible = 0;
+      Array.prototype.forEach.call(rows, function(row) {
+        const matches = !query || String(row.getAttribute('data-script-name') || '').toLowerCase().indexOf(query) !== -1;
+        row.style.display = matches ? '' : 'none';
+        if(matches) visible += 1;
+      });
+      let empty = list.querySelector('.script-filter-empty');
+      if(rows.length && !visible) {
+        if(!empty) {
+          empty = document.createElement('div');
+          empty.className = 'small script-filter-empty';
+          empty.textContent = 'No scripts match your search.';
+          list.appendChild(empty);
+        }
+        empty.style.display = '';
+      } else if(empty) {
+        empty.style.display = 'none';
+      }
     }
     function refreshList() {
       if(!list) return;
@@ -2282,6 +2306,7 @@
         scripts.forEach(function(script) {
           const row = document.createElement('div');
           row.className = 'script-list-row';
+          row.setAttribute('data-script-name', script.name || '');
           const name = document.createElement('div');
           name.className = 'script-list-name';
           name.textContent = script.name;
@@ -2295,11 +2320,13 @@
           row.appendChild(button);
           list.appendChild(row);
         });
+        filterScripts();
       });
     }
 
     scheduleScriptListRefresh = function() {setTimeout(refreshList, 0);};
     if(refresh) refresh.onclick = refreshList;
+    if(search) search.addEventListener('input', filterScripts);
     if(runFile) runFile.onclick = function() {
       callJSX('signarama_helper_chooseAndRunScriptFile()', function(result) {reportResult(result, 'Run script file');});
     };
