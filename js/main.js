@@ -3993,6 +3993,164 @@
     request.send();
   }
 
+  function wireLedLetterSpecs() {
+    const options = $('letterLedSpecOptions');
+    const details = $('letterLedSpecDropdown');
+    if(!options || !details) return;
+
+    function svgUrl(svg) {
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(String(svg || ''));
+    }
+    function setValue(id, value) {
+      const el = $(id);
+      if(el) el.value = value == null ? '' : value;
+    }
+    function choose(spec, button) {
+      setValue('letterLedCode', spec.code);
+      setValue('letterLedVoltage', spec.voltage);
+      setValue('letterLedWatt', spec.watt);
+      setValue('letterLedWidthMm', spec.widthMm);
+      setValue('letterLedHeightMm', spec.heightMm);
+      setValue('letterLedSvgOverride', spec.svg);
+      const name = $('letterLedSpecName');
+      const meta = $('letterLedSpecMeta');
+      const icon = $('letterLedSpecIcon');
+      const summary = $('letterLedSpecSummary');
+      if(name) name.textContent = spec.name || spec.code || 'LED module';
+      if(meta) meta.textContent = (spec.code || '') + ' · ' + spec.widthMm + ' × ' + spec.heightMm + ' mm · ' + spec.watt + ' W · ' + spec.voltage + ' V';
+      if(icon) icon.src = svgUrl(spec.svg);
+      if(summary) summary.textContent = spec.name || spec.code || 'LED module';
+      Array.prototype.forEach.call(options.querySelectorAll('.led-spec-option'), function(el) {el.setAttribute('aria-selected', el === button ? 'true' : 'false');});
+      details.open = false;
+    }
+    let bundledSpecs = [];
+    let localSpecs = [];
+    function localCatalogPath() {
+      const path = require('path');
+      return path.join(cs.getSystemPath(SystemPath.USER_DATA), 'Signarama Helper', 'led-specs.json');
+    }
+    function readLocalSpecs() {
+      try {
+        const fs = require('fs');
+        const parsed = JSON.parse(fs.readFileSync(localCatalogPath(), 'utf8'));
+        return parsed && Array.isArray(parsed.leds) ? parsed.leds : [];
+      } catch(_eLedLocalRead) {return [];}
+    }
+    function writeLocalSpecs(specs) {
+      const fs = require('fs');
+      const path = require('path');
+      const filePath = localCatalogPath();
+      fs.mkdirSync(path.dirname(filePath), {recursive: true});
+      fs.writeFileSync(filePath, JSON.stringify({version: 1, leds: specs}, null, 2), 'utf8');
+      return filePath;
+    }
+    function render() {
+      const specs = bundledSpecs.concat(localSpecs);
+      options.innerHTML = '';
+      specs.forEach(function(spec, index) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'led-spec-option';
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', 'false');
+        const icon = document.createElement('img');
+        icon.alt = '';
+        icon.src = svgUrl(spec.svg);
+        const copy = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = spec.name || spec.code || 'LED module';
+        const meta = document.createElement('div');
+        meta.className = 'small';
+        meta.textContent = (spec.code || '') + ' · ' + spec.widthMm + ' × ' + spec.heightMm + ' mm · ' + spec.watt + ' W · ' + spec.voltage + ' V';
+        copy.appendChild(title);
+        copy.appendChild(meta);
+        button.appendChild(icon);
+        button.appendChild(copy);
+        button.addEventListener('click', function() {choose(spec, button);});
+        options.appendChild(button);
+        if(index === 0) choose(spec, button);
+      });
+      if(!specs.length) options.innerHTML = '<div class="small">No LED specifications found.</div>';
+    }
+
+    function showAddSpecModal(svgPayload) {
+      const old = $('letterLedAddOverlay');
+      if(old) old.remove();
+      const bounds = svgPayload.boundsMm || {};
+      const overlay = document.createElement('div');
+      overlay.id = 'letterLedAddOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+      overlay.innerHTML = '<div class="card" style="width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;margin:0;">' +
+        '<div class="cardTitle">Add Selection to LED Library</div><div class="small" style="margin:5px 0 12px;">The selected Illustrator artwork was converted to SVG. Enter its LED specifications.</div>' +
+        '<div class="grid2">' +
+        '<label class="fld"><span>Name</span><input id="addLedName" value="Custom LED Module"></label>' +
+        '<label class="fld"><span>LED Code</span><input id="addLedCode" value="CUSTOM-LED"></label>' +
+        '<label class="fld"><span>Width (mm)</span><input id="addLedWidth" type="number" step="0.1" value="' + Number(bounds.width || 0).toFixed(2) + '"></label>' +
+        '<label class="fld"><span>Height (mm)</span><input id="addLedHeight" type="number" step="0.1" value="' + Number(bounds.height || 0).toFixed(2) + '"></label>' +
+        '<label class="fld"><span>LED Watt</span><input id="addLedWatt" type="number" step="0.01" value="1.5"></label>' +
+        '<label class="fld"><span>LED Voltage</span><input id="addLedVoltage" type="number" step="0.1" value="12"></label></div>' +
+        '<div class="row" style="margin-top:14px;justify-content:flex-end;"><button id="cancelAddLedSpec" class="btn2" type="button">Cancel</button><button id="saveAddLedSpec" class="btn2" type="button">Save LED</button></div></div>';
+      document.body.appendChild(overlay);
+      $('cancelAddLedSpec').onclick = function() {overlay.remove();};
+      $('saveAddLedSpec').onclick = function() {
+        const spec = {
+          name: String($('addLedName').value || '').trim(), code: String($('addLedCode').value || '').trim(),
+          widthMm: num($('addLedWidth').value), heightMm: num($('addLedHeight').value),
+          watt: num($('addLedWatt').value), voltage: num($('addLedVoltage').value), svg: String(svgPayload.svgText || '')
+        };
+        if(!spec.name || !spec.code || !(spec.widthMm > 0) || !(spec.heightMm > 0) || !(spec.watt > 0) || !(spec.voltage > 0)) {
+          showToast('Complete all LED specification fields with valid values.', {type: 'warn', title: 'LED Letters'}); return;
+        }
+        try {
+          localSpecs.push(spec);
+          const savedPath = writeLocalSpecs(localSpecs);
+          render();
+          const buttons = options.querySelectorAll('.led-spec-option');
+          choose(spec, buttons[buttons.length - 1]);
+          overlay.remove();
+          log('Saved custom LED specification to: ' + savedPath);
+        } catch(e) {showToast('Could not save the LED library: ' + (e.message || e), {type: 'error', title: 'LED Letters'});}
+      };
+    }
+
+    const addSelection = $('btnAddSelectionLedSpec');
+    if(addSelection) addSelection.onclick = function() {
+      loadJSX(function() {
+        callJSX('signarama_helper_nest_captureSelectionAsSvg()', function(result) {
+          let payload = null;
+          try {payload = JSON.parse(String(result || '{}'));} catch(_eLedCaptureJson) {payload = null;}
+          if(!payload || !payload.ok || !payload.svgText) {
+            showToast((payload && payload.error) || 'Could not convert the current selection to SVG.', {type: 'error', title: 'LED Letters'}); return;
+          }
+          showAddSpecModal(payload);
+        });
+      });
+    };
+
+    document.addEventListener('click', function(event) {
+      if(details.open && !details.contains(event.target)) details.open = false;
+    });
+
+    const request = new XMLHttpRequest();
+    request.open('GET', 'data/led-specs.json', true);
+    request.onreadystatechange = function() {
+      if(request.readyState !== 4) return;
+      if(request.status === 0 || (request.status >= 200 && request.status < 300)) {
+        try {
+          const parsed = JSON.parse(request.responseText);
+          bundledSpecs = parsed && Array.isArray(parsed.leds) ? parsed.leds : [];
+          localSpecs = readLocalSpecs();
+          render();
+          return;
+        } catch(_eLedSpecJson) { }
+      }
+      localSpecs = readLocalSpecs();
+      render();
+      if(!localSpecs.length) options.innerHTML = '<div class="small">Could not load the bundled or local LED library.</div>';
+    };
+    request.send();
+  }
+
   function wireColours() {
     const refreshBtn = $('btnRefreshColours');
     if(refreshBtn) refreshBtn.onclick = () => refreshColours({showToastOnComplete: true});
