@@ -2204,6 +2204,7 @@
     wireLightbox();
     wireLedLayout();
     wireLedDepiction();
+    wireLedLetterSpecs();
     wireLetterLayout();
     wireColours();
     wireNest();
@@ -2229,6 +2230,7 @@
 
   function wireScripts() {
     const list = $('predefinedScriptsList');
+    const search = $('predefinedScriptsSearch');
     const refresh = $('btnRefreshScripts');
     const runFile = $('btnRunScriptFile');
     const runCode = $('btnRunScriptCode');
@@ -2251,6 +2253,29 @@
       callJSX('signarama_helper_runScriptFile("' + jsxEscapeDoubleQuoted(path) + '")', function(result) {
         reportResult(result, title || 'Run script');
       });
+    }
+    function filterScripts() {
+      if(!list) return;
+      const query = String((search && search.value) || '').trim().toLowerCase();
+      const rows = list.querySelectorAll('.script-list-row');
+      let visible = 0;
+      Array.prototype.forEach.call(rows, function(row) {
+        const matches = !query || String(row.getAttribute('data-script-name') || '').toLowerCase().indexOf(query) !== -1;
+        row.style.display = matches ? '' : 'none';
+        if(matches) visible += 1;
+      });
+      let empty = list.querySelector('.script-filter-empty');
+      if(rows.length && !visible) {
+        if(!empty) {
+          empty = document.createElement('div');
+          empty.className = 'small script-filter-empty';
+          empty.textContent = 'No scripts match your search.';
+          list.appendChild(empty);
+        }
+        empty.style.display = '';
+      } else if(empty) {
+        empty.style.display = 'none';
+      }
     }
     function refreshList() {
       if(!list) return;
@@ -2282,6 +2307,7 @@
         scripts.forEach(function(script) {
           const row = document.createElement('div');
           row.className = 'script-list-row';
+          row.setAttribute('data-script-name', script.name || '');
           const name = document.createElement('div');
           name.className = 'script-list-name';
           name.textContent = script.name;
@@ -2295,11 +2321,13 @@
           row.appendChild(button);
           list.appendChild(row);
         });
+        filterScripts();
       });
     }
 
     scheduleScriptListRefresh = function() {setTimeout(refreshList, 0);};
     if(refresh) refresh.onclick = refreshList;
+    if(search) search.addEventListener('input', filterScripts);
     if(runFile) runFile.onclick = function() {
       callJSX('signarama_helper_chooseAndRunScriptFile()', function(result) {reportResult(result, 'Run script file');});
     };
@@ -3743,6 +3771,9 @@
     if(!btn) return;
     btn.onclick = () => {
       const payload = {
+        ledCode: String(($('letterLedCode') && $('letterLedCode').value) || ''),
+        ledVoltage: num(($('letterLedVoltage') && $('letterLedVoltage').value) || 0),
+        ledSvg: String(($('letterLedSvgOverride') && $('letterLedSvgOverride').value) || ''),
         ledWatt: num(($('letterLedWatt') && $('letterLedWatt').value) || 0),
         ledWidthMm: num(($('letterLedWidthMm') && $('letterLedWidthMm').value) || 0),
         ledHeightMm: num(($('letterLedHeightMm') && $('letterLedHeightMm').value) || 0),
@@ -3756,6 +3787,77 @@
       const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       runButtonJsxOperation('signarama_helper_drawLetterLayout("' + json + '")', {logFn: log, toastTitle: 'Create letter layout'});
     };
+  }
+
+  function wireLedLetterSpecs() {
+    const options = $('letterLedSpecOptions');
+    const details = $('letterLedSpecDropdown');
+    if(!options || !details) return;
+
+    function svgUrl(svg) {
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(String(svg || ''));
+    }
+    function setValue(id, value) {
+      const el = $(id);
+      if(el) el.value = value == null ? '' : value;
+    }
+    function choose(spec, button) {
+      setValue('letterLedCode', spec.code);
+      setValue('letterLedVoltage', spec.voltage);
+      setValue('letterLedWatt', spec.watt);
+      setValue('letterLedWidthMm', spec.widthMm);
+      setValue('letterLedHeightMm', spec.heightMm);
+      setValue('letterLedSvgOverride', spec.svg);
+      const name = $('letterLedSpecName');
+      const meta = $('letterLedSpecMeta');
+      const icon = $('letterLedSpecIcon');
+      const summary = $('letterLedSpecSummary');
+      if(name) name.textContent = spec.name || spec.code || 'LED module';
+      if(meta) meta.textContent = (spec.code || '') + ' · ' + spec.widthMm + ' × ' + spec.heightMm + ' mm · ' + spec.watt + ' W · ' + spec.voltage + ' V';
+      if(icon) icon.src = svgUrl(spec.svg);
+      if(summary) summary.textContent = spec.name || spec.code || 'LED module';
+      Array.prototype.forEach.call(options.querySelectorAll('.led-spec-option'), function(el) {el.setAttribute('aria-selected', el === button ? 'true' : 'false');});
+      details.open = false;
+    }
+    function render(data) {
+      const specs = data && Array.isArray(data.leds) ? data.leds : [];
+      options.innerHTML = '';
+      specs.forEach(function(spec, index) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'led-spec-option';
+        button.setAttribute('role', 'option');
+        button.setAttribute('aria-selected', 'false');
+        const icon = document.createElement('img');
+        icon.alt = '';
+        icon.src = svgUrl(spec.svg);
+        const copy = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = spec.name || spec.code || 'LED module';
+        const meta = document.createElement('div');
+        meta.className = 'small';
+        meta.textContent = (spec.code || '') + ' · ' + spec.widthMm + ' × ' + spec.heightMm + ' mm · ' + spec.watt + ' W · ' + spec.voltage + ' V';
+        copy.appendChild(title);
+        copy.appendChild(meta);
+        button.appendChild(icon);
+        button.appendChild(copy);
+        button.addEventListener('click', function() {choose(spec, button);});
+        options.appendChild(button);
+        if(index === 0) choose(spec, button);
+      });
+      if(!specs.length) options.innerHTML = '<div class="small">No LED specifications found.</div>';
+    }
+
+    const request = new XMLHttpRequest();
+    request.open('GET', 'data/led-specs.json', true);
+    request.onreadystatechange = function() {
+      if(request.readyState !== 4) return;
+      if(request.status === 0 || (request.status >= 200 && request.status < 300)) {
+        try {render(JSON.parse(request.responseText)); return;} catch(_eLedSpecJson) { }
+      }
+      options.innerHTML = '<div class="small">Could not load data/led-specs.json.</div>';
+    };
+    request.send();
   }
 
   function wireColours() {

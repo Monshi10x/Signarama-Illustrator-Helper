@@ -125,14 +125,30 @@ test('Scripts tab supports bundled files, selected files, and pasted code', () =
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'jsx', 'scripts', 'Select All Artwork.jsx')), true);
 });
 
-test('LED and letter layouts use viewport center and lightbox measures exclude strokes', () => {
+test('LED layouts use viewport center, letter LEDs stay on their offset paths, and lightbox measures exclude strokes', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
   const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
+  const specs = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'led-specs.json'), 'utf8'));
+  const letterLayout = host.slice(host.indexOf('function signarama_helper_drawLetterLayout'), host.indexOf('function _srh_addLightboxMeasures'));
   assert.match(host, /function _srh_getViewportCenter/);
   assert.match(host, /var viewCenter2 = _getViewCenter\(doc\)/);
-  assert.match(host, /var targetCenter = _srh_getViewportCenter\(doc, activeRect\)/);
-  assert.match(host, /runGroups\[tg\]\.translate\(dx,dy\)/);
+  assert.doesNotMatch(letterLayout, /\.translate\(/);
+  assert.match(letterLayout, /Samples already use the offset paths' document coordinates/);
   assert.match(host, /Lightbox dimensions describe the path geometry, never the stroke extents/);
   assert.match(host, /try \{b = item\.geometricBounds;\}/);
+  assert.match(host, /working\.applyEffect\(fx1\)/);
+  assert.match(host, /_srh_letterExpandItems\(doc, working\)/);
+  assert.doesNotMatch(host, /wrapper\.applyEffect\(fx1\)/);
+  assert.match(html, /data-tab="tab-led-letters"[^>]*>LED Letters</);
+  assert.match(html, /id="letterLedSpecOptions"/);
+  assert.match(html, /id="letterLedSvgOverride"/);
+  assert.doesNotMatch(html.slice(html.indexOf('id="tab-lightbox"'), html.indexOf('id="tab-led-letters"')), /btnCreateLetterLayout/);
+  assert.match(main, /request\.open\('GET', 'data\/led-specs\.json'/);
+  assert.match(main, /ledSvg: String/);
+  assert.match(host, /groupItems\.createFromFile\(svgFile\)/);
+  assert.ok(specs.leds.length > 0);
+  for(const spec of specs.leds) for(const key of ['code', 'widthMm', 'heightMm', 'watt', 'voltage', 'svg']) assert.ok(spec[key] !== undefined, key);
 });
 
 test('release selection respects stable and beta channels', () => {
