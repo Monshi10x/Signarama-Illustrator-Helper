@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "leds": [
+    {
+      "name": "Standard 1.5W Module",
+      "code": "LED-1.5W-12V",
+      "widthMm": 66,
+      "heightMm": 13,
+      "watt": 1.5,
+      "voltage": 12,
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 66 13\"><rect x=\"0.5\" y=\"0.5\" width=\"65\" height=\"12\" rx=\"3\" fill=\"white\" stroke=\"black\"/><circle cx=\"12\" cy=\"6.5\" r=\"3\" fill=\"#f2f2f2\" stroke=\"#555\"/><circle cx=\"54\" cy=\"6.5\" r=\"3\" fill=\"#f2f2f2\" stroke=\"#555\"/><path d=\"M22 6.5h22\" stroke=\"#e21b2d\"/></svg>"
+    },
+    {
+      "name": "Compact 0.72W Module",
+      "code": "LED-0.72W-12V",
+      "widthMm": 45,
+      "heightMm": 12,
+      "watt": 0.72,
+      "voltage": 12,
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 45 12\"><rect x=\"0.5\" y=\"0.5\" width=\"44\" height=\"11\" rx=\"5.5\" fill=\"white\" stroke=\"black\"/><circle cx=\"12\" cy=\"6\" r=\"3\" fill=\"#eee\" stroke=\"#555\"/><circle cx=\"33\" cy=\"6\" r=\"3\" fill=\"#eee\" stroke=\"#555\"/></svg>"
+    }
+  ]
+}
