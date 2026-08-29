@@ -133,6 +133,9 @@ test('LED and letter layouts use viewport center and lightbox measures exclude s
   assert.match(host, /runGroups\[tg\]\.translate\(dx,dy\)/);
   assert.match(host, /Lightbox dimensions describe the path geometry, never the stroke extents/);
   assert.match(host, /try \{b = item\.geometricBounds;\}/);
+  assert.match(host, /working\.applyEffect\(fx1\)/);
+  assert.match(host, /_srh_letterExpandItems\(doc, working\)/);
+  assert.doesNotMatch(host, /wrapper\.applyEffect\(fx1\)/);
 });
 
 test('release selection respects stable and beta channels', () => {

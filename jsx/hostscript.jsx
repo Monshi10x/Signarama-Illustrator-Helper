@@ -11888,7 +11888,6 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
   if(!sourceItem || !tempLayer || !(offsetPt > 0)) return [];
   _srh_letterDbg('offset source | type=' + String(sourceItem.typename || '') + ' | offsetPt=' + offsetPt);
   var working = null;
-  var wrapper = null;
   var doc = null;
   try {doc = app.activeDocument;} catch(_eLosDoc) {doc = null;}
   try {
@@ -11898,34 +11897,26 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
     _srh_letterDbg('offset duplicate FAILED | ' + String(_eLos0));
     return [];
   }
-  try {
-    wrapper = tempLayer.groupItems.add();
-    working.move(wrapper, ElementPlacement.PLACEATEND);
-    _srh_letterDbg('offset wrapper OK');
-  } catch(_eLosWrap) {
-    _srh_letterDbg('offset wrapper FAILED | ' + String(_eLosWrap));
-    try {if(working) working.remove();} catch(_eLosWrapRm) { }
-    return [];
-  }
   var result = {applied:false, changed:false};
   var expandedItems = [];
   try {
     var beforeBounds = null;
-    try {beforeBounds = wrapper.visibleBounds;} catch(_eLosB0) {beforeBounds = null;}
+    try {beforeBounds = working.visibleBounds;} catch(_eLosB0) {beforeBounds = null;}
     if(!beforeBounds || beforeBounds.length !== 4) {
-      try {beforeBounds = wrapper.geometricBounds;} catch(_eLosB1) {beforeBounds = null;}
+      try {beforeBounds = working.geometricBounds;} catch(_eLosB1) {beforeBounds = null;}
     }
     var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(-Math.abs(offsetPt)) + ' I jntp 0 R mlim 180"/></LiveEffect>';
     var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(-Math.abs(offsetPt)) + ' I jntp 0"/></LiveEffect>';
     var applied = false;
-    try {wrapper.applyEffect(fx1); applied = true;} catch(_eLosFx0) {
-      try {wrapper.applyEffect(fx2); applied = true;} catch(_eLosFx1) { }
+    try {working.applyEffect(fx1); applied = true;} catch(_eLosFx0) {
+      try {working.applyEffect(fx2); applied = true;} catch(_eLosFx1) { }
     }
     if(applied && doc) {
-      expandedItems = _srh_letterExpandItems(doc, wrapper);
+      try {app.redraw();} catch(_eLosRedraw) { }
+      expandedItems = _srh_letterExpandItems(doc, working);
       _srh_letterDbg('offset expanded items=' + expandedItems.length);
     }
-    var afterTarget = (expandedItems && expandedItems.length) ? expandedItems[0] : wrapper;
+    var afterTarget = (expandedItems && expandedItems.length) ? expandedItems[0] : working;
     var afterBounds = null;
     try {afterBounds = afterTarget.visibleBounds;} catch(_eLosA0) {afterBounds = null;}
     if(!afterBounds || afterBounds.length !== 4) {
@@ -11950,7 +11941,7 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
   try {changed = !!(result && result.changed);} catch(_eLos4) {changed = false;}
   _srh_letterDbg('offset result | changed=' + (changed ? 'yes' : 'no'));
   if(!changed) {
-    try {if(wrapper) wrapper.remove();} catch(_eLos5) { }
+    try {if(working) working.remove();} catch(_eLos5) { }
     return [];
   }
   var roots = [];
@@ -11964,16 +11955,16 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
       else if(exType === 'PathItem' || exType === 'CompoundPathItem') roots.push(ex);
     }
   } else {
-    _srh_letter_collectPlacementRoots(wrapper, roots);
+    _srh_letter_collectPlacementRoots(working, roots);
   }
   if(!roots.length) {
     var workingType = '';
-    try {workingType = String(wrapper.typename || '');} catch(_eLosType) {workingType = '';}
-    if(workingType === 'PathItem' || workingType === 'CompoundPathItem') roots.push(wrapper);
+    try {workingType = String(working.typename || '');} catch(_eLosType) {workingType = '';}
+    if(workingType === 'PathItem' || workingType === 'CompoundPathItem') roots.push(working);
   }
   _srh_letterDbg('offset roots=' + roots.length);
   if(!roots.length) {
-    try {if(wrapper) wrapper.remove();} catch(_eLos6) { }
+    try {if(working) working.remove();} catch(_eLos6) { }
     return [];
   }
   var out = [];
@@ -11987,7 +11978,7 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
       _srh_letterDbg('offset root duplicate FAILED | ' + String(_eLos7));
     }
   }
-  try {if(wrapper) wrapper.remove();} catch(_eLos8) { }
+  try {if(working) working.remove();} catch(_eLos8) { }
   return out;
 }
 
