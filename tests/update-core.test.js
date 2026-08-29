@@ -143,9 +143,14 @@ test('LED layouts use viewport center, letter LEDs stay on their offset paths, a
   assert.match(html, /data-tab="tab-led-letters"[^>]*>LED Letters</);
   assert.match(html, /id="letterLedSpecOptions"/);
   assert.match(html, /id="letterLedSvgOverride"/);
+  assert.match(html, /id="btnAddSelectionLedSpec"/);
   assert.doesNotMatch(html.slice(html.indexOf('id="tab-lightbox"'), html.indexOf('id="tab-led-letters"')), /btnCreateLetterLayout/);
   assert.match(main, /request\.open\('GET', 'data\/led-specs\.json'/);
   assert.match(main, /ledSvg: String/);
+  assert.match(main, /signarama_helper_nest_captureSelectionAsSvg\(\)/);
+  assert.match(main, /Signarama Helper', 'led-specs\.json'/);
+  assert.match(main, /fs\.writeFileSync\(filePath, JSON\.stringify/);
+  assert.match(main, /details\.open && !details\.contains\(event\.target\)/);
   assert.match(host, /groupItems\.createFromFile\(svgFile\)/);
   assert.ok(specs.leds.length > 0);
   for(const spec of specs.leds) for(const key of ['code', 'widthMm', 'heightMm', 'watt', 'voltage', 'svg']) assert.ok(spec[key] !== undefined, key);
