@@ -150,6 +150,9 @@ test('LED centreline workflow retires inset layout, exposes stable controls, and
   assert.match(host, /groupItems\.createFromFile\(svgFile\)/);
   for(const id of ['ledCreateLayout','ledCreateGuides','ledRepopulateGuides','ledClearGenerated','ledCancelLayout','ledLayoutMode','ledRasterPrecisionMm','ledMaxCentreSpacingMm','ledMaxWireReachMm','ledDrawGuides','ledDrawModules','ledDrawWiring','ledDrawStats','ledReplacePrevious']) assert.match(html, new RegExp('id="'+id+'"'));
   assert.match(main, /function wireLedCentreline\(/);
+  assert.match(main, /\[SRH\]\[LED\]/);
+  assert.match(main, /Create Layout clicked/);
+  assert.match(main, /engine generate complete/);
   assert.match(main, /queuedHost\('signarama_helper_led_drawLayout/);
   assert.match(host, /function signarama_helper_led_drawLayout\(/);
   assert.match(host, /function signarama_helper_led_extractSelectionGeometry\(/);

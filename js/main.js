@@ -3769,10 +3769,27 @@
   function wireLedCentreline() {
     const create = $('ledCreateLayout'), guidesOnly = $('ledCreateGuides'), clear = $('ledClearGenerated'), repopulate = $('ledRepopulateGuides'), cancel = $('ledCancelLayout');
     const status = $('ledLayoutStatus'), progress = $('ledProgressBar');
-    if(!create || !window.LedCentreline) return;
+    function ledDebug(message, extra) {
+      let line = '[SRH][LED] ' + String(message || '');
+      if(extra !== undefined) {
+        try {line += ' | ' + (typeof extra === 'string' ? extra : JSON.stringify(extra));}
+        catch(_eLedDebug) {line += ' | [unserializable detail]';}
+      }
+      log(line);
+    }
+    ledDebug('wire start', {button: !!create, engine: !!window.LedCentreline});
+    if(!create) {ledDebug('wire failed: Create Layout button not found'); return;}
+    if(!window.LedCentreline) {
+      ledDebug('wire failed: LedCentreline browser global is unavailable; check js/led-centreline.js loading');
+      if(status) status.textContent = 'LED engine failed to load. See Testing console.';
+      return;
+    }
     let cancelled = false;
-    function setProgress(text, fraction) {if(status) status.textContent=text;if(progress) progress.style.width=Math.max(0,Math.min(100,(fraction||0)*100))+'%';}
-    function queuedHost(functionCall, cb) {loadJSX(function() {callJSX(functionCall, cb);});}
+    function setProgress(text, fraction) {if(status) status.textContent=text;if(progress) progress.style.width=Math.max(0,Math.min(100,(fraction||0)*100))+'%';ledDebug('status', {text:String(text||''),progress:Math.round((fraction||0)*100)});}
+    function queuedHost(functionCall, cb) {
+      ledDebug('queue host call', String(functionCall || '').split('(')[0]);
+      loadJSX(function() {callJSX(functionCall, function(result) {ledDebug('host response', String(result || '').slice(0, 500));if(cb) cb(result);});});
+    }
     function contoursFromSvg(svgText, boundsMm) {
       const root = SvgParser.load(String(svgText || ''));
       SvgParser.config({tolerance: Math.max(0.05,num(($('ledCurveToleranceMm')&&$('ledCurveToleranceMm').value)||0.5))});
@@ -3784,7 +3801,9 @@
       let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
       raw.forEach(function(c){c.points.forEach(function(p){if(p.x<minX)minX=p.x;if(p.x>maxX)maxX=p.x;if(p.y<minY)minY=p.y;if(p.y>maxY)maxY=p.y;});});
       const sx=Number(boundsMm.width)/(maxX-minX),sy=Number(boundsMm.height)/(maxY-minY);
-      return raw.map(function(c){return{points:c.points.map(function(p){return{x:(p.x-minX)*sx,y:(maxY-p.y)*sy};})};});
+      const contours = raw.map(function(c){return{points:c.points.map(function(p){return{x:(p.x-minX)*sx,y:(maxY-p.y)*sy};})};});
+      ledDebug('SVG contours prepared', {contours:contours.length,widthMm:Number(boundsMm.width),heightMm:Number(boundsMm.height)});
+      return contours;
     }
     function settings(guidesOnlyFlag) {return{cellMm:num($('ledRasterPrecisionMm').value)||1,maxCells:250000,widthMm:num($('letterLedWidthMm').value),heightMm:num($('letterLedHeightMm').value),clearanceMm:num($('ledEdgeClearanceMm').value),pruneMm:num($('ledBranchPruneMm').value),maxSpacingMm:num($('ledMaxCentreSpacingMm').value),endpointInsetMm:Math.max(num($('letterLedWidthMm').value),num($('letterLedHeightMm').value))/2,guidesOnly:!!guidesOnlyFlag};}
     function toDocument(result,payload) {
@@ -3797,12 +3816,14 @@
       mapped.placements.forEach(function(run){modules+=run.length;const s=window.LedCentreline.splitSeries(run,parseInt($('letterMaxLedsInSeries').value,10)||50,num($('ledMaxWireReachMm').value));series+=s.series.length;unreachable+=s.unreachable.length;for(let i=1;i<run.length;i++){const dx=run[i].x-run[i-1].x,dy=run[i].y-run[i-1].y,d=Math.sqrt(dx*dx+dy*dy);min=Math.min(min,d);max=Math.max(max,d);sum+=d;spacingCount++;}});
       const anchor=mapped.guides.length&&mapped.guides[0].length?mapped.guides[0][0]:{x:0,y:0};
       const payload={layoutId:'led-'+Date.now(),sourceKey:'bounds-'+anchor.x.toFixed(3)+'-'+anchor.y.toFixed(3),profileCode:String($('letterLedCode').value||'generic'),settingsVersion:1,guides:mapped.guides,placements:opts.guidesOnly?mapped.placements.map(function(){return[];}):mapped.placements,moduleWidthMm:opts.widthMm,moduleHeightMm:opts.heightMm,moduleSvg:String($('letterLedSvgOverride').value||''),drawGuides:!!$('ledDrawGuides').checked,drawModules:!!$('ledDrawModules').checked,drawWiring:!!$('ledDrawWiring').checked,drawStats:!!$('ledDrawStats').checked,replacePrevious:!!$('ledReplacePrevious').checked,preserveGuides:!!preserveGuides,statsX:anchor.x,statsY:anchor.y,summary:'LED layout | '+modules+' modules | '+series+' series | spacing '+(spacingCount?min.toFixed(1)+'–'+max.toFixed(1)+' mm':'n/a')+' | estimated '+(modules*num($('letterLedWatt').value)).toFixed(2)+' W | unreachable gaps '+unreachable};
+      ledDebug('output prepared', {guides:mapped.guides.length,modules:modules,series:series,unreachable:unreachable,preserveGuides:!!preserveGuides});
       const encoded=JSON.stringify(payload).replace(/\\/g,'\\\\').replace(/"/g,'\\"');queuedHost('signarama_helper_led_drawLayout("'+encoded+'")',function(res){setProgress(String(res||payload.summary),1);if(cancel)cancel.disabled=true;});
     }
-    function run(guidesOnlyFlag) {cancelled=false;if(cancel)cancel.disabled=false;setProgress('Extracting selected filled geometry…',.05);queuedHost('signarama_helper_led_extractSelectionGeometry()',function(res){let p;try{p=JSON.parse(String(res||'{}'));}catch(e){p=null;}if(!p||!p.ok){setProgress((p&&p.error)||'Geometry extraction failed.',0);return;}setProgress('Computing bounded medial axis…',.25);setTimeout(function(){if(cancelled){setProgress('Cancelled before geometry computation.',0);return;}try{const contours=contoursFromSvg(p.svgText,p.boundsMm),opts=settings(guidesOnlyFlag),result=window.LedCentreline.generate(contours,opts),mapped=toDocument(result,p);localStorage.setItem('srhLedLastContours',JSON.stringify({contours:contours,payload:p,options:opts}));setProgress('Drawing editable guides and modules…',.8);output(mapped,opts,false);}catch(e){setProgress('LED layout failed: '+(e.message||e),0);}},0);});}
-    create.onclick=function(){run(false);};guidesOnly.onclick=function(){run(true);};if(cancel)cancel.onclick=function(){cancelled=true;cancel.disabled=true;setProgress('Cancellation requested; stopping between phases…',0);};
+    function run(guidesOnlyFlag) {cancelled=false;if(cancel)cancel.disabled=false;ledDebug('run requested',{guidesOnly:!!guidesOnlyFlag});setProgress('Extracting selected filled geometry…',.05);queuedHost('signarama_helper_led_extractSelectionGeometry()',function(res){let p;try{p=JSON.parse(String(res||'{}'));}catch(e){ledDebug('geometry response JSON parse failed',e&&e.message?e.message:e);p=null;}if(!p||!p.ok){ledDebug('geometry extraction failed',p||String(res||''));setProgress((p&&p.error)||'Geometry extraction failed.',0);return;}ledDebug('geometry extracted',{items:Number(p.itemCount||0),svgChars:String(p.svgText||'').length,boundsMm:p.boundsMm,scaleFactor:p.scaleFactor});setProgress('Computing bounded medial axis…',.25);setTimeout(function(){if(cancelled){setProgress('Cancelled before geometry computation.',0);return;}try{const contours=contoursFromSvg(p.svgText,p.boundsMm),opts=settings(guidesOnlyFlag);ledDebug('engine generate start',opts);const started=Date.now(),result=window.LedCentreline.generate(contours,opts),mapped=toDocument(result,p);ledDebug('engine generate complete',{elapsedMs:Date.now()-started,guides:result.guides.length,cells:result.grid&&result.grid.cells,cellMm:result.grid&&result.grid.cellMm,modules:result.placements.reduce(function(n,r){return n+r.length;},0)});localStorage.setItem('srhLedLastContours',JSON.stringify({contours:contours,payload:p,options:opts}));setProgress('Drawing editable guides and modules…',.8);output(mapped,opts,false);}catch(e){ledDebug('layout exception',e&&e.stack?e.stack:(e&&e.message?e.message:e));setProgress('LED layout failed: '+(e.message||e),0);}},0);});}
+    create.onclick=function(){ledDebug('Create Layout clicked');run(false);};guidesOnly.onclick=function(){ledDebug('Create Guide Paths Only clicked');run(true);};if(cancel)cancel.onclick=function(){ledDebug('Cancel clicked');cancelled=true;cancel.disabled=true;setProgress('Cancellation requested; stopping between phases…',0);};
     if(clear)clear.onclick=function(){queuedHost('signarama_helper_led_clearGenerated()',function(res){setProgress(String(res||'Cleared.'),0);});};
     if(repopulate)repopulate.onclick=function(){setProgress('Reading edited LED guides…',.1);queuedHost('signarama_helper_led_captureGuides()',function(res){let p;try{p=JSON.parse(String(res||'{}'));}catch(e){p=null;}if(!p||!p.ok){setProgress((p&&p.error)||'Could not read guides.',0);return;}const saved=JSON.parse(localStorage.getItem('srhLedLastContours')||'null');if(!saved){setProgress('Original fill geometry is unavailable; create a layout before repopulating.',0);return;}const b=saved.payload.sourceBounds,w=Number(saved.payload.boundsMm.width),h=Number(saved.payload.boundsMm.height),local=p.guides.map(function(g){return g.map(function(q){return{x:(q.x-b.left)/(b.right-b.left)*w,y:(q.y-b.bottom)/(b.top-b.bottom)*h};});}),placements=local.map(function(g){return window.LedCentreline.placeModules(g,saved.contours,settings(false));}),mapped={guides:p.guides,placements:placements.map(function(run){return run.map(function(q){return{x:b.left+q.x/w*(b.right-b.left),y:b.bottom+q.y/h*(b.top-b.bottom),angle:q.angle,sequence:q.sequence};});})};output(mapped,settings(false),true);});};
+    ledDebug('wire complete: LED actions ready');
   }
 
   function wireLedLetterSpecs() {
@@ -3967,164 +3988,6 @@
       const index = localSpecs.indexOf(currentSpec);
       if(index < 0) {showToast('Bundled generic examples cannot be deleted; duplicate one to create a local profile.', {type:'warn',title:'LEDs'});return;}
       localSpecs.splice(index,1);writeLocalSpecs(localSpecs);render();
-    };
-
-    document.addEventListener('click', function(event) {
-      if(details.open && !details.contains(event.target)) details.open = false;
-    });
-
-    const request = new XMLHttpRequest();
-    request.open('GET', 'data/led-specs.json', true);
-    request.onreadystatechange = function() {
-      if(request.readyState !== 4) return;
-      if(request.status === 0 || (request.status >= 200 && request.status < 300)) {
-        try {
-          const parsed = JSON.parse(request.responseText);
-          bundledSpecs = parsed && Array.isArray(parsed.leds) ? parsed.leds : [];
-          localSpecs = readLocalSpecs();
-          render();
-          return;
-        } catch(_eLedSpecJson) { }
-      }
-      localSpecs = readLocalSpecs();
-      render();
-      if(!localSpecs.length) options.innerHTML = '<div class="small">Could not load the bundled or local LED library.</div>';
-    };
-    request.send();
-  }
-
-  function wireLedLetterSpecs() {
-    const options = $('letterLedSpecOptions');
-    const details = $('letterLedSpecDropdown');
-    if(!options || !details) return;
-
-    function svgUrl(svg) {
-      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(String(svg || ''));
-    }
-    function setValue(id, value) {
-      const el = $(id);
-      if(el) el.value = value == null ? '' : value;
-    }
-    function choose(spec, button) {
-      setValue('letterLedCode', spec.code);
-      setValue('letterLedVoltage', spec.voltage);
-      setValue('letterLedWatt', spec.watt);
-      setValue('letterLedWidthMm', spec.widthMm);
-      setValue('letterLedHeightMm', spec.heightMm);
-      setValue('letterLedSvgOverride', spec.svg);
-      const name = $('letterLedSpecName');
-      const meta = $('letterLedSpecMeta');
-      const icon = $('letterLedSpecIcon');
-      const summary = $('letterLedSpecSummary');
-      if(name) name.textContent = spec.name || spec.code || 'LED module';
-      if(meta) meta.textContent = (spec.code || '') + ' · ' + spec.widthMm + ' × ' + spec.heightMm + ' mm · ' + spec.watt + ' W · ' + spec.voltage + ' V';
-      if(icon) icon.src = svgUrl(spec.svg);
-      if(summary) summary.textContent = spec.name || spec.code || 'LED module';
-      Array.prototype.forEach.call(options.querySelectorAll('.led-spec-option'), function(el) {el.setAttribute('aria-selected', el === button ? 'true' : 'false');});
-      details.open = false;
-    }
-    let bundledSpecs = [];
-    let localSpecs = [];
-    function localCatalogPath() {
-      const path = require('path');
-      return path.join(cs.getSystemPath(SystemPath.USER_DATA), 'Signarama Helper', 'led-specs.json');
-    }
-    function readLocalSpecs() {
-      try {
-        const fs = require('fs');
-        const parsed = JSON.parse(fs.readFileSync(localCatalogPath(), 'utf8'));
-        return parsed && Array.isArray(parsed.leds) ? parsed.leds : [];
-      } catch(_eLedLocalRead) {return [];}
-    }
-    function writeLocalSpecs(specs) {
-      const fs = require('fs');
-      const path = require('path');
-      const filePath = localCatalogPath();
-      fs.mkdirSync(path.dirname(filePath), {recursive: true});
-      fs.writeFileSync(filePath, JSON.stringify({version: 1, leds: specs}, null, 2), 'utf8');
-      return filePath;
-    }
-    function render() {
-      const specs = bundledSpecs.concat(localSpecs);
-      options.innerHTML = '';
-      specs.forEach(function(spec, index) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'led-spec-option';
-        button.setAttribute('role', 'option');
-        button.setAttribute('aria-selected', 'false');
-        const icon = document.createElement('img');
-        icon.alt = '';
-        icon.src = svgUrl(spec.svg);
-        const copy = document.createElement('div');
-        const title = document.createElement('strong');
-        title.textContent = spec.name || spec.code || 'LED module';
-        const meta = document.createElement('div');
-        meta.className = 'small';
-        meta.textContent = (spec.code || '') + ' · ' + spec.widthMm + ' × ' + spec.heightMm + ' mm · ' + spec.watt + ' W · ' + spec.voltage + ' V';
-        copy.appendChild(title);
-        copy.appendChild(meta);
-        button.appendChild(icon);
-        button.appendChild(copy);
-        button.addEventListener('click', function() {choose(spec, button);});
-        options.appendChild(button);
-        if(index === 0) choose(spec, button);
-      });
-      if(!specs.length) options.innerHTML = '<div class="small">No LED specifications found.</div>';
-    }
-
-    function showAddSpecModal(svgPayload) {
-      const old = $('letterLedAddOverlay');
-      if(old) old.remove();
-      const bounds = svgPayload.boundsMm || {};
-      const overlay = document.createElement('div');
-      overlay.id = 'letterLedAddOverlay';
-      overlay.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
-      overlay.innerHTML = '<div class="card" style="width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;margin:0;">' +
-        '<div class="cardTitle">Add Selection to LED Library</div><div class="small" style="margin:5px 0 12px;">The selected Illustrator artwork was converted to SVG. Enter its LED specifications.</div>' +
-        '<div class="grid2">' +
-        '<label class="fld"><span>Name</span><input id="addLedName" value="Custom LED Module"></label>' +
-        '<label class="fld"><span>LED Code</span><input id="addLedCode" value="CUSTOM-LED"></label>' +
-        '<label class="fld"><span>Width (mm)</span><input id="addLedWidth" type="number" step="0.1" value="' + Number(bounds.width || 0).toFixed(2) + '"></label>' +
-        '<label class="fld"><span>Height (mm)</span><input id="addLedHeight" type="number" step="0.1" value="' + Number(bounds.height || 0).toFixed(2) + '"></label>' +
-        '<label class="fld"><span>LED Watt</span><input id="addLedWatt" type="number" step="0.01" value="1.5"></label>' +
-        '<label class="fld"><span>LED Voltage</span><input id="addLedVoltage" type="number" step="0.1" value="12"></label></div>' +
-        '<div class="row" style="margin-top:14px;justify-content:flex-end;"><button id="cancelAddLedSpec" class="btn2" type="button">Cancel</button><button id="saveAddLedSpec" class="btn2" type="button">Save LED</button></div></div>';
-      document.body.appendChild(overlay);
-      $('cancelAddLedSpec').onclick = function() {overlay.remove();};
-      $('saveAddLedSpec').onclick = function() {
-        const spec = {
-          name: String($('addLedName').value || '').trim(), code: String($('addLedCode').value || '').trim(),
-          widthMm: num($('addLedWidth').value), heightMm: num($('addLedHeight').value),
-          watt: num($('addLedWatt').value), voltage: num($('addLedVoltage').value), svg: String(svgPayload.svgText || '')
-        };
-        if(!spec.name || !spec.code || !(spec.widthMm > 0) || !(spec.heightMm > 0) || !(spec.watt > 0) || !(spec.voltage > 0)) {
-          showToast('Complete all LED specification fields with valid values.', {type: 'warn', title: 'LED Letters'}); return;
-        }
-        try {
-          localSpecs.push(spec);
-          const savedPath = writeLocalSpecs(localSpecs);
-          render();
-          const buttons = options.querySelectorAll('.led-spec-option');
-          choose(spec, buttons[buttons.length - 1]);
-          overlay.remove();
-          log('Saved custom LED specification to: ' + savedPath);
-        } catch(e) {showToast('Could not save the LED library: ' + (e.message || e), {type: 'error', title: 'LED Letters'});}
-      };
-    }
-
-    const addSelection = $('btnAddSelectionLedSpec');
-    if(addSelection) addSelection.onclick = function() {
-      loadJSX(function() {
-        callJSX('signarama_helper_nest_captureSelectionAsSvg()', function(result) {
-          let payload = null;
-          try {payload = JSON.parse(String(result || '{}'));} catch(_eLedCaptureJson) {payload = null;}
-          if(!payload || !payload.ok || !payload.svgText) {
-            showToast((payload && payload.error) || 'Could not convert the current selection to SVG.', {type: 'error', title: 'LED Letters'}); return;
-          }
-          showAddSpecModal(payload);
-        });
-      });
     };
 
     document.addEventListener('click', function(event) {

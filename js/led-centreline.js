@@ -1,7 +1,10 @@
 (function(root, factory) {
   var api = factory();
+  // CEP exposes CommonJS globals inside a browser page. Always publish the
+  // browser global there; otherwise the panel silently sees no engine.
+  if(root && root.document) root.LedCentreline = api;
   if(typeof module === 'object' && module.exports) module.exports = api;
-  else root.LedCentreline = api;
+  else if(root) root.LedCentreline = api;
 }(this, function() {
   'use strict';
   var SQRT2 = Math.sqrt(2);
