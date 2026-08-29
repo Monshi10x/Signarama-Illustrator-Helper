@@ -125,7 +125,7 @@ test('Scripts tab supports bundled files, selected files, and pasted code', () =
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'jsx', 'scripts', 'Select All Artwork.jsx')), true);
 });
 
-test('LED layouts use viewport center, letter LEDs stay on their offset paths, and lightbox measures exclude strokes', () => {
+test('LED centreline workflow retires inset layout, exposes stable controls, and lightbox measures exclude strokes', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8');
   const host = fs.readFileSync(path.join(__dirname, '..', 'jsx', 'hostscript.jsx'), 'utf8');
@@ -134,24 +134,30 @@ test('LED layouts use viewport center, letter LEDs stay on their offset paths, a
   assert.match(host, /function _srh_getViewportCenter/);
   assert.match(host, /var viewCenter2 = _getViewCenter\(doc\)/);
   assert.doesNotMatch(letterLayout, /\.translate\(/);
-  assert.match(letterLayout, /Samples already use the offset paths' document coordinates/);
+  assert.match(letterLayout, /Letter Layout has been retired/);
   assert.match(host, /Lightbox dimensions describe the path geometry, never the stroke extents/);
   assert.match(host, /try \{b = item\.geometricBounds;\}/);
-  assert.match(host, /working\.applyEffect\(fx1\)/);
-  assert.match(host, /_srh_letterExpandItems\(doc, working\)/);
-  assert.doesNotMatch(host, /wrapper\.applyEffect\(fx1\)/);
-  assert.match(html, /data-tab="tab-led-letters"[^>]*>LED Letters</);
+  assert.match(html, /data-tab="tab-led-letters"[^>]*>LEDs</);
   assert.match(html, /id="letterLedSpecOptions"/);
   assert.match(html, /id="letterLedSvgOverride"/);
   assert.match(html, /id="btnAddSelectionLedSpec"/);
   assert.doesNotMatch(html.slice(html.indexOf('id="tab-lightbox"'), html.indexOf('id="tab-led-letters"')), /btnCreateLetterLayout/);
   assert.match(main, /request\.open\('GET', 'data\/led-specs\.json'/);
-  assert.match(main, /ledSvg: String/);
-  assert.match(main, /signarama_helper_nest_captureSelectionAsSvg\(\)/);
+  assert.match(main, /signarama_helper_led_extractSelectionGeometry\(\)/);
   assert.match(main, /Signarama Helper', 'led-specs\.json'/);
   assert.match(main, /fs\.writeFileSync\(filePath, JSON\.stringify/);
   assert.match(main, /details\.open && !details\.contains\(event\.target\)/);
   assert.match(host, /groupItems\.createFromFile\(svgFile\)/);
+  for(const id of ['ledCreateLayout','ledCreateGuides','ledRepopulateGuides','ledClearGenerated','ledCancelLayout','ledLayoutMode','ledRasterPrecisionMm','ledMaxCentreSpacingMm','ledMaxWireReachMm','ledDrawGuides','ledDrawModules','ledDrawWiring','ledDrawStats','ledReplacePrevious']) assert.match(html, new RegExp('id="'+id+'"'));
+  assert.match(main, /function wireLedCentreline\(/);
+  assert.match(main, /queuedHost\('signarama_helper_led_drawLayout/);
+  assert.match(host, /function signarama_helper_led_drawLayout\(/);
+  assert.match(host, /function signarama_helper_led_extractSelectionGeometry\(/);
+  assert.match(host, /captureMode \|\| ''\) === 'led' \? \[\] : _srh_nest_markSourceItems/);
+  assert.match(host, /function signarama_helper_led_captureGuides\(/);
+  for(const layer of ['LED Guide Paths','LED Modules','LED Wiring','LED Layout Stats']) assert.match(host, new RegExp(layer));
+  const ids=Array.from(html.matchAll(/\bid="([^"]+)"/g),m=>m[1]);
+  assert.equal(new Set(ids).size,ids.length,'panel element IDs must be unique');
   assert.ok(specs.leds.length > 0);
   for(const spec of specs.leds) for(const key of ['code', 'widthMm', 'heightMm', 'watt', 'voltage', 'svg']) assert.ok(spec[key] !== undefined, key);
 });
