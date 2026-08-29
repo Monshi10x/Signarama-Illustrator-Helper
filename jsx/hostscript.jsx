@@ -7932,7 +7932,7 @@ function signarama_helper_nest_captureSelectionShapeAsSvg() {
     try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestBinClose0) { }
   }
 }
-function signarama_helper_nest_captureSelectionAsSvg() {
+function signarama_helper_nest_captureSelectionAsSvg(captureMode) {
   if(!app.documents.length) return _srh_nest_jsonResponse(false, {error: 'No open document.'});
 
   var sourceDoc = app.activeDocument;
@@ -7947,7 +7947,8 @@ function signarama_helper_nest_captureSelectionAsSvg() {
 
   var actualWidthPt = _srh_nest_docPtToActualPt(sourceBounds.width, scaleFactor);
   var actualHeightPt = _srh_nest_docPtToActualPt(sourceBounds.height, scaleFactor);
-  var sourceIds = _srh_nest_markSourceItems(selectionItems);
+  // LED extraction must not rename or otherwise mark original source artwork.
+  var sourceIds = String(captureMode || '') === 'led' ? [] : _srh_nest_markSourceItems(selectionItems);
   var snapshotInfo = {layerName: '', ids: sourceIds};
   var marginPt = _srh_mm2pt(10);
   var exportCtx = null;
@@ -8248,6 +8249,7 @@ function signarama_helper_nest_captureSelectionAsSvg() {
     return _srh_nest_jsonResponse(true, {
       itemCount: selectionItems.length,
       scaleFactor: scaleFactor,
+      sourceBounds: {left: sourceBounds.left, top: sourceBounds.top, right: sourceBounds.right, bottom: sourceBounds.bottom},
       boundsPt: {
         width: actualWidthPt,
         height: actualHeightPt
@@ -8266,6 +8268,62 @@ function signarama_helper_nest_captureSelectionAsSvg() {
   } finally {
     try {_srh_nest_cleanupCurrentDocExport(exportCtx);} catch(_eNestClose0) { }
   }
+}
+
+function signarama_helper_led_extractSelectionGeometry() {
+  return signarama_helper_nest_captureSelectionAsSvg('led');
+}
+
+function _srh_ledOwned(item) {
+  try {return String(item.note || '').indexOf('"owner":"signarama-led-centreline"') >= 0;} catch(_eLedOwned) {return false;}
+}
+function _srh_ledClearOwnedLayer(doc, layerName) {
+  var layer = null;
+  try {layer = doc.layers.getByName(layerName);} catch(_eLedLayer0) {layer = null;}
+  if(!layer) return 0;
+  var removed = 0;
+  for(var i=layer.pageItems.length-1;i>=0;i--) try {if(_srh_ledOwned(layer.pageItems[i])) {layer.pageItems[i].remove();removed++;}} catch(_eLedLayer1) { }
+  return removed;
+}
+function signarama_helper_led_clearGenerated() {
+  if(!app.documents.length) return 'Error: No open document.';
+  var doc=app.activeDocument,n=0,names=['LED Guide Paths','LED Modules','LED Wiring','LED Layout Stats'];
+  for(var i=0;i<names.length;i++) n+=_srh_ledClearOwnedLayer(doc,names[i]);
+  return 'Cleared '+n+' owned LED layout group(s).';
+}
+function signarama_helper_led_drawLayout(jsonText) {
+  if(!app.documents.length) return 'Error: No open document.';
+  var data={};try {data=JSON.parse(String(jsonText||'{}'));} catch(e) {return 'Error: Invalid LED layout payload.';}
+  var doc=app.activeDocument,metaLayout=String(data.layoutId||'layout').replace(/["\\]/g,'_'),metaSource=String(data.sourceKey||'selection').replace(/["\\]/g,'_'),metaProfile=String(data.profileCode||'generic').replace(/["\\]/g,'_');
+  var meta='{"owner":"signarama-led-centreline","schemaVersion":1,"layoutId":"'+metaLayout+'","sourceKey":"'+metaSource+'","profile":"'+metaProfile+'","settingsVersion":'+Number(data.settingsVersion||1)+'}';
+  if(data.replacePrevious) {
+    if(!data.preserveGuides) _srh_ledClearOwnedLayer(doc,'LED Guide Paths');
+    _srh_ledClearOwnedLayer(doc,'LED Modules');_srh_ledClearOwnedLayer(doc,'LED Wiring');_srh_ledClearOwnedLayer(doc,'LED Layout Stats');
+  }
+  var guideLayer=_srh_getOrCreateLayer(doc,'LED Guide Paths'),moduleLayer=_srh_getOrCreateLayer(doc,'LED Modules'),wireLayer=_srh_getOrCreateLayer(doc,'LED Wiring'),statsLayer=_srh_getOrCreateLayer(doc,'LED Layout Stats');
+  var guides=data.guides||[],placements=data.placements||[],black=new RGBColor(),red=new RGBColor();black.red=black.green=black.blue=0;red.red=255;red.green=0;red.blue=0;
+  var gg=null;if(!data.preserveGuides){gg=guideLayer.groupItems.add();gg.name='LED Guides '+String(data.layoutId||'');gg.note=meta;}
+  var mg=moduleLayer.groupItems.add();mg.name='LED Modules '+String(data.layoutId||'');mg.note=meta;
+  var wg=wireLayer.groupItems.add();wg.name='LED Wiring '+String(data.layoutId||'');wg.note=meta;
+  var stroke=_srh_pxStrokeDoc(1),moduleFile=_srh_letter_svgFile(String(data.moduleSvg||'')),count=0;
+  for(var g=0;g<guides.length;g++) {
+    var pts=[],gp=guides[g]||[];for(var p=0;p<gp.length;p++) pts.push([Number(gp[p].x),Number(gp[p].y)]);
+    if(gg&&data.drawGuides!==false&&pts.length>1) try {var path=gg.pathItems.add();path.setEntirePath(pts);path.filled=false;path.stroked=true;path.strokeWidth=stroke;path.strokeColor=red;path.name='LED Guide '+g;path.note=meta.slice(0,-1)+',"guideId":"guide-'+g+'"}';} catch(_eLedDraw0) { }
+    var run=placements[g]||[],wire=[];
+    for(var m=0;m<run.length;m++) {var q=run[m];wire.push([Number(q.x),Number(q.y)]);if(data.drawModules!==false){var moduleItem=_srh_letter_drawModule(mg,wg,Number(q.x),Number(q.y),_srh_mm2ptDoc(Number(data.moduleWidthMm)||1),_srh_mm2ptDoc(Number(data.moduleHeightMm)||1),Number(q.angle)||0,stroke,black,red,moduleFile);try {if(moduleItem){moduleItem.name='LED Module '+g+'-'+m;moduleItem.note=meta.slice(0,-1)+',"guideId":"guide-'+g+'","runId":"run-'+g+'","sequence":'+(m+1)+'}';}} catch(_eLedModuleMeta) { }count++;}}
+    if(data.drawWiring&&wire.length>1) try {var wp=wg.pathItems.add();wp.setEntirePath(wire);wp.filled=false;wp.stroked=true;wp.strokeWidth=stroke;wp.strokeColor=black;wp.note=meta.slice(0,-1)+',"runId":"run-'+g+'"}';} catch(_eLedDraw1) { }
+  }
+  try {if(moduleFile&&moduleFile.exists)moduleFile.remove();} catch(_eLedFile) { }
+  if(data.drawStats) try {var sg=statsLayer.groupItems.add();sg.note=meta;var tf=sg.textFrames.pointText([Number(data.statsX)||0,Number(data.statsY)||0]);tf.contents=String(data.summary||'LED layout: '+count+' modules');} catch(_eLedStats) { }
+  return 'LED centreline layout drawn. Guides: '+guides.length+', modules: '+count+'.';
+}
+
+function signarama_helper_led_captureGuides() {
+  if(!app.documents.length) return _srh_nest_jsonResponse(false,{error:'No open document.'});
+  var doc=app.activeDocument,layer=null,out=[];try {layer=doc.layers.getByName('LED Guide Paths');} catch(e) {layer=null;}
+  if(!layer) return _srh_nest_jsonResponse(false,{error:'No LED Guide Paths layer.'});
+  for(var i=0;i<layer.pathItems.length;i++) {var p=layer.pathItems[i];if(!_srh_ledOwned(p))continue;var pts=[];for(var j=0;j<p.pathPoints.length;j++){var a=p.pathPoints[j].anchor;pts.push({x:Number(a[0]),y:Number(a[1])});}if(pts.length>1)out.push(pts);}
+  return _srh_nest_jsonResponse(true,{guides:out});
 }
 
 function signarama_helper_nest_placeNativeNestPlacement(jsonText) {
@@ -11782,7 +11840,23 @@ function _srh_letter_polylineLength(points) {
   return total;
 }
 
-function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, angleRad, strokePt, black, red) {
+function _srh_letter_svgFile(svgText) {
+  if(!svgText || String(svgText).indexOf('<svg') < 0) return null;
+  var file = null;
+  try {
+    file = new File(Folder.temp.fsName + '/srh-letter-led-' + new Date().getTime() + '-' + Math.floor(Math.random() * 100000) + '.svg');
+    file.encoding = 'UTF-8';
+    if(!file.open('w')) return null;
+    file.write(String(svgText));
+    file.close();
+    return file;
+  } catch(_eLsvg0) {
+    try {if(file && file.opened) file.close();} catch(_eLsvg1) { }
+    return null;
+  }
+}
+
+function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, angleRad, strokePt, black, red, svgFile) {
   var cosA = Math.cos(angleRad);
   var sinA = Math.sin(angleRad);
   var hx = widthPt * 0.5;
@@ -11804,14 +11878,29 @@ function _srh_letter_drawModule(ledLayer, lineLayer, cx, cy, widthPt, heightPt, 
   pathPts.push(pathPts[0]);
 
   var rect = null;
+  if(svgFile) {
+    try {
+      rect = ledLayer.groupItems.createFromFile(svgFile);
+      var sourceW = Number(rect.width || 0);
+      var sourceH = Number(rect.height || 0);
+      if(sourceW > 0 && sourceH > 0) rect.resize((widthPt / sourceW) * 100, (heightPt / sourceH) * 100, true, true, true, true, 100, Transformation.CENTER);
+      rect.position = [cx - (widthPt * 0.5), cy + (heightPt * 0.5)];
+      rect.rotate(angleRad * 180 / Math.PI, true, true, true, true, Transformation.CENTER);
+    } catch(_eLdmSvg) {
+      try {if(rect) rect.remove();} catch(_eLdmSvgRm) { }
+      rect = null;
+    }
+  }
   try {
-    rect = ledLayer.pathItems.add();
-    rect.setEntirePath(pathPts);
-    rect.closed = true;
-    rect.filled = false;
-    rect.stroked = true;
-    rect.strokeWidth = strokePt;
-    rect.strokeColor = black;
+    if(!rect) {
+      rect = ledLayer.pathItems.add();
+      rect.setEntirePath(pathPts);
+      rect.closed = true;
+      rect.filled = false;
+      rect.stroked = true;
+      rect.strokeWidth = strokePt;
+      rect.strokeColor = black;
+    }
   } catch(_eLdm0) { }
 
   try {
@@ -11884,283 +11973,8 @@ function _srh_letterExpandSelection() {
   try {app.executeMenuCommand('expand');} catch(_eLexp1) { }
 }
 
-function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
-  if(!sourceItem || !tempLayer || !(offsetPt > 0)) return [];
-  _srh_letterDbg('offset source | type=' + String(sourceItem.typename || '') + ' | offsetPt=' + offsetPt);
-  var working = null;
-  var wrapper = null;
-  var doc = null;
-  try {doc = app.activeDocument;} catch(_eLosDoc) {doc = null;}
-  try {
-    working = sourceItem.duplicate(tempLayer, ElementPlacement.PLACEATEND);
-    _srh_letterDbg('offset duplicate OK | type=' + String(working.typename || ''));
-  } catch(_eLos0) {
-    _srh_letterDbg('offset duplicate FAILED | ' + String(_eLos0));
-    return [];
-  }
-  try {
-    wrapper = tempLayer.groupItems.add();
-    working.move(wrapper, ElementPlacement.PLACEATEND);
-    _srh_letterDbg('offset wrapper OK');
-  } catch(_eLosWrap) {
-    _srh_letterDbg('offset wrapper FAILED | ' + String(_eLosWrap));
-    try {if(working) working.remove();} catch(_eLosWrapRm) { }
-    return [];
-  }
-  var result = {applied:false, changed:false};
-  var expandedItems = [];
-  try {
-    var beforeBounds = null;
-    try {beforeBounds = wrapper.visibleBounds;} catch(_eLosB0) {beforeBounds = null;}
-    if(!beforeBounds || beforeBounds.length !== 4) {
-      try {beforeBounds = wrapper.geometricBounds;} catch(_eLosB1) {beforeBounds = null;}
-    }
-    var fx1 = '<LiveEffect name="Adobe Offset Path"><Dict data="R ofst ' + Number(-Math.abs(offsetPt)) + ' I jntp 0 R mlim 180"/></LiveEffect>';
-    var fx2 = '<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 180 R ofst ' + Number(-Math.abs(offsetPt)) + ' I jntp 0"/></LiveEffect>';
-    var applied = false;
-    try {wrapper.applyEffect(fx1); applied = true;} catch(_eLosFx0) {
-      try {wrapper.applyEffect(fx2); applied = true;} catch(_eLosFx1) { }
-    }
-    if(applied && doc) {
-      expandedItems = _srh_letterExpandItems(doc, wrapper);
-      _srh_letterDbg('offset expanded items=' + expandedItems.length);
-    }
-    var afterTarget = (expandedItems && expandedItems.length) ? expandedItems[0] : wrapper;
-    var afterBounds = null;
-    try {afterBounds = afterTarget.visibleBounds;} catch(_eLosA0) {afterBounds = null;}
-    if(!afterBounds || afterBounds.length !== 4) {
-      try {afterBounds = afterTarget.geometricBounds;} catch(_eLosA1) {afterBounds = null;}
-    }
-    var changed = false;
-    if(beforeBounds && afterBounds && beforeBounds.length === 4 && afterBounds.length === 4) {
-      for(var bi = 0; bi < 4; bi++) {
-        if(Math.abs(Number(beforeBounds[bi]) - Number(afterBounds[bi])) > 0.25) {
-          changed = true;
-          break;
-        }
-      }
-    }
-    result = {applied: applied, changed: changed};
-    _srh_letterDbg('offset local apply | applied=' + (applied ? 'yes' : 'no') + ' | changed=' + (changed ? 'yes' : 'no'));
-  } catch(_eLos3) {
-    _srh_letterDbg('offset apply FAILED | ' + String(_eLos3));
-    result = {applied:false, changed:false};
-  }
-  var changed = false;
-  try {changed = !!(result && result.changed);} catch(_eLos4) {changed = false;}
-  _srh_letterDbg('offset result | changed=' + (changed ? 'yes' : 'no'));
-  if(!changed) {
-    try {if(wrapper) wrapper.remove();} catch(_eLos5) { }
-    return [];
-  }
-  var roots = [];
-  if(expandedItems && expandedItems.length) {
-    for(var ei = 0; ei < expandedItems.length; ei++) {
-      var ex = expandedItems[ei];
-      if(!ex) continue;
-      var exType = '';
-      try {exType = String(ex.typename || '');} catch(_eLosExType) {exType = '';}
-      if(exType === 'GroupItem') _srh_letter_collectPlacementRoots(ex, roots);
-      else if(exType === 'PathItem' || exType === 'CompoundPathItem') roots.push(ex);
-    }
-  } else {
-    _srh_letter_collectPlacementRoots(wrapper, roots);
-  }
-  if(!roots.length) {
-    var workingType = '';
-    try {workingType = String(wrapper.typename || '');} catch(_eLosType) {workingType = '';}
-    if(workingType === 'PathItem' || workingType === 'CompoundPathItem') roots.push(wrapper);
-  }
-  _srh_letterDbg('offset roots=' + roots.length);
-  if(!roots.length) {
-    try {if(wrapper) wrapper.remove();} catch(_eLos6) { }
-    return [];
-  }
-  var out = [];
-  for(var i = 0; i < roots.length; i++) {
-    var root = roots[i];
-    if(!root) continue;
-    try {
-      var dup = root.duplicate(tempLayer, ElementPlacement.PLACEATEND);
-      if(dup) out.push(dup);
-    } catch(_eLos7) {
-      _srh_letterDbg('offset root duplicate FAILED | ' + String(_eLos7));
-    }
-  }
-  try {if(wrapper) wrapper.remove();} catch(_eLos8) { }
-  return out;
-}
-
-function signarama_helper_drawLetterLayout(jsonStr) {
-  if(!app.documents.length) return 'No open document.';
-  _srh_letterDebugLines = [];
-  var doc = app.activeDocument;
-  if(!doc.selection || !doc.selection.length) return 'No selection. Select one or more path items.';
-
-  var opts = {};
-  try {opts = JSON.parse(String(jsonStr));} catch(_eLl0) {opts = {};}
-
-  var ledWatt = Number(opts.ledWatt || 0);
-  var ledWidthMm = Number(opts.ledWidthMm || 0);
-  var ledHeightMm = Number(opts.ledHeightMm || 0);
-  var centerSpacingMm = Number(opts.centerSpacingMm || 0);
-  var initialOffsetMm = Number(opts.initialOffsetMm || 0);
-  var subsequentOffsetMm = Number(opts.subsequentOffsetMm || 0);
-  var rotationDeg = Number(opts.rotationDeg || 0);
-  var maxLedsInSeries = parseInt(opts.maxLedsInSeries, 10);
-  if(!maxLedsInSeries || maxLedsInSeries < 1) maxLedsInSeries = 50;
-
-  if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
-  if(!(initialOffsetMm > 0)) return 'Initial offset must be > 0.';
-  if(!(subsequentOffsetMm > 0)) return 'Subsequent offset must be > 0.';
-  if(!(centerSpacingMm > 0)) centerSpacingMm = ledWidthMm;
-
-  var ledWidthPt = _srh_mm2ptDoc(ledWidthMm);
-  var ledHeightPt = _srh_mm2ptDoc(ledHeightMm);
-  var centerSpacingPt = _srh_mm2ptDoc(centerSpacingMm);
-  var initialOffsetPt = _srh_mm2ptDoc(initialOffsetMm);
-  var subsequentOffsetPt = _srh_mm2ptDoc(subsequentOffsetMm);
-  var rotationRad = rotationDeg * Math.PI / 180.0;
-  var stroke1px = _srh_pxStrokeDoc(1);
-
-  var black = new RGBColor();
-  black.red = 0; black.green = 0; black.blue = 0;
-  var red = new RGBColor();
-  red.red = 255; red.green = 0; red.blue = 0;
-
-  var ledLayer = _srh_getOrCreateLayer(doc, 'Letter Layout LEDs');
-  var lineLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Center Lines');
-  var groupLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Groups');
-  var ledRunGroup = ledLayer.groupItems.add();
-  var lineRunGroup = lineLayer.groupItems.add();
-  var labelRunGroup = groupLayer.groupItems.add();
-  var tempLayer = _srh_getOrCreateLayer(doc, '__SRH Letter Layout Temp');
-  try {tempLayer.locked = false;} catch(_eLlt0) { }
-  try {tempLayer.visible = true;} catch(_eLlt1) { }
-  try {
-    while(tempLayer.pageItems && tempLayer.pageItems.length) {
-      try {tempLayer.pageItems[0].remove();} catch(_eLltClr0) {break;}
-    }
-  } catch(_eLltClr1) { }
-  _srh_letterDbg('temp layer ready | locked=' + (function(){try{return !!tempLayer.locked;}catch(_e){return 'n/a';}}()) + ' | visible=' + (function(){try{return !!tempLayer.visible;}catch(_e){return 'n/a';}}()));
-
-  var currentItems = [];
-  for(var s = 0; s < doc.selection.length; s++) {
-    try {
-      if(doc.selection[s]) currentItems.push(doc.selection[s]);
-    } catch(_eLlt2) { }
-  }
-  _srh_letterDbg('run start | selection=' + currentItems.length);
-  if(!currentItems.length) return 'No valid selection items to process.';
-
-  var offsets = [initialOffsetPt];
-  var totalPlaced = 0;
-  var totalPaths = 0;
-  var totalOffsetPaths = 0;
-  var currentOffsetPt = initialOffsetPt;
-  var loopGuard = 0;
-
-  while(currentItems.length && loopGuard < 500) {
-    loopGuard++;
-    _srh_letterDbg('offset pass | pass=' + loopGuard + ' | items=' + currentItems.length + ' | offsetPt=' + currentOffsetPt);
-    var nextItems = [];
-    for(var ci = 0; ci < currentItems.length; ci++) {
-      var sourceItem = currentItems[ci];
-      if(!sourceItem) continue;
-      _srh_letterDbg('source item | idx=' + ci + ' | type=' + String(sourceItem.typename || ''));
-      var offsetItems = _srh_letter_offsetSourceItem(sourceItem, currentOffsetPt, tempLayer);
-      try {
-        if(sourceItem.layer && sourceItem.layer === tempLayer) sourceItem.remove();
-      } catch(_eLlt3) { }
-      _srh_letterDbg('offset items | idx=' + ci + ' | count=' + (offsetItems ? offsetItems.length : 0));
-      if(!offsetItems || !offsetItems.length) continue;
-
-      for(var oi = 0; oi < offsetItems.length; oi++) {
-        var offsetItem = offsetItems[oi];
-        if(!offsetItem) continue;
-        totalOffsetPaths++;
-        _srh_letterDbg('offset item | idx=' + oi + ' | type=' + String(offsetItem.typename || ''));
-
-        var placementPaths = [];
-        _srh_letter_collectPlacementPaths(offsetItem, placementPaths);
-        _srh_letterDbg('placement paths=' + placementPaths.length);
-        if(!placementPaths.length) continue;
-
-        for(var pp = 0; pp < placementPaths.length; pp++) {
-          var placePath = placementPaths[pp];
-          if(!placePath) continue;
-          var poly = _dim_pathToPolygonPoints(placePath, {stepPt: Math.max(_srh_mm2ptDoc(2), Math.min(centerSpacingPt / 4, _srh_mm2ptDoc(10)))});
-          var pathLen = _srh_letter_polylineLength(poly);
-          _srh_letterDbg('path | idx=' + pp + ' | pts=' + (poly ? poly.length : 0) + ' | len=' + pathLen);
-          if(!(pathLen > 0.0001)) continue;
-          totalPaths++;
-
-          var pathPlaced = 0;
-          var groupBounds = null;
-          for(var dist = 0; dist <= pathLen + 0.0001; dist += centerSpacingPt) {
-            var sample = _srh_letter_pointAndTangentAtDistance(poly, dist);
-            if(!sample) continue;
-            _srh_letter_drawModule(ledRunGroup, lineRunGroup, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red);
-            pathPlaced++;
-            totalPlaced++;
-            if(groupBounds === null) {
-              groupBounds = {left: sample.x, top: sample.y, right: sample.x, bottom: sample.y};
-            } else {
-              if(sample.x < groupBounds.left) groupBounds.left = sample.x;
-              if(sample.x > groupBounds.right) groupBounds.right = sample.x;
-              if(sample.y > groupBounds.top) groupBounds.top = sample.y;
-              if(sample.y < groupBounds.bottom) groupBounds.bottom = sample.y;
-            }
-          }
-
-          if(groupBounds && pathPlaced > 0) {
-            try {
-              var label = labelRunGroup.textFrames.pointText([(groupBounds.left + groupBounds.right) * 0.5, groupBounds.bottom - _srh_mm2ptDoc(5)]);
-              label.contents = pathPlaced + ' LEDs';
-              try {label.textRange.paragraphAttributes.justification = Justification.CENTER;} catch(_eLlt4) { }
-              try {label.textRange.characterAttributes.size = _srh_ptDoc(10);} catch(_eLlt5) { }
-              try {label.textRange.characterAttributes.fillColor = black;} catch(_eLlt6) { }
-            } catch(_eLlt7) { }
-          }
-          _srh_letterDbg('path placed=' + pathPlaced);
-        }
-
-        nextItems.push(offsetItem);
-      }
-    }
-    currentItems = nextItems;
-    currentOffsetPt = subsequentOffsetPt;
-  }
-
-  try {tempLayer.locked = false;} catch(_eLlt8a) { }
-  try {tempLayer.visible = true;} catch(_eLlt8b) { }
-  try {tempLayer.remove();} catch(_eLlt8) { }
-  if(totalPlaced > 0) {
-    var runBounds = null;
-    var runGroups = [ledRunGroup, lineRunGroup, labelRunGroup];
-    for(var rg=0; rg<runGroups.length; rg++) {
-      var rgb = null;
-      try {rgb = runGroups[rg].geometricBounds;} catch(_eRunBounds) {rgb = null;}
-      if(!rgb || rgb.length !== 4) continue;
-      if(!runBounds) runBounds = {left:rgb[0], top:rgb[1], right:rgb[2], bottom:rgb[3]};
-      else {if(rgb[0]<runBounds.left) runBounds.left=rgb[0]; if(rgb[1]>runBounds.top) runBounds.top=rgb[1]; if(rgb[2]>runBounds.right) runBounds.right=rgb[2]; if(rgb[3]<runBounds.bottom) runBounds.bottom=rgb[3];}
-    }
-    if(runBounds) {
-      var activeRect = doc.artboards[doc.artboards.getActiveArtboardIndex()].artboardRect;
-      var targetCenter = _srh_getViewportCenter(doc, activeRect);
-      var dx = targetCenter[0] - ((runBounds.left + runBounds.right) / 2);
-      var dy = targetCenter[1] - ((runBounds.top + runBounds.bottom) / 2);
-      for(var tg=0; tg<runGroups.length; tg++) {try {runGroups[tg].translate(dx,dy);} catch(_eRunMove) { }}
-    }
-  }
-  _srh_bringLayerToFront(lineLayer);
-  _srh_bringLayerToFront(ledLayer);
-  _srh_bringLayerToFront(groupLayer);
-
-  var debugText = (_srh_letterDebugLines && _srh_letterDebugLines.length) ? ('\n' + _srh_letterDebugLines.join('\n')) : '';
-  _srh_letterDebugLines = null;
-  if(totalPlaced < 1) return 'Letter layout created no LED modules. Check offsets and selected path items.' + debugText;
-  return 'Letter layout drawn. Offset paths: ' + totalOffsetPaths + ', Path lines: ' + totalPaths + ', LEDs: ' + totalPlaced + ', Watt: ' + ledWatt + 'W, Max series: ' + maxLedsInSeries + '.' + debugText;
+function signarama_helper_drawLetterLayout() {
+  return 'Letter Layout has been retired. Use the LEDs tab medial-axis centreline workflow.';
 }
 
 function _srh_addLightboxMeasures(doc, bounds, supportCenters, opts, lightboxId) {

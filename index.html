@@ -237,9 +237,30 @@
       outline:none; resize:vertical;
     }
     textarea:focus { border-color:#555; }
-    .script-list { display:grid; gap:8px; }
+    .script-list-container {
+      height:280px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:10px;
+      background:#101010;
+      border:1px solid #333;
+      border-radius:12px;
+      box-sizing:border-box;
+    }
+    .script-search { width:100%; box-sizing:border-box; flex:0 0 auto; }
+    .script-list { display:grid; gap:8px; overflow-y:auto; min-height:0; padding-right:4px; }
     .script-list-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px; align-items:center; }
     .script-list-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .led-spec-dropdown { position:relative; }
+    .led-spec-dropdown summary { list-style:none; cursor:pointer; background:#101010; border:1px solid #333; border-radius:10px; padding:9px 10px; }
+    .led-spec-dropdown summary::-webkit-details-marker { display:none; }
+    .led-spec-options { position:absolute; z-index:20; left:0; right:0; max-height:260px; overflow-y:auto; padding:6px; background:#161616; border:1px solid #444; border-radius:10px; box-shadow:0 8px 18px rgba(0,0,0,.55); }
+    .led-spec-option { width:100%; display:flex; align-items:center; gap:10px; padding:8px; border:0; border-radius:8px; background:transparent; color:#eee; text-align:left; cursor:pointer; }
+    .led-spec-option:hover, .led-spec-option[aria-selected="true"] { background:#303030; }
+    .led-spec-option img, .led-spec-preview img { width:64px; height:36px; object-fit:contain; background:#fff; border-radius:5px; flex:0 0 auto; }
+    .led-spec-preview { display:flex; align-items:center; gap:12px; margin-top:10px; padding:10px; border:1px solid #333; border-radius:10px; background:#101010; }
+    #letterLedSvgOverride { width:100%; box-sizing:border-box; font-family:monospace; font-size:11px; }
     .btn2 {
       background:#2a2a2a; color:#eee;
       border:1px solid #444; border-radius:12px;
@@ -752,6 +773,7 @@
     <button class="tab" data-tab="tab-preflight" type="button">Preflight</button>
     <button class="tab" data-tab="tab-concept" type="button">Concept</button>
     <button class="tab" data-tab="tab-lightbox" type="button">Lightbox</button>
+    <button class="tab" data-tab="tab-led-letters" type="button">LEDs</button>
     <button class="tab" data-tab="tab-corebridge" type="button">Proofs</button>
     <button class="tab" data-tab="tab-colours" type="button">Colours</button>
     <button class="tab" data-tab="tab-nest" type="button">Nest</button>
@@ -1002,53 +1024,53 @@
           <button id="btnTL" class="dim-btn" type="button" title="Top + Left">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-1" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="20" y1="10" x2="50" y2="10" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-1)" marker-end="url(#dim-arrow-1)"/>
               <line x1="10" y1="20" x2="10" y2="50" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-1)" marker-end="url(#dim-arrow-1)"/>
             </svg>
           </button>
           <button id="btnT" class="dim-btn" type="button" title="Top Only">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="5 0 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-2" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="20" y1="10" x2="50" y2="10" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-2)" marker-end="url(#dim-arrow-2)"/>
             </svg>
           </button>
           <button id="btnRT" class="dim-btn" type="button" title="Right + Top">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="10 0 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-3" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="20" y1="10" x2="50" y2="10" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-3)" marker-end="url(#dim-arrow-3)"/>
               <line x1="60" y1="20" x2="60" y2="50" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-3)" marker-end="url(#dim-arrow-3)"/>
             </svg>
           </button>
           <button id="btnL" class="dim-btn" type="button" title="Left Only">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 5 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-4" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="10" y1="20" x2="10" y2="50" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-4)" marker-end="url(#dim-arrow-4)"/>
             </svg>
           </button>
           <button id="btnCenterText" class="dim-btn" type="button" title="Center Text">
@@ -1060,53 +1082,53 @@
           <button id="btnR" class="dim-btn" type="button" title="Right Only">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="10 5 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-5" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="60" y1="20" x2="60" y2="50" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-5)" marker-end="url(#dim-arrow-5)"/>
             </svg>
           </button>
           <button id="btnBL" class="dim-btn" type="button" title="Bottom + Left">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 10 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-6" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="20" y1="60" x2="50" y2="60" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-6)" marker-end="url(#dim-arrow-6)"/>
               <line x1="10" y1="20" x2="10" y2="50" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-6)" marker-end="url(#dim-arrow-6)"/>
             </svg>
           </button>
           <button id="btnB" class="dim-btn" type="button" title="Bottom Only">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="5 10 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-7" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="20" y1="60" x2="50" y2="60" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-7)" marker-end="url(#dim-arrow-7)"/>
             </svg>
           </button>
           <button id="btnRB" class="dim-btn" type="button" title="Right + Bottom">
             <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="10 10 60 60">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+                <marker id="dim-arrow-8" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="white"/>
                 </marker>
               </defs>
               <rect x="20" y="20" width="30" height="30" stroke="white" stroke-width="4" fill="none"/>
               <line x1="20" y1="60" x2="50" y2="60" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-8)" marker-end="url(#dim-arrow-8)"/>
               <line x1="60" y1="20" x2="60" y2="50" stroke="white" stroke-width="3"
-                    marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+                    marker-start="url(#dim-arrow-8)" marker-end="url(#dim-arrow-8)"/>
             </svg>
           </button>
           <button id="btnLineMeasure" class="dim-btn" type="button" title="Measure Line/Path">
@@ -1702,64 +1724,30 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:12px;">
-        <div class="cardHead">
-          <div class="cardTitle">Letter Layout</div>
-          <span class="info" data-tip="Offsets selected path items inward, then places LED modules along each resulting path using the local tangent plus an optional rotation. Each offset path starts its own placement sequence.">i</span>
+    </section>
+
+    <!-- TAB: LEDS -->
+    <section id="tab-led-letters" class="wrap hidden" role="tabpanel">
+      <div class="card">
+        <div class="cardHead"><div class="cardTitle">LED Centreline Layout</div><span class="info" data-tip="Creates editable medial-axis guide paths, then places modules from those guides.">i</span></div>
+        <label class="fld"><span>Module profile</span><details id="letterLedSpecDropdown" class="led-spec-dropdown"><summary id="letterLedSpecSummary">Choose a generic example profile</summary><div id="letterLedSpecOptions" class="led-spec-options" role="listbox"></div></details></label>
+        <div id="letterLedSpecPreview" class="led-spec-preview" aria-live="polite"><img id="letterLedSpecIcon" alt="Selected LED module"><div><strong id="letterLedSpecName">Loading profiles...</strong><div id="letterLedSpecMeta" class="small"></div></div></div>
+        <div class="row" style="margin-top:8px;"><button id="btnAddSelectionLedSpec" class="btn2" type="button">Add Selection as Profile Art</button><button id="ledProfileSave" class="btn2" type="button">Save Local</button><button id="ledProfileDuplicate" class="btn2" type="button">Duplicate</button><button id="ledProfileDelete" class="btn2" type="button">Delete Local</button></div>
+        <div class="grid2" style="margin-top:12px;">
+          <label class="fld"><span>Brand (user label)</span><input id="ledProfileBrand" value="Generic example — verify"></label><label class="fld"><span>Series</span><input id="ledProfileSeries" value="Example"></label>
+          <label class="fld"><span>Module code/name</span><input id="letterLedCode"></label><label class="fld"><span>Voltage</span><input type="number" id="letterLedVoltage" min="1" max="240" step="0.1" value="12"></label>
+          <label class="fld"><span>Body width (mm)</span><input type="number" id="letterLedWidthMm" min="0.1" max="500" step="0.1" value="66"></label><label class="fld"><span>Body height (mm)</span><input type="number" id="letterLedHeightMm" min="0.1" max="500" step="0.1" value="13"></label>
+          <label class="fld"><span>Nominal wattage</span><input type="number" id="letterLedWatt" min="0.01" max="100" step="0.01" value="1.5"></label><label class="fld"><span>Maximum centre spacing (mm)</span><input type="number" id="ledMaxCentreSpacingMm" min="1" max="1000" step="0.1" value="100"></label>
+          <label class="fld"><span>Maximum wire reach (mm)</span><input type="number" id="ledMaxWireReachMm" min="1" max="2000" step="0.1" value="150"></label><label class="fld"><span>Maximum modules per series</span><input type="number" id="letterMaxLedsInSeries" min="1" max="500" step="1" value="50"></label>
+          <label class="fld"><span>Can depth (mm)</span><input type="number" id="ledCanDepthMm" min="1" max="1000" step="0.1" value="100"></label><label class="fld"><span>Layout mode</span><select id="ledLayoutMode"><option value="auto">Auto (single-row production mode)</option><option value="1">Force 1 row</option><option value="2" disabled>Force 2 rows (not yet enabled)</option><option value="3" disabled>Force 3 rows (not yet enabled)</option><option value="guides">Guides only</option></select></label>
+          <label class="fld"><span>Maximum rows in Auto</span><input type="number" id="ledMaxRows" min="1" max="1" value="1" disabled></label><label class="fld"><span>Body-to-edge clearance (mm)</span><input type="number" id="ledEdgeClearanceMm" min="0" max="100" step="0.1" value="3"></label>
+          <label class="fld"><span>Inter-run gap (mm)</span><input type="number" id="ledInterRunGapMm" min="0" max="500" step="0.1" value="5" disabled></label><label class="chk"><input type="checkbox" id="ledPreferCenterTransitions" checked disabled><span>Prefer center path at transitions</span></label>
         </div>
-        <div class="row" style="margin-bottom:10px; align-items:flex-end; gap:12px;">
-          <div style="border:1px solid #333; border-radius:10px; padding:10px; background:#101010; display:flex; align-items:center; gap:10px;">
-            <div id="letterLedDepiction" style="width:140px;height:70px;display:grid;place-items:center;border:1px dashed #444;border-radius:8px;background:#151515;position:relative;">
-              <div id="letterLedDepictionRect" style="width:90px;height:26px;border:1px solid #ddd;position:relative;">
-                <div id="letterLedDepictionLine" style="position:absolute;left:0;right:0;top:50%;height:1px;background:#ff3b3b;"></div>
-              </div>
-            </div>
-            <div style="font-size:12px;color:#bcbcbc;">
-              <div id="letterLedDepictionText">LED 66mm Ã— 13mm</div>
-              <div style="color:#888;">Width Ã— Height</div>
-            </div>
-          </div>
-        </div>
-        <div class="grid2">
-          <label class="fld">
-            <span>Max LEDs in Series</span>
-            <input type="number" id="letterMaxLedsInSeries" step="1" value="50">
-          </label>
-          <label class="fld">
-            <span>LED Watt</span>
-            <input type="number" id="letterLedWatt" step="0.01" value="1.5">
-          </label>
-          <label class="fld">
-            <span>LED Width (mm)</span>
-            <input type="number" id="letterLedWidthMm" step="1" value="66">
-          </label>
-          <label class="fld">
-            <span>LED Height (mm)</span>
-            <input type="number" id="letterLedHeightMm" step="1" value="13">
-          </label>
-          <label class="fld">
-            <span>Allowance Between Centers (mm)</span>
-            <input type="number" id="letterAllowanceBetweenCentersMm" step="0.1" value="66">
-          </label>
-          <label class="fld">
-            <span>Rotation (deg)</span>
-            <input type="number" id="letterRotationDeg" step="0.1" value="0">
-          </label>
-          <label class="fld">
-            <span>Initial Offset (mm)</span>
-            <input type="number" id="letterInitialOffsetMm" step="0.1" value="20">
-          </label>
-          <label class="fld">
-            <span>Subsequent Offset (mm)</span>
-            <input type="number" id="letterSubsequentOffsetMm" step="0.1" value="20">
-          </label>
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <button id="btnCreateLetterLayout" class="btn2" type="button">Create Letter Layout</button>
-        </div>
-        <div class="small" style="margin-top:8px;">
-          Note: uses the current selection only. Invalid inward offset fragments are skipped and remaining paths continue.
-        </div>
+        <div class="grid2" style="margin-top:10px;"><label class="chk"><input type="checkbox" id="ledRotateToTangent" checked><span>Rotate modules to tangent</span></label><label class="chk"><input type="checkbox" id="ledDrawGuides" checked><span>Draw guide paths</span></label><label class="chk"><input type="checkbox" id="ledDrawModules" checked><span>Draw module bodies/centres</span></label><label class="chk"><input type="checkbox" id="ledDrawWiring" checked><span>Draw wiring</span></label><label class="chk"><input type="checkbox" id="ledDrawStats" checked><span>Draw layout statistics</span></label><label class="chk"><input type="checkbox" id="ledReplacePrevious" checked><span>Replace previous generated result</span></label></div>
+        <details style="margin-top:12px;"><summary>Advanced geometry</summary><div class="grid2" style="margin-top:10px;"><label class="fld"><span>Raster precision (mm)</span><input type="number" id="ledRasterPrecisionMm" min="0.25" max="5" step="0.25" value="1"></label><label class="fld"><span>Curve tolerance (mm)</span><input type="number" id="ledCurveToleranceMm" min="0.05" max="5" step="0.05" value="0.5"></label><label class="fld"><span>Branch prune distance (mm)</span><input type="number" id="ledBranchPruneMm" min="0" max="100" step="0.5" value="3"></label><label class="fld"><span>Smoothing</span><input type="number" id="ledSmoothing" min="0" max="5" step="1" value="1"></label><label class="fld"><span>Simplification tolerance (mm)</span><input type="number" id="ledSimplifyMm" min="0" max="10" step="0.1" value="0.5"></label><label class="chk"><input type="checkbox" id="ledAllowClearanceRelaxation"><span>Allow explicit clearance relaxation</span></label></div></details>
+        <label class="fld" style="margin-top:10px;"><span>Module SVG override</span><textarea id="letterLedSvgOverride" rows="4" spellcheck="false"></textarea></label>
+        <div class="row" style="margin-top:12px;"><button id="ledCreateLayout" class="btn2" type="button">Create Layout</button><button id="ledCreateGuides" class="btn2" type="button">Create Guide Paths Only</button></div><div class="row" style="margin-top:8px;"><button id="ledRepopulateGuides" class="btn2" type="button">Repopulate From Guides</button><button id="ledClearGenerated" class="btn2" type="button">Clear Generated Layout</button><button id="ledCancelLayout" class="btn2" type="button" disabled>Cancel</button></div>
+        <div class="nest-progress" style="margin-top:10px;"><div id="ledProgressBar" class="nest-progress-bar"></div></div><div id="ledLayoutStatus" class="small" role="status" aria-live="polite">Ready. Multi-row planning is intentionally disabled pending topology-safe transitions.</div>
       </div>
     </section>
 
@@ -1773,8 +1761,11 @@
           </div>
           <button id="btnRefreshScripts" class="btn2" type="button">Refresh</button>
         </div>
-        <div id="predefinedScriptsList" class="script-list">
-          <div class="small">Open this tab to load scripts.</div>
+        <div class="script-list-container">
+          <input id="predefinedScriptsSearch" class="script-search" type="search" placeholder="Search scripts..." aria-label="Search pre-defined scripts" autocomplete="off">
+          <div id="predefinedScriptsList" class="script-list">
+            <div class="small">Open this tab to load scripts.</div>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -2055,6 +2046,7 @@
   <script src="js/update/ui.js"></script>
   <script src="js/dimensions-logic.js"></script>
   <script src="js/preflight-logic.js"></script>
+  <script src="js/led-centreline.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
