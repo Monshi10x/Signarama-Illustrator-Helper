@@ -3768,9 +3768,10 @@
 
   function wireLetterLayout() {
     const btn = $('btnCreateLetterLayout');
-    if(!btn) return;
-    btn.onclick = () => {
-      const payload = {
+    const pathBtn = $('btnAddLedsToPath');
+    if(!btn && !pathBtn) return;
+    function payload() {
+      return {
         ledCode: String(($('letterLedCode') && $('letterLedCode').value) || ''),
         ledVoltage: num(($('letterLedVoltage') && $('letterLedVoltage').value) || 0),
         ledSvg: String(($('letterLedSvgOverride') && $('letterLedSvgOverride').value) || ''),
@@ -3784,7 +3785,15 @@
         rotationDeg: num(($('letterRotationDeg') && $('letterRotationDeg').value) || 0),
         isLargeArtboard: isLargeArtboard
       };
-      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+    function encodedPayload() {
+      return JSON.stringify(payload()).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+    if(pathBtn) pathBtn.onclick = () => {
+      runButtonJsxOperation('signarama_helper_addLedsToPath("' + encodedPayload() + '")', {logFn: log, toastTitle: 'Add LEDs to path'});
+    };
+    if(btn) btn.onclick = () => {
+      const json = encodedPayload();
       runButtonJsxOperation('signarama_helper_drawLetterLayout("' + json + '")', {logFn: log, toastTitle: 'Create letter layout'});
     };
   }
