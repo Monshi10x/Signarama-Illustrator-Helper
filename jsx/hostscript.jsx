@@ -11714,12 +11714,12 @@ function _srh_letterDbg(msg) {
   } catch(_eLdbg1) { }
 }
 
-function _srh_letter_collectPlacementPaths(item, out) {
+function _srh_letter_collectPlacementPaths(item, out, allowOpen) {
   if(!item || !out) return;
   var tn = '';
   try {tn = String(item.typename || '');} catch(_eLcpp0) {tn = '';}
   if(tn === 'PathItem') {
-    try {if(item.guides || item.clipping || !item.closed) return;} catch(_eLcpp1) { }
+    try {if(item.guides || item.clipping || (!allowOpen && !item.closed)) return;} catch(_eLcpp1) { }
     out.push(item);
     return;
   }
@@ -11730,7 +11730,7 @@ function _srh_letter_collectPlacementPaths(item, out) {
     for(var i = 0; i < kids.length; i++) {
       var cp = kids[i];
       if(!cp) continue;
-      try {if(cp.guides || cp.clipping || !cp.closed) continue;} catch(_eLcpp3) { }
+      try {if(cp.guides || cp.clipping || (!allowOpen && !cp.closed)) continue;} catch(_eLcpp3) { }
       out.push(cp);
     }
     return;
@@ -11739,7 +11739,7 @@ function _srh_letter_collectPlacementPaths(item, out) {
     var items = null;
     try {items = item.pageItems;} catch(_eLcpp4) {items = null;}
     if(!items || !items.length) return;
-    for(var j = 0; j < items.length; j++) _srh_letter_collectPlacementPaths(items[j], out);
+    for(var j = 0; j < items.length; j++) _srh_letter_collectPlacementPaths(items[j], out, allowOpen);
   }
 }
 
@@ -12011,6 +12011,66 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
   }
   try {if(working) working.remove();} catch(_eLos8) { }
   return out;
+}
+
+function signarama_helper_addLedsToPath(jsonStr) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  if(!doc.selection || !doc.selection.length) return 'No selection. Select one or more path items.';
+
+  var opts = {};
+  try {opts = JSON.parse(String(jsonStr));} catch(_eLap0) {opts = {};}
+  var ledWidthMm = Number(opts.ledWidthMm || 0);
+  var ledHeightMm = Number(opts.ledHeightMm || 0);
+  var centerSpacingMm = Number(opts.centerSpacingMm || 0);
+  var rotationRad = Number(opts.rotationDeg || 0) * Math.PI / 180.0;
+  if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
+  if(!(centerSpacingMm > 0)) return 'Allowance between centers must be > 0.';
+
+  var placementPaths = [];
+  for(var s = 0; s < doc.selection.length; s++) {
+    try {_srh_letter_collectPlacementPaths(doc.selection[s], placementPaths, true);} catch(_eLap1) { }
+  }
+  if(!placementPaths.length) return 'No paths found in the current selection.';
+
+  var ledWidthPt = _srh_mm2ptDoc(ledWidthMm);
+  var ledHeightPt = _srh_mm2ptDoc(ledHeightMm);
+  var centerSpacingPt = _srh_mm2ptDoc(centerSpacingMm);
+  var stroke1px = _srh_pxStrokeDoc(1);
+  var black = new RGBColor();
+  black.red = 0; black.green = 0; black.blue = 0;
+  var red = new RGBColor();
+  red.red = 255; red.green = 0; red.blue = 0;
+  var ledSvgFile = _srh_letter_svgFile(String(opts.ledSvg || ''));
+  var ledLayer = _srh_getOrCreateLayer(doc, 'Letter Layout LEDs');
+  var lineLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Center Lines');
+  var ledRunGroup = ledLayer.groupItems.add();
+  var lineRunGroup = lineLayer.groupItems.add();
+  var totalPlaced = 0;
+  var pathsUsed = 0;
+
+  for(var p = 0; p < placementPaths.length; p++) {
+    var poly = _dim_pathToPolygonPoints(placementPaths[p], {stepPt: Math.max(_srh_mm2ptDoc(2), Math.min(centerSpacingPt / 4, _srh_mm2ptDoc(10)))});
+    var pathLen = _srh_letter_polylineLength(poly);
+    if(!(pathLen > 0.0001)) continue;
+    pathsUsed++;
+    for(var dist = 0; dist <= pathLen + 0.0001; dist += centerSpacingPt) {
+      var sample = _srh_letter_pointAndTangentAtDistance(poly, dist);
+      if(!sample) continue;
+      _srh_letter_drawModule(ledRunGroup, lineRunGroup, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red, ledSvgFile);
+      totalPlaced++;
+    }
+  }
+
+  try {if(ledSvgFile && ledSvgFile.exists) ledSvgFile.remove();} catch(_eLap2) { }
+  _srh_bringLayerToFront(lineLayer);
+  _srh_bringLayerToFront(ledLayer);
+  if(totalPlaced < 1) {
+    try {ledRunGroup.remove();} catch(_eLap3) { }
+    try {lineRunGroup.remove();} catch(_eLap4) { }
+    return 'No LED modules were added. Check the selected paths.';
+  }
+  return 'Added ' + totalPlaced + ' LEDs to ' + pathsUsed + ' selected path' + (pathsUsed === 1 ? '' : 's') + ' at ' + centerSpacingMm + ' mm centers.';
 }
 
 function signarama_helper_drawLetterLayout(jsonStr) {
