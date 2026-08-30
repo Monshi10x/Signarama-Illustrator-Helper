@@ -145,6 +145,9 @@ test('LED layouts use viewport center, letter LEDs stay on their offset paths, a
   assert.match(html, /id="letterLedSvgOverride"/);
   assert.match(html, /id="btnAddSelectionLedSpec"/);
   assert.match(html, /id="btnAddLedsToPath"[^>]*>Add LEDs to Path</);
+  assert.match(html, /id="letterMinAllowanceBetweenCentersMm"/);
+  assert.match(html, /id="letterPathStartClearanceMm"/);
+  assert.match(html, /id="letterPathEndClearanceMm"/);
   assert.doesNotMatch(html.slice(html.indexOf('id="tab-lightbox"'), html.indexOf('id="tab-led-letters"')), /btnCreateLetterLayout/);
   assert.match(main, /request\.open\('GET', 'data\/led-specs\.json'/);
   assert.match(main, /ledSvg: String/);
@@ -155,7 +158,9 @@ test('LED layouts use viewport center, letter LEDs stay on their offset paths, a
   assert.match(main, /details\.open && !details\.contains\(event\.target\)/);
   assert.match(host, /groupItems\.createFromFile\(svgFile\)/);
   assert.match(host, /function signarama_helper_addLedsToPath\(jsonStr\)/);
-  assert.match(host, /dist \+= centerSpacingPt/);
+  assert.match(host, /function _srh_letter_planPathPlacements/);
+  assert.match(host, /startClearanceMm > 0 \? startClearanceMm : ledWidthMm \* 0\.5/);
+  assert.match(host, /span \/ intervals/);
   assert.ok(specs.leds.length > 0);
   for(const spec of specs.leds) for(const key of ['code', 'widthMm', 'heightMm', 'watt', 'voltage', 'svg']) assert.ok(spec[key] !== undefined, key);
 });

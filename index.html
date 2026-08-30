@@ -1754,7 +1754,10 @@
           <label class="fld"><span>LED Watt</span><input type="number" id="letterLedWatt" step="0.01" value="1.5"></label>
           <label class="fld"><span>LED Width (mm)</span><input type="number" id="letterLedWidthMm" step="0.1" value="66"></label>
           <label class="fld"><span>LED Height (mm)</span><input type="number" id="letterLedHeightMm" step="0.1" value="13"></label>
-          <label class="fld"><span>Allowance Between Centers (mm)</span><input type="number" id="letterAllowanceBetweenCentersMm" step="0.1" value="66"></label>
+          <label class="fld"><span>Minimum Between Centers (mm)</span><input type="number" id="letterMinAllowanceBetweenCentersMm" step="0.1" value="50"></label>
+          <label class="fld"><span>Maximum Between Centers (mm)</span><input type="number" id="letterAllowanceBetweenCentersMm" step="0.1" value="66"></label>
+          <label class="fld"><span>Start Clearance (mm, 0 = auto)</span><input type="number" id="letterPathStartClearanceMm" step="0.1" min="0" value="0"></label>
+          <label class="fld"><span>End Clearance (mm, 0 = auto)</span><input type="number" id="letterPathEndClearanceMm" step="0.1" min="0" value="0"></label>
           <label class="fld"><span>Max LEDs in Series</span><input type="number" id="letterMaxLedsInSeries" step="1" value="50"></label>
           <label class="fld"><span>Rotation (deg)</span><input type="number" id="letterRotationDeg" step="0.1" value="0"></label>
           <label class="fld"><span>Initial Offset (mm)</span><input type="number" id="letterInitialOffsetMm" step="0.1" value="20"></label>
@@ -1769,7 +1772,7 @@
           <button id="btnAddLedsToPath" class="btn2" type="button">Add LEDs to Path</button>
           <button id="btnCreateLetterLayout" class="btn2" type="button">Create Letter Layout</button>
         </div>
-        <div class="small" style="margin-top:8px;">Uses the current selection only. Invalid inward offset fragments are skipped.</div>
+        <div class="small" style="margin-top:8px;">Path placement distributes LEDs evenly between the minimum and maximum centers. Auto clearance keeps half an LED inside each open-path end.</div>
       </div>
     </section>
 
