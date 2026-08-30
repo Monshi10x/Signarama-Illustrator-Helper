@@ -3768,23 +3768,35 @@
 
   function wireLetterLayout() {
     const btn = $('btnCreateLetterLayout');
-    if(!btn) return;
-    btn.onclick = () => {
-      const payload = {
+    const pathBtn = $('btnAddLedsToPath');
+    if(!btn && !pathBtn) return;
+    function payload() {
+      return {
         ledCode: String(($('letterLedCode') && $('letterLedCode').value) || ''),
         ledVoltage: num(($('letterLedVoltage') && $('letterLedVoltage').value) || 0),
         ledSvg: String(($('letterLedSvgOverride') && $('letterLedSvgOverride').value) || ''),
         ledWatt: num(($('letterLedWatt') && $('letterLedWatt').value) || 0),
         ledWidthMm: num(($('letterLedWidthMm') && $('letterLedWidthMm').value) || 0),
         ledHeightMm: num(($('letterLedHeightMm') && $('letterLedHeightMm').value) || 0),
+        minCenterSpacingMm: num(($('letterMinAllowanceBetweenCentersMm') && $('letterMinAllowanceBetweenCentersMm').value) || 0),
         centerSpacingMm: num(($('letterAllowanceBetweenCentersMm') && $('letterAllowanceBetweenCentersMm').value) || 0),
+        pathStartClearanceMm: num(($('letterPathStartClearanceMm') && $('letterPathStartClearanceMm').value) || 0),
+        pathEndClearanceMm: num(($('letterPathEndClearanceMm') && $('letterPathEndClearanceMm').value) || 0),
         initialOffsetMm: num(($('letterInitialOffsetMm') && $('letterInitialOffsetMm').value) || 0),
         subsequentOffsetMm: num(($('letterSubsequentOffsetMm') && $('letterSubsequentOffsetMm').value) || 0),
         maxLedsInSeries: parseInt((($('letterMaxLedsInSeries') && $('letterMaxLedsInSeries').value) || 0), 10) || 50,
         rotationDeg: num(($('letterRotationDeg') && $('letterRotationDeg').value) || 0),
         isLargeArtboard: isLargeArtboard
       };
-      const json = JSON.stringify(payload).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+    function encodedPayload() {
+      return JSON.stringify(payload()).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+    if(pathBtn) pathBtn.onclick = () => {
+      runButtonJsxOperation('signarama_helper_addLedsToPath("' + encodedPayload() + '")', {logFn: log, toastTitle: 'Add LEDs to path'});
+    };
+    if(btn) btn.onclick = () => {
+      const json = encodedPayload();
       runButtonJsxOperation('signarama_helper_drawLetterLayout("' + json + '")', {logFn: log, toastTitle: 'Create letter layout'});
     };
   }

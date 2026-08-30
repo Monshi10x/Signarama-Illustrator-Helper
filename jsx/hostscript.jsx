@@ -11714,12 +11714,12 @@ function _srh_letterDbg(msg) {
   } catch(_eLdbg1) { }
 }
 
-function _srh_letter_collectPlacementPaths(item, out) {
+function _srh_letter_collectPlacementPaths(item, out, allowOpen) {
   if(!item || !out) return;
   var tn = '';
   try {tn = String(item.typename || '');} catch(_eLcpp0) {tn = '';}
   if(tn === 'PathItem') {
-    try {if(item.guides || item.clipping || !item.closed) return;} catch(_eLcpp1) { }
+    try {if(item.guides || item.clipping || (!allowOpen && !item.closed)) return;} catch(_eLcpp1) { }
     out.push(item);
     return;
   }
@@ -11730,7 +11730,7 @@ function _srh_letter_collectPlacementPaths(item, out) {
     for(var i = 0; i < kids.length; i++) {
       var cp = kids[i];
       if(!cp) continue;
-      try {if(cp.guides || cp.clipping || !cp.closed) continue;} catch(_eLcpp3) { }
+      try {if(cp.guides || cp.clipping || (!allowOpen && !cp.closed)) continue;} catch(_eLcpp3) { }
       out.push(cp);
     }
     return;
@@ -11739,7 +11739,7 @@ function _srh_letter_collectPlacementPaths(item, out) {
     var items = null;
     try {items = item.pageItems;} catch(_eLcpp4) {items = null;}
     if(!items || !items.length) return;
-    for(var j = 0; j < items.length; j++) _srh_letter_collectPlacementPaths(items[j], out);
+    for(var j = 0; j < items.length; j++) _srh_letter_collectPlacementPaths(items[j], out, allowOpen);
   }
 }
 
@@ -12011,6 +12011,122 @@ function _srh_letter_offsetSourceItem(sourceItem, offsetPt, tempLayer) {
   }
   try {if(working) working.remove();} catch(_eLos8) { }
   return out;
+}
+
+function _srh_letter_planPathPlacements(pathLen, minSpacing, maxSpacing, startClearance, endClearance, isClosed) {
+  pathLen = Number(pathLen || 0);
+  minSpacing = Number(minSpacing || 0);
+  maxSpacing = Number(maxSpacing || 0);
+  startClearance = Math.max(0, Number(startClearance || 0));
+  endClearance = Math.max(0, Number(endClearance || 0));
+  if(!(pathLen > 0) || !(maxSpacing > 0)) return [];
+  if(!(minSpacing > 0)) minSpacing = maxSpacing;
+  if(minSpacing > maxSpacing) {
+    var swap = minSpacing;
+    minSpacing = maxSpacing;
+    maxSpacing = swap;
+  }
+
+  // Closed paths have no exposed ends. Avoid adding a duplicate module where
+  // the final sample wraps back onto the first one.
+  if(isClosed) {
+    var closedCount = Math.max(1, Math.ceil(pathLen / maxSpacing));
+    while(closedCount > 1 && pathLen / closedCount < minSpacing) closedCount--;
+    var closedSpacing = pathLen / closedCount;
+    var closedOut = [];
+    for(var c = 0; c < closedCount; c++) closedOut.push(c * closedSpacing);
+    return closedOut;
+  }
+
+  var first = Math.min(startClearance, pathLen * 0.5);
+  var last = Math.max(first, pathLen - Math.min(endClearance, pathLen * 0.5));
+  var span = last - first;
+  if(!(span >= minSpacing)) return [(first + last) * 0.5];
+
+  // Use the fewest intervals needed to stay below the maximum. If that would
+  // violate the minimum, reduce the interval count. This fills the full usable
+  // span, so neither end is left with an arbitrary shortfall.
+  var intervals = Math.max(1, Math.ceil(span / maxSpacing));
+  var spacing = span / intervals;
+  if(spacing < minSpacing) {
+    intervals = Math.max(1, Math.floor(span / minSpacing));
+    spacing = minSpacing;
+    first += (span - (intervals * spacing)) * 0.5;
+  }
+  var out = [];
+  for(var i = 0; i <= intervals; i++) out.push(first + (i * spacing));
+  return out;
+}
+
+function signarama_helper_addLedsToPath(jsonStr) {
+  if(!app.documents.length) return 'No open document.';
+  var doc = app.activeDocument;
+  if(!doc.selection || !doc.selection.length) return 'No selection. Select one or more path items.';
+
+  var opts = {};
+  try {opts = JSON.parse(String(jsonStr));} catch(_eLap0) {opts = {};}
+  var ledWidthMm = Number(opts.ledWidthMm || 0);
+  var ledHeightMm = Number(opts.ledHeightMm || 0);
+  var centerSpacingMm = Number(opts.centerSpacingMm || 0);
+  var minCenterSpacingMm = Number(opts.minCenterSpacingMm || 0);
+  var startClearanceMm = Number(opts.pathStartClearanceMm || 0);
+  var endClearanceMm = Number(opts.pathEndClearanceMm || 0);
+  var rotationRad = Number(opts.rotationDeg || 0) * Math.PI / 180.0;
+  if(!(ledWidthMm > 0) || !(ledHeightMm > 0)) return 'LED width/height must be > 0.';
+  if(!(centerSpacingMm > 0)) return 'Allowance between centers must be > 0.';
+  if(!(minCenterSpacingMm > 0)) minCenterSpacingMm = centerSpacingMm;
+
+  var placementPaths = [];
+  for(var s = 0; s < doc.selection.length; s++) {
+    try {_srh_letter_collectPlacementPaths(doc.selection[s], placementPaths, true);} catch(_eLap1) { }
+  }
+  if(!placementPaths.length) return 'No paths found in the current selection.';
+
+  var ledWidthPt = _srh_mm2ptDoc(ledWidthMm);
+  var ledHeightPt = _srh_mm2ptDoc(ledHeightMm);
+  var centerSpacingPt = _srh_mm2ptDoc(centerSpacingMm);
+  var minCenterSpacingPt = _srh_mm2ptDoc(minCenterSpacingMm);
+  var startClearancePt = _srh_mm2ptDoc(startClearanceMm > 0 ? startClearanceMm : ledWidthMm * 0.5);
+  var endClearancePt = _srh_mm2ptDoc(endClearanceMm > 0 ? endClearanceMm : ledWidthMm * 0.5);
+  var stroke1px = _srh_pxStrokeDoc(1);
+  var black = new RGBColor();
+  black.red = 0; black.green = 0; black.blue = 0;
+  var red = new RGBColor();
+  red.red = 255; red.green = 0; red.blue = 0;
+  var ledSvgFile = _srh_letter_svgFile(String(opts.ledSvg || ''));
+  var ledLayer = _srh_getOrCreateLayer(doc, 'Letter Layout LEDs');
+  var lineLayer = _srh_getOrCreateLayer(doc, 'Letter Layout Center Lines');
+  var ledRunGroup = ledLayer.groupItems.add();
+  var lineRunGroup = lineLayer.groupItems.add();
+  var totalPlaced = 0;
+  var pathsUsed = 0;
+
+  for(var p = 0; p < placementPaths.length; p++) {
+    var poly = _dim_pathToPolygonPoints(placementPaths[p], {stepPt: Math.max(_srh_mm2ptDoc(2), Math.min(centerSpacingPt / 4, _srh_mm2ptDoc(10)))});
+    var pathLen = _srh_letter_polylineLength(poly);
+    if(!(pathLen > 0.0001)) continue;
+    var isClosed = false;
+    try {isClosed = !!placementPaths[p].closed;} catch(_eLapClosed) {isClosed = false;}
+    var distances = _srh_letter_planPathPlacements(pathLen, minCenterSpacingPt, centerSpacingPt, startClearancePt, endClearancePt, isClosed);
+    if(!distances.length) continue;
+    pathsUsed++;
+    for(var d = 0; d < distances.length; d++) {
+      var sample = _srh_letter_pointAndTangentAtDistance(poly, distances[d]);
+      if(!sample) continue;
+      _srh_letter_drawModule(ledRunGroup, lineRunGroup, sample.x, sample.y, ledWidthPt, ledHeightPt, sample.angle + rotationRad, stroke1px, black, red, ledSvgFile);
+      totalPlaced++;
+    }
+  }
+
+  try {if(ledSvgFile && ledSvgFile.exists) ledSvgFile.remove();} catch(_eLap2) { }
+  _srh_bringLayerToFront(lineLayer);
+  _srh_bringLayerToFront(ledLayer);
+  if(totalPlaced < 1) {
+    try {ledRunGroup.remove();} catch(_eLap3) { }
+    try {lineRunGroup.remove();} catch(_eLap4) { }
+    return 'No LED modules were added. Check the selected paths.';
+  }
+  return 'Added ' + totalPlaced + ' LEDs to ' + pathsUsed + ' selected path' + (pathsUsed === 1 ? '' : 's') + ' using ' + minCenterSpacingMm + '-' + centerSpacingMm + ' mm centers.';
 }
 
 function signarama_helper_drawLetterLayout(jsonStr) {
